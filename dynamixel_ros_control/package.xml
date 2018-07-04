@@ -1,0 +1,31 @@
+<?xml version="1.0"?>
+<package format="2">
+  <name>dynamixel_ros_control</name>
+  <version>0.0.0</version>
+  <description>Provides a hardware interface for dynamixel motors.</description>
+
+  <maintainer email="oehler@sim.tu-darmstadt.de">Martin Oehler</maintainer>
+
+
+  <!-- One license tag required, multiple allowed, one license per tag -->
+  <!-- Commonly used license strings: -->
+  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
+  <license>TODO</license>
+
+
+  <author email="oehler@sim.tu-darmstadt.de">Martin Oehler</author>
+
+  <buildtool_depend>catkin</buildtool_depend>
+  <build_depend>controller_manager</build_depend>
+  <build_depend>dynamixel_sdk</build_depend>
+  <build_depend>hardware_interface</build_depend>
+  <build_export_depend>controller_manager</build_export_depend>
+  <build_export_depend>dynamixel_sdk</build_export_depend>
+  <build_export_depend>hardware_interface</build_export_depend>
+  <exec_depend>controller_manager</exec_depend>
+  <exec_depend>dynamixel_sdk</exec_depend>
+  <exec_depend>hardware_interface</exec_depend>
+
+  <export>
+  </export>
+</package>
