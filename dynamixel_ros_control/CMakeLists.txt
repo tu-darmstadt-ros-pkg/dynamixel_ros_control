@@ -52,21 +52,27 @@ include_directories(
 )
 
 set(HEADERS
+  include/${PROJECT_NAME}/common.h
+  include/${PROJECT_NAME}/joint.h
   include/${PROJECT_NAME}/dynamixel.h
   include/${PROJECT_NAME}/control_table.h
   include/${PROJECT_NAME}/control_table_item.h
   include/${PROJECT_NAME}/dynamixel_driver.h
   include/${PROJECT_NAME}/dynamixel_hardware_interface.h
-  include/${PROJECT_NAME}/sync_manager.h
+  include/${PROJECT_NAME}/sync_read_manager.h
+  include/${PROJECT_NAME}/sync_write_manager.h
 )
 
 set(SOURCES
+  src/common.cpp
+  src/joint.cpp
   src/dynamixel.cpp
   src/control_table.cpp
   src/control_table_item.cpp
   src/dynamixel_driver.cpp
   src/dynamixel_hardware_interface.cpp
-  src/sync_manager.cpp
+  src/sync_read_manager.cpp
+  src/sync_write_manager.cpp
 )
 
 ## Declare a C++ library

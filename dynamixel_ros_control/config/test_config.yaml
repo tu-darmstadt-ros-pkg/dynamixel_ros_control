@@ -1,0 +1,39 @@
+debug: true
+control_rate: 20.0 
+torque_on_startup: true
+torque_off_on_shutdown: false
+dynamixels:
+  port_info:
+    port_name: /dev/ttyUSB0
+    protocol_version: 2
+    baud_rate: 3000000
+  read_values: # write values are given by the control mode
+    read_position: true
+    read_velocity: true
+    read_torque: false
+  control_mode: position
+  device_info: # read/write all devices with one packet
+    arm_yaw_joint:
+      id: 1
+      model_number: 20 # warning if ping does not match setting
+    arm_pitch_joint_0:
+      id: 2
+    arm_pitch_joint_1:
+      id: 3
+    arm_pitch_joint_2:
+      id: 4
+    arm_roll_joint:
+      id: 5
+    lidar_spin_joint:
+      id: 6
+      control_mode: velocity # overrides control_mode: position
+  write_registers:
+    arm_yaw_joint:
+      max_position_limit_rad: 3.14 # radian
+    lidar_spin_joint:
+      goal_velocity_rad_per_s: 1 # radian per second
+  publish_registers:
+    present_temperature: 
+      topic: /dynamixels/temperature
+      frequency: 10 # Hz
+      

@@ -1,41 +1,43 @@
 #ifndef DYNAMIXEL_ROS_CONTROL__DYNAMIXEL_H
 #define DYNAMIXEL_ROS_CONTROL__DYNAMIXEL_H
 
+#include <ros/ros.h>
 #include <dynamixel_ros_control/control_table_item.h>
-#include <map>
 
 namespace dynamixel_ros_control {
 
-struct State
-{
-  State() : position(0), velocity(0), effort(0) {}
-  double position;
-  double velocity;
-  double effort;
-};
+
 
 class Dynamixel {
 public:
   Dynamixel(uint8_t id, uint16_t model_number);
   Dynamixel(uint8_t id, std::string model_name);
 
-  double tickToRad(int32_t tick);
-  int32_t radToTick(double rad);
+  double dxlValuetoPosition(int32_t dxl_value);
+  int32_t positionToDxlValue(double rad);
 
-  double tickToVelocity(int32_t tick);
-  int32_t velocityToTick(double velocity);
+  double dxlValueToVelocity(int32_t dxl_value);
+  int32_t velocityToDxlValue(double velocity);
 
-  double tickToTorque(int32_t tick);
-  int32_t torqueToTick(double torque);
+  double dxlValueToTorque(int32_t dxl_value);
+  int32_t torqueToDxlValue(double torque);
+
+  const ControlTableItem& getItem(std::string& name);
+  uint8_t getId() const;
+  uint16_t getModelNumber() const;
+
 private:
+  std::string getSeries();
+  void loadControlTable(std::string series);
   uint8_t id_;
   uint16_t model_number_;
   std::string model_name_;
 
-  std::map<std::string, ControlTableItem> ctrl_table_;
+  double position_to_value_ratio_;
+  double velocity_to_value_ratio_;
+  double torque_to_value_ratio_;
 
-  State current_state_;
-  State goal_state_;
+  std::map<std::string, ControlTableItem> control_table_;
 };
 
 }

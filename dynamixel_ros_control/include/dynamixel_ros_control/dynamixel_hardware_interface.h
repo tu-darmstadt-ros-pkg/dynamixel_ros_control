@@ -22,33 +22,33 @@ public:
   void write();
 
 private:
-  bool loadConfig();
-
   void setTorque(bool enabled);
   void setTorque(std_msgs::BoolConstPtr enabled);
 
   ros::NodeHandle nh_;
   ros::NodeHandle pnh_;
 
-  bool debug_;
-
   bool first_cycle_;
 
-  boost::shared_ptr<dynamixel_ros_control::DynamixelDriver> driver_;
+  dynamixel_ros_control::DynamixelDriver driver_;
 
   // Read
   hardware_interface::JointStateInterface jnt_state_interface_;
+  SyncReadManager read_manager_;
 
   // Write
   hardware_interface::PositionJointInterface jnt_pos_interface_;
   hardware_interface::VelocityJointInterface jnt_vel_interface_;
   hardware_interface::EffortJointInterface jnt_eff_interface_;
+  SyncWriteManager control_write_manager_;
+  SyncWriteManager torque_write_manager_;
 
+  // Configuration
+  bool debug_;
+  bool torque_on_startup_;
   bool torque_off_on_shutdown_;
 
-  int joint_count_;
-
-  std::vector<std::string> joint_names_;
+  std::vector<Joint> joints_;
 
 
   // subscriber

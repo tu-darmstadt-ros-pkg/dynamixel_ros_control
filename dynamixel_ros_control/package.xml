@@ -16,16 +16,9 @@
   <author email="oehler@sim.tu-darmstadt.de">Martin Oehler</author>
 
   <buildtool_depend>catkin</buildtool_depend>
-  <build_depend>controller_manager</build_depend>
-  <build_depend>dynamixel_sdk</build_depend>
-  <build_depend>hardware_interface</build_depend>
-  <build_export_depend>controller_manager</build_export_depend>
-  <build_export_depend>dynamixel_sdk</build_export_depend>
-  <build_export_depend>hardware_interface</build_export_depend>
-  <exec_depend>controller_manager</exec_depend>
-  <exec_depend>dynamixel_sdk</exec_depend>
-  <exec_depend>hardware_interface</exec_depend>
-
+  <depend>controller_manager</depend>
+  <depend>dynamixel_sdk</depend>
+  <depend>hardware_interface</depend>
   <export>
   </export>
 </package>
