@@ -8,6 +8,14 @@ DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh
 
 }
 
+DynamixelHardwareInterface::~DynamixelHardwareInterface()
+{
+  if (torque_off_on_shutdown_)
+  {
+    setTorque(false);
+  }
+}
+
 bool DynamixelHardwareInterface::init()
 {
   // Load Parameters
@@ -26,34 +34,38 @@ bool DynamixelHardwareInterface::init()
   }
 
   // Register interfaces
-  for (unsigned int i = 0; i < joint_names_.size(); i++)
+  for (Joint& joint: joints_)
   {
-    hardware_interface::JointStateHandle state_handle(joint_names_[i], &current_position_[i], &current_velocity_[i], &current_effort_[i]);
+    hardware_interface::JointStateHandle state_handle(joint.name, &joint.current_state.position, &joint.current_state.velocity,
+                                                      &joint.current_state.effort);
     jnt_state_interface_.registerHandle(state_handle);
 
-    hardware_interface::JointHandle pos_handle(state_handle, &goal_position_[i]);
-    jnt_pos_interface_.registerHandle(pos_handle);
-
-    hardware_interface::JointHandle vel_handle(state_handle, &goal_velocity_[i]);
-    jnt_vel_interface_.registerHandle(vel_handle);
-
-    hardware_interface::JointHandle eff_handle(state_handle, &goal_effort_[i]);
-    jnt_eff_interface_.registerHandle(eff_handle);
-
+    if (joint.control_mode == POSITION) {
+      hardware_interface::JointHandle pos_handle(state_handle, &joint.goal_state.position);
+      jnt_pos_interface_.registerHandle(pos_handle);
+    } else if (joint.control_mode == VELOCITY) {
+      hardware_interface::JointHandle vel_handle(state_handle, &joint.goal_state.velocity);
+      jnt_vel_interface_.registerHandle(vel_handle);
+    } else if (joint.control_mode == CURRENT) {
+      hardware_interface::JointHandle eff_handle(state_handle, &joint.goal_state.effort);
+      jnt_eff_interface_.registerHandle(eff_handle);
+    }
   }
   registerInterface(&jnt_state_interface_);
-  if (control_mode_ == PositionControl)
+  if (!jnt_pos_interface_.getNames().empty())
   {
     registerInterface(&jnt_pos_interface_);
-  } else if (control_mode_ == VelocityControl)
+  }
+  if (!jnt_vel_interface_.getNames().empty())
   {
     registerInterface(&jnt_vel_interface_);
-  } else if (control_mode_ == EffortControl)
+  }
+  if (!jnt_eff_interface_.getNames().empty())
   {
     registerInterface(&jnt_eff_interface_);
   }
 
-  if (nh.param("auto_torque", false)) {
+  if (torque_on_startup_) {
     setTorque(true);
   }
 

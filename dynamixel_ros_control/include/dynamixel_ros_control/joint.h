@@ -13,6 +13,15 @@ struct State
   double effort;
 };
 
+enum ControlMode {
+  CURRENT,
+  VELOCITY,
+  POSITION,
+  EXTENDED_POSITION,
+  CURRENT_BASED_POSITION,
+  PWM
+};
+
 struct Joint {
   Joint(std::string _name, uint8_t id, uint16_t model_number);
   std::string name;
@@ -20,6 +29,7 @@ struct Joint {
   State current_state;
   State goal_state;
 
+  ControlMode control_mode;
   double mounting_offset;
   double offset;
 };

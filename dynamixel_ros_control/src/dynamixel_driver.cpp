@@ -45,9 +45,10 @@ bool DynamixelDriver::loadDynamixels(const ros::NodeHandle& nh, std::vector<Join
     // Ping dynamixel to retrieve model number
     uint16_t model_number_ping;
     if (!ping(id, model_number_ping)) {
-      ROS_ERROR_STREAM("Failed to ping servo '" << joint_name << "' with id " << id);
+      ROS_ERROR_STREAM("Failed to ping motor '" << joint_name << "' with id " << id);
       return false;
     } else {
+      // Ping successful, add to list
       if (model_number_config != model_number_ping) {
         ROS_WARN_STREAM("Model number in config [" << model_number_config
                         << "] does not match servo model number [" << model_number_ping << "] for joint '"
@@ -79,7 +80,7 @@ bool DynamixelDriver::ping(uint8_t id)
 
 bool DynamixelDriver::ping(uint8_t id, uint16_t& model_number)
 {
-  uint8_t error      = 0;
+  uint8_t error = 0;
   return packet_handler_->ping(port_handler_, id, &model_number, &error) == COMM_SUCCESS;
 }
 
