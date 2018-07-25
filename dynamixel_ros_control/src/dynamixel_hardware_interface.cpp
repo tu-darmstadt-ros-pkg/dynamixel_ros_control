@@ -65,6 +65,30 @@ bool DynamixelHardwareInterface::init()
     registerInterface(&jnt_eff_interface_);
   }
 
+  // Register sync reads/writes
+  for (Joint& joint: joints_) {
+    // Register writes
+    control_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque); // TODO bool to uint32_t?
+    if (joint.control_mode == POSITION) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position); // TODO read register name from config
+    } else if (joint.control_mode == VELOCITY) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
+    } else if (joint.control_mode == CURRENT) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_current", joint.goal_state.effort); // TODO effort = current?
+    }
+
+    // Register reads
+    if (joint.read_position) {
+      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
+    }
+    if (joint.read_velocity) {
+      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
+    }
+    if (joint.read_effort) {
+      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
+    }
+  }
+
   if (torque_on_startup_) {
     setTorque(true);
   }
@@ -76,23 +100,32 @@ bool DynamixelHardwareInterface::init()
 
 void DynamixelHardwareInterface::read()
 {
-
+  if (!read_manager_.read()) {
+    ROS_ERROR_STREAM("Sync read failed!");
+  }
 }
 
 void DynamixelHardwareInterface::write()
 {
-
+  if (!control_write_manager_.write()) {
+    ROS_ERROR_STREAM("Sync write failed!");
+  }
 }
 
 
 void DynamixelHardwareInterface::setTorque(bool enabled)
 {
-
+  for (Joint& joint: joints_) {
+    joint.goal_state.torque = enabled;
+  }
+  if (!torque_write_manager_.write()) {
+    ROS_ERROR_STREAM("Setting torque failed!");
+  }
 }
 
 void DynamixelHardwareInterface::setTorque(std_msgs::BoolConstPtr enabled)
 {
-
+  setTorque(enabled->data);
 }
 
 }

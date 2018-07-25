@@ -29,9 +29,9 @@ dynamixels:
       control_mode: velocity # overrides control_mode: position
   write_registers:
     arm_yaw_joint:
-      max_position_limit_rad: 3.14 # radian
+      max_position_limit: 3.14 # radian
     lidar_spin_joint:
-      goal_velocity_rad_per_s: 1 # radian per second
+      goal_velocity: 1 # radian per second
   publish_registers:
     present_temperature: 
       topic: /dynamixels/temperature

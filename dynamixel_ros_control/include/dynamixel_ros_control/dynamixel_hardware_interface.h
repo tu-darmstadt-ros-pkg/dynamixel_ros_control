@@ -1,5 +1,5 @@
-#ifndef DYNAMIXEL_ROS_CONTROL__DYNAMIXEL_HARDWARE_INTERFACE_H
-#define DYNAMIXEL_ROS_CONTROL__DYNAMIXEL_HARDWARE_INTERFACE_H
+#ifndef DYNAMIXEL_ROS_CONTROL_DYNAMIXEL_HARDWARE_INTERFACE_H
+#define DYNAMIXEL_ROS_CONTROL_DYNAMIXEL_HARDWARE_INTERFACE_H
 
 #include <hardware_interface/joint_command_interface.h>
 #include <hardware_interface/joint_state_interface.h>

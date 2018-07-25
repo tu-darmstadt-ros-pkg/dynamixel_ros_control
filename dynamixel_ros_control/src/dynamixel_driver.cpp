@@ -5,10 +5,7 @@
 namespace dynamixel_ros_control {
 
 DynamixelDriver::DynamixelDriver()
-  : next_indirect_address_(0)
-{
-
-}
+  : next_indirect_address_(0) {}
 
 bool DynamixelDriver::loadDynamixels(const ros::NodeHandle& nh, std::vector<Joint>& joints)
 {
@@ -59,6 +56,9 @@ bool DynamixelDriver::loadDynamixels(const ros::NodeHandle& nh, std::vector<Join
       Joint joint(joint_name, id, model_number_ping);
       dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0);
       dxl_nh.param("offset", joint.offset, 0.0);
+      if (!joint.dynamixel.loadControlTable(nh)) {
+        return false;
+      }
       joints.push_back(joint); // TODO prevent copy?
 
       std::stringstream ss;
