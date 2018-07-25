@@ -13,13 +13,8 @@ bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
 
   ros::NodeHandle device_nh(nh, "devices/" + series);
 
-  // Load info
   bool success = true;
-  success &= loadRequiredParameter(device_nh, "velocity_to_value_ratio", velocity_to_value_ratio_);
-  success &= loadRequiredParameter(device_nh, "torque_to_current_value_ratio", torque_to_value_ratio_);
-  int ticks_per_rev_int;
-  success &= loadRequiredParameter(device_nh, "ticks_per_revolution", ticks_per_rev_int);
-  ticks_per_revolution_ = static_cast<double>(ticks_per_rev_int);
+  // TODO load unit conversion ratios
 
   // Load table
   std::vector<std::string> control_table_entries;
@@ -38,51 +33,34 @@ bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
 
 double Dynamixel::dxlValueToUnit(std::string register_name, int32_t value)
 {
-  std::string unit = getItem(register_name).unit();
-  if (unit == "rad") {
-    return dxlValuetoPosition(value);
-  }
+  return static_cast<double>(value) * getItem(register_name).dxlValueToUnitRatio();
 }
 
 bool Dynamixel::dxlValueToBool(std::string register_name, int32_t value)
 {
   std::string unit = getItem(register_name).unit();
   if (unit == "bool") {
-    return static_cast<bool>(value);
+    return value > 0;
   } else {
-    ROS_ERROR_STREAM("Unknown bool type: '" << unit << "'");
+    ROS_ERROR_STREAM("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
     return false;
   }
 }
 
-double Dynamixel::dxlValuetoPosition(int32_t dxl_value)
+int32_t Dynamixel::unitToDxlValue(std::string register_name, double unit_value)
 {
-  return (static_cast<double>(dxl_value) / ticks_per_revolution_ * 2 * M_PI);
+  return static_cast<int32_t>(unit_value / getItem(register_name).dxlValueToUnitRatio());
 }
 
-int32_t Dynamixel::positionToDxlValue(double rad)
+int32_t Dynamixel::boolToDxlValue(std::string register_name, bool b)
 {
-
-}
-
-double Dynamixel::dxlValueToVelocity(int32_t dxl_value)
-{
-  return static_cast<double>(dxl_value) / velocity_to_value_ratio_;
-}
-
-int32_t Dynamixel::velocityToDxlValue(double velocity)
-{
-  return static_cast<int32_t>(velocity_to_value_ratio_ * velocity);
-}
-
-double Dynamixel::dxlValueToTorque(int32_t dxl_value)
-{
-  return static_cast<double>(dxl_value) / torque_to_value_ratio_;
-}
-
-int32_t Dynamixel::torqueToDxlValue(double torque)
-{
-
+  std::string unit = getItem(register_name).unit();
+  if (unit == "bool") {
+    return static_cast<int32_t>(b);
+  } else {
+    ROS_ERROR_STREAM("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
+    return false;
+  }
 }
 
 const ControlTableItem& Dynamixel::getItem(std::string& name)
@@ -96,7 +74,7 @@ const ControlTableItem& Dynamixel::getItem(std::string& name)
 
 }
 
-std::string Dynamixel::getSeries(const ros::NodeHandle& nh)
+std::string Dynamixel::getSeries(const ros::NodeHandle& nh) const
 {
   std::string series;
   if (!nh.getParam("model_list/" + std::to_string(model_number_), series)) {

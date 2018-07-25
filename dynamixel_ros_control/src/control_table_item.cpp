@@ -4,11 +4,17 @@
 
 namespace dynamixel_ros_control {
 
-ControlTableItem::ControlTableItem(std::string name, uint16_t address, uint8_t data_length, AccessType access_type, MemoryType memory_type, std::string unit)
-  : name_(name), address_(address), data_length_(data_length), access_type_(access_type), memory_type_(memory_type), unit_(unit) {}
+ControlTableItem::ControlTableItem(std::string name, uint16_t address, uint8_t data_length, AccessType access_type, MemoryType memory_type)
+  : name_(name),
+    address_(address),
+    data_length_(data_length),
+    access_type_(access_type),
+    memory_type_(memory_type),
+    unit_(""),
+    dxl_value_to_unit_ratio_(1.0) {}
 
 ControlTableItem::ControlTableItem()
-  : ControlTableItem("unset", 0, 0, READ, RAM, "") {}
+  : ControlTableItem("unset", 0, 0, READ, RAM) {}
 
 bool ControlTableItem::loadFromString(std::string control_table_string)
 {
@@ -94,9 +100,19 @@ bool ControlTableItem::stringToMemoryType(const std::string& str, MemoryType& me
   return false;
 }
 
+void ControlTableItem::setDxlValueToUnitRatio(double dxl_value_to_unit_ratio)
+{
+  dxl_value_to_unit_ratio_ = dxl_value_to_unit_ratio;
+}
+
+double ControlTableItem::dxlValueToUnitRatio() const
+{
+  return dxl_value_to_unit_ratio_;
+}
+
 std::string ControlTableItem::unit() const
 {
-  return unit_;
+    return unit_;
 }
 
 uint8_t ControlTableItem::data_length() const

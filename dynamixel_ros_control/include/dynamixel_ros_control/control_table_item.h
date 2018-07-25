@@ -19,7 +19,7 @@ enum MemoryType {
 class ControlTableItem {
 public:
   ControlTableItem(std::string name, uint16_t address, uint8_t data_length,
-                   AccessType access_type, MemoryType memory_type, std::string unit="");
+                   AccessType access_type, MemoryType memory_type);
   ControlTableItem();
   bool loadFromString(std::string control_table_string);
 
@@ -29,6 +29,9 @@ public:
   AccessType access_type() const;
   MemoryType memory_type() const;
   std::string unit() const;
+  double dxlValueToUnitRatio() const;
+
+  void setDxlValueToUnitRatio(double dxl_value_to_unit_ratio);
 
 private:
   bool stringToAccessType(const std::string& str, AccessType& access_type);
@@ -40,6 +43,7 @@ private:
   AccessType access_type_;
   MemoryType memory_type_;
   std::string unit_;
+  double dxl_value_to_unit_ratio_;
 };
 
 }

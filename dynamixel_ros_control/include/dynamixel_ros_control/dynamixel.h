@@ -16,29 +16,18 @@ public:
   double dxlValueToUnit(std::string register_name, int32_t value);
   bool dxlValueToBool(std::string register_name, int32_t value);
 
-  double dxlValuetoPosition(int32_t dxl_value);
-  int32_t positionToDxlValue(double rad);
-
-  double dxlValueToVelocity(int32_t dxl_value);
-  int32_t velocityToDxlValue(double velocity);
-
-  double dxlValueToTorque(int32_t dxl_value);
-  int32_t torqueToDxlValue(double torque);
+  int32_t unitToDxlValue(std::string register_name, double unit_value);
+  int32_t boolToDxlValue(std::string register_name, bool b);
 
   const ControlTableItem& getItem(std::string& name);
   uint8_t getId() const;
   uint16_t getModelNumber() const;
 
 private:
-  std::string getSeries(const ros::NodeHandle& nh);
+  std::string getSeries(const ros::NodeHandle& nh) const;
   uint8_t id_;
   uint16_t model_number_;
   std::string model_name_;
-
-  double ticks_per_revolution_;
-  double position_to_value_ratio_;
-  double velocity_to_value_ratio_;
-  double torque_to_value_ratio_;
 
   std::map<std::string, ControlTableItem> control_table_;
 };
