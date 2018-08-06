@@ -31,9 +31,16 @@ bool DynamixelDriver::loadDynamixels(const ros::NodeHandle& nh, std::vector<Join
     std::string joint_name = (std::string)(it->first);
     ros::NodeHandle dxl_nh(nh, "device_info/" + joint_name);
 
-    int id;
-    if (!loadRequiredParameter(dxl_nh, "id", id)) {
+    int id_int;
+    if (!loadRequiredParameter(dxl_nh, "id", id_int)) {
       return false;
+    }
+    uint8_t id;
+    if (id_int < 256) {
+      id = static_cast<uint8_t>(id_int);
+    } else {
+      ROS_ERROR_STREAM("ID " << id_int << " exceeds 256.");
+      continue;
     }
 
     int model_number_config;
@@ -42,16 +49,15 @@ bool DynamixelDriver::loadDynamixels(const ros::NodeHandle& nh, std::vector<Join
     // Ping dynamixel to retrieve model number
     uint16_t model_number_ping;
     if (!ping(id, model_number_ping)) {
-      ROS_ERROR_STREAM("Failed to ping motor '" << joint_name << "' with id " << id);
+      ROS_ERROR_STREAM("Failed to ping motor '" << joint_name << "' with id " << id_int);
       return false;
     } else {
       // Ping successful, add to list
       if (model_number_config != model_number_ping) {
         ROS_WARN_STREAM("Model number in config [" << model_number_config
                         << "] does not match servo model number [" << model_number_ping << "] for joint '"
-                        << joint_name << "', ID: " << id);
+                        << joint_name << "', ID: " << id_int);
       }
-
 
       Joint joint(joint_name, id, model_number_ping);
       dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0);

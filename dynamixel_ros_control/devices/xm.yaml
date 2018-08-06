@@ -1,7 +1,7 @@
 xm:
   info:
     velocity_to_value_ratio: 41.7012
-    torque_to_current_value_ratio: 149.795386991;
+    torque_to_current_value_ratio: 149.795386991
     ticks_per_revolution: 4096
     
   unit_conversions: # dxl value to unit ratio

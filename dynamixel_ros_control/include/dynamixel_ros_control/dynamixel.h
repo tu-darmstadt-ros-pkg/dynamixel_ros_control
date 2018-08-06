@@ -25,6 +25,7 @@ public:
 
 private:
   std::string getSeries(const ros::NodeHandle& nh) const;
+  bool loadUnitConversionRatios(const ros::NodeHandle& nh);
   uint8_t id_;
   uint16_t model_number_;
   std::string model_name_;

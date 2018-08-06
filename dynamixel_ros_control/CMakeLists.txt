@@ -55,7 +55,6 @@ set(HEADERS
   include/${PROJECT_NAME}/common.h
   include/${PROJECT_NAME}/joint.h
   include/${PROJECT_NAME}/dynamixel.h
-  include/${PROJECT_NAME}/control_table.h
   include/${PROJECT_NAME}/control_table_item.h
   include/${PROJECT_NAME}/dynamixel_driver.h
   include/${PROJECT_NAME}/dynamixel_hardware_interface.h
@@ -67,7 +66,6 @@ set(SOURCES
   src/common.cpp
   src/joint.cpp
   src/dynamixel.cpp
-  src/control_table.cpp
   src/control_table_item.cpp
   src/dynamixel_driver.cpp
   src/dynamixel_hardware_interface.cpp

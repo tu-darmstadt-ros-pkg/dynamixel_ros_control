@@ -13,10 +13,8 @@ bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
 
   ros::NodeHandle device_nh(nh, "devices/" + series);
 
-  bool success = true;
-  // TODO load unit conversion ratios
-
   // Load table
+  bool success = true;
   std::vector<std::string> control_table_entries;
   device_nh.getParam("/control_table", control_table_entries);
   for (const std::string& entry_str: control_table_entries) {
@@ -28,6 +26,13 @@ bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
       success = false;
     }
   }
+
+  // Load unit conversion ratios
+  if (!loadUnitConversionRatios(device_nh)) {
+    ROS_ERROR_STREAM("Failed to load unit conversion ratios.");
+    return false;
+  }
+
   return success;
 }
 
@@ -67,11 +72,10 @@ const ControlTableItem& Dynamixel::getItem(std::string& name)
 {
   try {
     return control_table_.at(name);
-  } catch (const std::out_of_range& e) {
+  } catch (const std::out_of_range&) {
     ROS_ERROR_STREAM("Could not find register '" << name << "'.");
     throw;
   }
-
 }
 
 std::string Dynamixel::getSeries(const ros::NodeHandle& nh) const
@@ -83,6 +87,40 @@ std::string Dynamixel::getSeries(const ros::NodeHandle& nh) const
   } else {
     return series;
   }
+}
+
+bool Dynamixel::loadUnitConversionRatios(const ros::NodeHandle& nh)
+{
+  XmlRpc::XmlRpcValue units;
+  nh.getParam("unit_conversions", units);
+  if (units.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
+    return false;
+  }
+  std::map<std::string, double> unit_to_ratio;
+  for(XmlRpc::XmlRpcValue::ValueStruct::iterator it = units.begin(); it != units.end(); ++it)
+  {
+    std::string unit_name = static_cast<std::string>(it->first);
+    if (it->second.getType() != XmlRpc::XmlRpcValue::TypeDouble) {
+      ROS_ERROR_STREAM("Ratio of unit '" << unit_name << "_ is not of type double.");
+      return false;
+    }
+    double ratio = static_cast<double>(it->second);
+    unit_to_ratio.emplace(unit_name, ratio);
+  }
+
+  // Assign ratios to control table entries
+  for (std::map<std::string, ControlTableItem>::value_type& kv: control_table_) {
+    if (kv.second.unit() != "") {
+      double ratio = 1.0;
+      try {
+        ratio = unit_to_ratio.at(kv.second.unit());
+      } catch (const std::out_of_range&) {
+        ROS_ERROR_STREAM("Undefined unit '" << kv.second.unit() << "' in control table entry '" << kv.first << "'.");
+      }
+      kv.second.setDxlValueToUnitRatio(ratio);
+    }
+  }
+  return true;
 }
 
 uint16_t Dynamixel::getModelNumber() const
