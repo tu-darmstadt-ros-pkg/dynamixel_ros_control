@@ -8,6 +8,8 @@
 #include <std_msgs/Bool.h>
 
 #include <dynamixel_ros_control/dynamixel_driver.h>
+#include <dynamixel_ros_control/sync_read_manager.h>
+#include <dynamixel_ros_control/sync_write_manager.h>
 
 namespace dynamixel_ros_control {
 
@@ -17,9 +19,9 @@ public:
   DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh);
   ~DynamixelHardwareInterface();
 
-  bool init();
-  void read();
-  void write();
+  bool init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh) override;
+  void read(const ros::Time& time, const ros::Duration& period) override;
+  void write(const ros::Time& time, const ros::Duration& period) override;
 
 private:
   void setTorque(bool enabled);

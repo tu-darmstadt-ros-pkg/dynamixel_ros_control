@@ -90,6 +90,13 @@ bool DynamixelDriver::ping(uint8_t id, uint16_t& model_number)
   return packet_handler_->ping(port_handler_, id, &model_number, &error) == COMM_SUCCESS;
 }
 
+bool DynamixelDriver::requestIndirectAddresses(unsigned int data_length, unsigned int& address_start)
+{
+  address_start = next_indirect_address_;
+  next_indirect_address_ += data_length;
+  return true;
+}
+
 bool DynamixelDriver::setPacketHandler(float protocol_version)
 {
   packet_handler_ = dynamixel::PacketHandler::getPacketHandler(protocol_version);
@@ -116,7 +123,7 @@ bool DynamixelDriver::setPortHandler(std::string port_name)
   }
 }
 
-bool DynamixelDriver::setBaudRate(uint32_t baud_rate)
+bool DynamixelDriver::setBaudRate(int baud_rate)
 {
   if (port_handler_->setBaudRate(baud_rate))
   {

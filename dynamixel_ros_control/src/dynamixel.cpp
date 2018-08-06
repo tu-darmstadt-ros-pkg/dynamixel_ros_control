@@ -128,6 +128,11 @@ uint16_t Dynamixel::getModelNumber() const
   return model_number_;
 }
 
+bool Dynamixel::setIndirectAddress(unsigned int indirect_address_start, std::string register_name)
+{
+
+}
+
 uint8_t Dynamixel::getId() const
 {
   return id_;

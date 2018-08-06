@@ -10,7 +10,7 @@ int main(int argc, char** argv)
 
   // Initialize hardware interface
   dynamixel_ros_control::DynamixelHardwareInterface hw(nh, pnh);
-  if (!hw.init())
+  if (!hw.init(nh, pnh))
   {
     ROS_ERROR_STREAM("Failed to initialize hardware interface.");
     return 0;
@@ -29,15 +29,15 @@ int main(int argc, char** argv)
   ros::Rate rate(pnh.param("control_rate", 25));
   while (ros::ok())
   {
-    hw.read();
     ros::Duration period = ros::Time::now() - current_time;
     current_time = ros::Time::now();
+    hw.read(current_time, period);
     if (first_update) {
       first_update = false;
     } else {
       cm.update(current_time, period);
     }
-    hw.write();
+    hw.write(current_time, period);
     rate.sleep();
     ros::spinOnce();
   }

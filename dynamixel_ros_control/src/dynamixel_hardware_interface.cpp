@@ -16,7 +16,7 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
   }
 }
 
-bool DynamixelHardwareInterface::init()
+bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh)
 {
   // Load Parameters
   nh_.param<bool>("debug", debug_, false);
@@ -68,7 +68,7 @@ bool DynamixelHardwareInterface::init()
   // Register sync reads/writes
   for (Joint& joint: joints_) {
     // Register writes
-    control_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque); // TODO bool to uint32_t?
+    control_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
     if (joint.control_mode == POSITION) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position); // TODO read register name from config
     } else if (joint.control_mode == VELOCITY) {
@@ -89,6 +89,10 @@ bool DynamixelHardwareInterface::init()
     }
   }
 
+  // Initialize sync reads/writes
+  control_write_manager_.init();
+  read_manager_.init(driver_);
+
   if (torque_on_startup_) {
     setTorque(true);
   }
@@ -98,14 +102,14 @@ bool DynamixelHardwareInterface::init()
   return true;
 }
 
-void DynamixelHardwareInterface::read()
+void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
   if (!read_manager_.read()) {
     ROS_ERROR_STREAM("Sync read failed!");
   }
 }
 
-void DynamixelHardwareInterface::write()
+void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duration& period)
 {
   if (!control_write_manager_.write()) {
     ROS_ERROR_STREAM("Sync write failed!");

@@ -23,6 +23,8 @@ public:
   uint8_t getId() const;
   uint16_t getModelNumber() const;
 
+  bool setIndirectAddress(unsigned int indirect_address_start, std::string register_name);
+
 private:
   std::string getSeries(const ros::NodeHandle& nh) const;
   bool loadUnitConversionRatios(const ros::NodeHandle& nh);
