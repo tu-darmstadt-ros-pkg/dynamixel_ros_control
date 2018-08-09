@@ -23,7 +23,7 @@ public:
   uint8_t getId() const;
   uint16_t getModelNumber() const;
 
-  bool setIndirectAddress(unsigned int indirect_address_start, std::string register_name);
+  bool setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_address_start, uint16_t& indirect_data_start);
 
 private:
   std::string getSeries(const ros::NodeHandle& nh) const;

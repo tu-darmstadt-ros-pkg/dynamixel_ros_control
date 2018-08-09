@@ -28,10 +28,8 @@ public:
   bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, uint32_t& value_out);
 
   dynamixel::GroupSyncWrite* setSyncWrite(uint16_t address, uint8_t data_length);
-  dynamixel::GroupSyncWrite* setSyncWrite(std::string register_name);
 
   dynamixel::GroupSyncRead* setSyncRead(uint16_t address, uint8_t data_length);
-  dynamixel::GroupSyncRead* setSyncRead(std::string register_name);
 
   const std::vector<Dynamixel>& getDynamixels();
 

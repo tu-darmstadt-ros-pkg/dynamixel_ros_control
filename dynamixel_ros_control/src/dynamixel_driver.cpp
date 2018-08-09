@@ -90,6 +90,16 @@ bool DynamixelDriver::ping(uint8_t id, uint16_t& model_number)
   return packet_handler_->ping(port_handler_, id, &model_number, &error) == COMM_SUCCESS;
 }
 
+dynamixel::GroupSyncWrite*DynamixelDriver::setSyncWrite(uint16_t address, uint8_t data_length)
+{
+
+}
+
+dynamixel::GroupSyncRead* DynamixelDriver::setSyncRead(uint16_t address, uint8_t data_length)
+{
+
+}
+
 bool DynamixelDriver::requestIndirectAddresses(unsigned int data_length, unsigned int& address_start)
 {
   address_start = next_indirect_address_;
