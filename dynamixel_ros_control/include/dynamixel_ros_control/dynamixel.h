@@ -19,11 +19,11 @@ public:
   int32_t unitToDxlValue(std::string register_name, double unit_value);
   int32_t boolToDxlValue(std::string register_name, bool b);
 
-  const ControlTableItem& getItem(std::string& name);
+  const ControlTableItem& getItem(std::string& name) const;
   uint8_t getId() const;
   uint16_t getModelNumber() const;
 
-  bool setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_address_start, uint16_t& indirect_data_start);
+  bool setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address);
 
 private:
   std::string getSeries(const ros::NodeHandle& nh) const;

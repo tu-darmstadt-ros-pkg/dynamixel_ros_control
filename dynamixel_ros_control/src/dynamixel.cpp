@@ -68,7 +68,7 @@ int32_t Dynamixel::boolToDxlValue(std::string register_name, bool b)
   }
 }
 
-const ControlTableItem& Dynamixel::getItem(std::string& name)
+const ControlTableItem& Dynamixel::getItem(std::string& name) const
 {
   try {
     return control_table_.at(name);
@@ -128,7 +128,7 @@ uint16_t Dynamixel::getModelNumber() const
   return model_number_;
 }
 
-bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_address_start, uint16_t& indirect_data_start)
+bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address)
 {
 
 }
