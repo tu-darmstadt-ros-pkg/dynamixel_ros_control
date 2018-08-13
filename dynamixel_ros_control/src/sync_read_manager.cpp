@@ -19,7 +19,7 @@ void SyncReadManager::addDynamixel(Dynamixel* dxl)
 
 //}
 
-bool SyncReadManager::addRegister(std::string register_name, std::vector<std::pair<Dynamixel*, double*>> dxl_value_pairs)
+bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappingList<double>& dxl_value_pairs)
 {
   if (read_entries_.find(register_name) != read_entries_.end()) {
     ROS_ERROR_STREAM("Register '" << register_name << "' has already been added.");
@@ -46,7 +46,7 @@ bool SyncReadManager::addRegister(std::string register_name, std::vector<std::pa
 
   // Check if data length of register is the same for each servo
   uint8_t register_data_length = 0;
-  for (std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: dxl_value_pairs) {
+  for (const std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: dxl_value_pairs) {
     const Dynamixel* dxl = dxl_value_pair.first;
     uint8_t length = dxl->getItem(register_name).data_length();
     if (register_data_length == 0) {
@@ -63,6 +63,11 @@ bool SyncReadManager::addRegister(std::string register_name, std::vector<std::pa
 
   read_entries_.emplace(register_name, entry);
   return true;
+}
+
+bool SyncReadManager::addRegister(std::string register_name, DxlValueMappingList<bool> dxl_value_pairs)
+{
+  // TODO
 }
 
 bool SyncReadManager::init(DynamixelDriver& driver)
@@ -130,7 +135,6 @@ bool SyncReadManager::read()
   for (std::map<std::string, ReadEntry>::value_type& read_kv: read_entries_) {
     std::string register_name = read_kv.first;
 
-    // TODO
     uint16_t register_data_address = read_kv.second.indirect_data_address;
     uint8_t register_data_length = read_kv.second.data_length;
     for (std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: read_kv.second.dxl_value_pairs) {

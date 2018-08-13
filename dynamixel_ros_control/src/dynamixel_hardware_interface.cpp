@@ -66,6 +66,9 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   }
 
   // Register sync reads/writes
+  DxlValueMappingList<double> position_mapping;
+  DxlValueMappingList<double> velocity_mapping;
+  DxlValueMappingList<double> effort_mapping;
   for (Joint& joint: joints_) {
     // Register writes
     control_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
@@ -79,15 +82,22 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
     // Register reads
     if (joint.read_position) {
-      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
+      position_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.position));
+//      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
     }
     if (joint.read_velocity) {
-      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
+      velocity_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.velocity));
+//      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
     }
     if (joint.read_effort) {
-      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
+      effort_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.effort));
+//      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
     }
   }
+
+  read_manager_.addRegister("present_position", position_mapping);
+  read_manager_.addRegister("present_velocity", velocity_mapping);
+  read_manager_.addRegister("present_current", effort_mapping);
 
   // Initialize sync reads/writes
   control_write_manager_.init();

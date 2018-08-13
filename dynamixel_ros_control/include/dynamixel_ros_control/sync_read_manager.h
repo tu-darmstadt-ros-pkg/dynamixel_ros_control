@@ -7,16 +7,17 @@
 
 namespace dynamixel_ros_control {
 
-struct ReadEntry {
-  ReadEntry();
+template <typename T>
+using DxlValueMappingList = std::vector<std::pair<Dynamixel*, T*>>;
 
+struct ReadEntry {
   std::string register_name;
 
   unsigned int indirect_index;
   uint16_t indirect_data_address;
   uint8_t data_length;
 
-  std::vector<std::pair<Dynamixel*, double*>> dxl_value_pairs;
+  DxlValueMappingList<double> dxl_value_pairs;
 };
 
 class SyncReadManager {
@@ -26,7 +27,9 @@ public:
 
   void addDynamixel(Dynamixel* dxl);
 //  void addRegister(Dynamixel& dxl, std::string register_name, uint32_t* value);
-  bool addRegister(std::string register_name, std::vector<std::pair<Dynamixel*, double*>> dxl_value_pairs);
+  bool addRegister(std::string register_name, const DxlValueMappingList<double>& dxl_value_pairs);
+  bool addRegister(std::string register_name, DxlValueMappingList<bool> dxl_value_pairs);
+
 
   /**
    * @brief init To be called by dynamixel driver.
