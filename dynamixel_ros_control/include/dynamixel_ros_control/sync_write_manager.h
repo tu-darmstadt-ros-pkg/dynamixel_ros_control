@@ -1,20 +1,33 @@
 #ifndef DYNAMIXEL_ROS_CONTROL_SYNC_WRITE_MANAGER_H
 #define DYNAMIXEL_ROS_CONTROL_SYNC_WRITE_MANAGER_H
 
+#include <dynamixel_ros_control/dynamixel_driver.h>
 #include <dynamixel_ros_control/dynamixel.h>
 #include <dynamixel_sdk/group_sync_write.h>
 
 namespace dynamixel_ros_control {
 
+struct WriteEntry {
+  Dynamixel* dxl;
+  std::string register_name;
+  double* value;
+};
+
 class SyncWriteManager {
 public:
-  void addRegister(const Dynamixel& dxl, std::string register_name, uint32_t& value);
-  void addRegister(const Dynamixel& dxl, std::string register_name, double& value);
+  SyncWriteManager();
+  void addRegister(Dynamixel& dxl, std::string register_name, double& value);
   void addRegister(const Dynamixel& dxl, std::string register_name, bool& value);
 
-  bool init(); // to be called by dynamixel driver
+  bool init(DynamixelDriver& driver);
   bool write();
 private:
+  std::vector<WriteEntry> write_entries_;
+
+  unsigned int indirect_address_index_;
+  uint16_t indirect_data_address_;
+  uint8_t data_length_;
+
   dynamixel::GroupSyncWrite* sync_write_;
 };
 
