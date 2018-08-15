@@ -7,34 +7,18 @@ SyncWriteManager::SyncWriteManager()
 
 void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, double& value)
 {
-  // Check if entry for dynamixel exists already
-  for (const std::vector<WriteEntry>::value_type& entry: write_entries_) {
-    if (dxl.getId() == entry.dxl->getId()) {
-      ROS_ERROR_STREAM("A write entry for dynamixel ID " << dxl.getId() << " exists already.");
-      return;
-    }
+  std::vector<WriteEntry>::iterator it = addEntry(dxl, register_name);
+  if (it != write_entries_.end()) {
+    it->d_value = &value;
   }
-
-  // Check if data length matches
-  if (data_length_ == 0) {
-    data_length_ = dxl.getItem(register_name).data_length();
-  } else {
-    if (data_length_ != dxl.getItem(register_name).data_length()) {
-      ROS_ERROR_STREAM("Data length of register '" << register_name << "' does not match the data length of previous write entries.");
-      return;
-    }
-  }
-
-  WriteEntry entry;
-  entry.dxl = &dxl;
-  entry.register_name = register_name;
-  entry.value = &value;
-  write_entries_.push_back(entry);
 }
 
-void SyncWriteManager::addRegister(const Dynamixel& dxl, std::string register_name, bool& value)
+void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, bool& value)
 {
-
+  std::vector<WriteEntry>::iterator it = addEntry(dxl, register_name);
+  if (it != write_entries_.end()) {
+    it->b_value = &value;
+  }
 }
 
 bool SyncWriteManager::init(DynamixelDriver& driver)
@@ -75,7 +59,12 @@ bool SyncWriteManager::write()
 {
   // Convert values and update params
   for (std::vector<WriteEntry>::value_type& entry: write_entries_) {
-    int32_t dxl_value = entry.dxl->unitToDxlValue(entry.register_name, *entry.value);
+    int32_t dxl_value;
+    if (entry.d_value != nullptr) {
+      dxl_value = entry.dxl->unitToDxlValue(entry.register_name, *entry.d_value);
+    } else if (entry.b_value != nullptr) {
+      dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);
+    }
     unsigned char* value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
     sync_write_->changeParam(entry.dxl->getId(), value_ptr);
   }
@@ -85,6 +74,33 @@ bool SyncWriteManager::write()
     return false;
   }
   return true;
+}
+
+std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, std::string register_name)
+{
+  // Check if entry for dynamixel exists already
+  for (const std::vector<WriteEntry>::value_type& entry: write_entries_) {
+    if (dxl.getId() == entry.dxl->getId()) {
+      ROS_ERROR_STREAM("A write entry for dynamixel ID " << dxl.getId() << " exists already.");
+      return write_entries_.end();
+    }
+  }
+
+  // Check if data length matches
+  if (data_length_ == 0) {
+    data_length_ = dxl.getItem(register_name).data_length();
+  } else {
+    if (data_length_ != dxl.getItem(register_name).data_length()) {
+      ROS_ERROR_STREAM("Data length of register '" << register_name << "' does not match the data length of previous write entries.");
+      return write_entries_.end();
+    }
+  }
+
+  WriteEntry entry;
+  entry.dxl = &dxl;
+  entry.register_name = register_name;
+  write_entries_.push_back(entry);
+  return std::prev(write_entries_.end());
 }
 
 }
