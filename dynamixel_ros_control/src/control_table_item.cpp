@@ -1,6 +1,7 @@
 #include <dynamixel_ros_control/control_table_item.h>
 
 #include <boost/algorithm/string.hpp>
+#include <dynamixel_ros_control/common.h>
 
 namespace dynamixel_ros_control {
 
@@ -18,9 +19,7 @@ ControlTableItem::ControlTableItem()
 
 bool ControlTableItem::loadFromString(std::string control_table_string)
 {
-  // 102 | goal_current             | 2      | RW     | RAM    | Nm
-  // strip whitespace
-  boost::trim(control_table_string);
+  removeWhitespace(control_table_string);
   std::vector<std::string> parts;
   boost::split(parts, control_table_string, boost::is_any_of("|"));
   if (parts.size() != 6) {
@@ -30,14 +29,14 @@ bool ControlTableItem::loadFromString(std::string control_table_string)
 
   // load data
   try {
-    address_ = std::stoi(parts[0]);
+    address_ = static_cast<uint16_t>(std::stoi(parts[0]));
   } catch (const std::invalid_argument& e) {
     ROS_ERROR_STREAM("Failed to read address '" << parts[0] << "'.");
     return false;
   }
   name_ = parts[1];
   try {
-    data_length_ = std::stoi(parts[2]);
+    data_length_ = static_cast<uint8_t>(std::stoi(parts[2]));
   } catch (const std::invalid_argument& e) {
     ROS_ERROR_STREAM("Failed to read data length '" << parts[2] << "'.");
     return false;
@@ -75,11 +74,11 @@ MemoryType ControlTableItem::memory_type() const
 bool ControlTableItem::stringToAccessType(const std::string& str, AccessType& access_type)
 {
   if (str == "R") {
-    return READ;
+    access_type = READ;
     return true;
   }
   if (str == "RW") {
-    return READ_WRITE;
+    access_type = READ_WRITE;
     return true;
   }
   ROS_ERROR_STREAM("Unknown access type '" << str << "'.");

@@ -11,6 +11,12 @@ struct IndirectAddressInfo {
   uint16_t indirect_address_start;
   unsigned int count;
   uint16_t indirect_data_start;
+
+  std::string toString() const {
+    return " --- Indirect address start: " + std::to_string(indirect_address_start) + "\n" +
+           " --- Count: " + std::to_string(count) + "\n" +
+           " --- Indirect data start: " + std::to_string(indirect_data_start);
+  }
 };
 
 class Dynamixel {

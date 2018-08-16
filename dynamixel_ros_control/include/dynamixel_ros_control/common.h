@@ -14,6 +14,12 @@ bool loadRequiredParameter(const ros::NodeHandle& nh, std::string name, T& value
   return true;
 }
 
+inline std::string &removeWhitespace(std::string &s) {
+  std::string::iterator end_pos = std::remove(s.begin(), s.end(), ' ');
+  s.erase(end_pos, s.end());
+  return s;
+}
+
 //template<typename T>
 //void split(const std::string &s, char delim, T result) {
 //    std::stringstream ss(s);

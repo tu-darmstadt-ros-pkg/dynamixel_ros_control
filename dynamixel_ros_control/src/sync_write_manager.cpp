@@ -84,7 +84,7 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, std
   // Check if entry for dynamixel exists already
   for (const std::vector<WriteEntry>::value_type& entry: write_entries_) {
     if (dxl.getId() == entry.dxl->getId()) {
-      ROS_ERROR_STREAM("A write entry for dynamixel ID " << dxl.getId() << " exists already.");
+      ROS_ERROR_STREAM("A write entry for dynamixel ID " << static_cast<int>(dxl.getId()) << " exists already.");
       return write_entries_.end();
     }
   }

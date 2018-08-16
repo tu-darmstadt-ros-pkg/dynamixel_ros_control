@@ -36,10 +36,6 @@ struct Joint {
   ControlMode control_mode;
   double mounting_offset;
   double offset;
-
-  bool read_position;
-  bool read_velocity;
-  bool read_effort;
 };
 
 }

@@ -17,8 +17,11 @@ bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
   // Load table
   bool success = true;
   std::vector<std::string> control_table_entries;
-  device_nh.getParam("/control_table", control_table_entries);
+  if (!loadRequiredParameter(device_nh, "control_table", control_table_entries)) {
+    return false;
+  }
   for (const std::string& entry_str: control_table_entries) {
+//    ROS_INFO_STREAM("Processing: " << entry_str);
     ControlTableItem entry;
     if (entry.loadFromString(entry_str)) {
       control_table_.emplace(entry.name(), entry); // TODO prevent copy?
@@ -147,7 +150,7 @@ bool Dynamixel::loadUnitConversionRatios(const ros::NodeHandle& nh)
 
   // Assign ratios to control table entries
   for (std::map<std::string, ControlTableItem>::value_type& kv: control_table_) {
-    if (kv.second.unit() != "") {
+    if (kv.second.unit() != "" && kv.second.unit() != "bool") {
       double ratio = 1.0;
       try {
         ratio = unit_to_ratio.at(kv.second.unit());
@@ -167,7 +170,7 @@ bool Dynamixel::loadIndirectAddresses(const ros::NodeHandle& nh)
     return false;
   }
   for (std::string line: lines) {
-    boost::trim(line);
+    removeWhitespace(line);
     std::vector<std::string> parts;
     boost::split(parts, line, boost::is_any_of("|"));
     if (parts.size() != 2) {
@@ -188,6 +191,7 @@ bool Dynamixel::loadIndirectAddresses(const ros::NodeHandle& nh)
       continue;
     }
     info.indirect_data_start = info.indirect_address_start + static_cast<uint16_t>(2 * info.count);
+    ROS_DEBUG_STREAM("Added indirect address: " << std::endl << info.toString());
     indirect_addresses_.push_back(info);
   }
   return true;

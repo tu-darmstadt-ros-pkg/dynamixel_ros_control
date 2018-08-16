@@ -68,12 +68,16 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   }
 
   // Register sync reads/writes
+  pnh_.param("dynamixels/read_values/read_position", read_position_, true);
+  pnh_.param("dynamixels/read_values/read_velocity", read_velocity_, false);
+  pnh_.param("dynamixels/read_values/read_effort", read_effort_, false);
+
   DxlValueMappingList<double> position_mapping;
   DxlValueMappingList<double> velocity_mapping;
   DxlValueMappingList<double> effort_mapping;
   for (Joint& joint: joints_) {
     // Register writes
-    control_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
+    torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
     if (joint.control_mode == POSITION) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position); // TODO read register name from config
     } else if (joint.control_mode == VELOCITY) {
@@ -83,25 +87,33 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     }
 
     // Register reads
-    if (joint.read_position) {
+    read_manager_.addDynamixel(&joint.dynamixel);
+    if (read_position_) {
       position_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.position));
 //      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
     }
-    if (joint.read_velocity) {
+    if (read_velocity_) {
       velocity_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.velocity));
 //      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
     }
-    if (joint.read_effort) {
+    if (read_effort_) {
       effort_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.effort));
 //      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
     }
   }
 
-  read_manager_.addRegister("present_position", position_mapping);
-  read_manager_.addRegister("present_velocity", velocity_mapping);
-  read_manager_.addRegister("present_current", effort_mapping);
+  if (read_position_) {
+    read_manager_.addRegister("present_position", position_mapping);
+  }
+  if (read_velocity_) {
+    read_manager_.addRegister("present_velocity", velocity_mapping);
+  }
+  if (read_effort_) {
+    read_manager_.addRegister("present_current", effort_mapping);
+  }
 
   // Initialize sync reads/writes
+  torque_write_manager_.init(driver_);
   control_write_manager_.init(driver_);
   read_manager_.init(driver_);
 

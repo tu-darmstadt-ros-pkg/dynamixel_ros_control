@@ -53,6 +53,10 @@ private:
   bool torque_on_startup_;
   bool torque_off_on_shutdown_;
 
+  bool read_position_;
+  bool read_velocity_;
+  bool read_effort_;
+
   std::vector<Joint> joints_;
 
 
