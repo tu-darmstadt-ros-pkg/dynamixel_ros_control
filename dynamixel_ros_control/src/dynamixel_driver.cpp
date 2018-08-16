@@ -11,19 +11,19 @@ bool DynamixelDriver::init(const ros::NodeHandle& nh)
 {
   // Get port info
   std::string port_name;
-  nh.getParam("port_info/port_name", port_name);
-  if (!setPortHandler(port_name)) {
+  if (!loadRequiredParameter(nh, "port_info/port_name", port_name) || !setPortHandler(port_name)) {
     return false;
   }
 
   int baudrate;
-  nh.getParam("port_info/baudrate", baudrate);
-  if (!setBaudRate(baudrate)) {
+  if (!loadRequiredParameter(nh, "port_info/baud_rate", baudrate) || !setBaudRate(baudrate)) {
     return false;
   }
 
   float protocol_version;
-  nh.getParam("port_info/protocol_version", protocol_version);
+  if (!loadRequiredParameter(nh, "port_info/protocol_version", protocol_version)) {
+    return false;
+  }
   return setPacketHandler(protocol_version);
 }
 

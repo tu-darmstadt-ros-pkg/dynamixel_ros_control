@@ -119,7 +119,7 @@ std::string Dynamixel::getSeries(const ros::NodeHandle& nh) const
 {
   std::string series;
   if (!nh.getParam("model_list/" + std::to_string(model_number_), series)) {
-    ROS_ERROR_STREAM("Unknown model number " << model_number_ << ".");
+    ROS_ERROR_STREAM("Unknown model number " << model_number_ << ". nh: " << nh.getNamespace() << "/model_list/" << model_number_);
     return "";
   } else {
     return series;
@@ -163,7 +163,7 @@ bool Dynamixel::loadUnitConversionRatios(const ros::NodeHandle& nh)
 bool Dynamixel::loadIndirectAddresses(const ros::NodeHandle& nh)
 {
   std::vector<std::string> lines;
-  if (loadRequiredParameter(nh, "indirect_addresses", lines)) {
+  if (!loadRequiredParameter(nh, "indirect_addresses", lines)) {
     return false;
   }
   for (std::string line: lines) {

@@ -32,7 +32,10 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   bool first = true;
   for (std::vector<WriteEntry>::value_type& entry: write_entries_) {
     uint16_t indirect_data_address;
-    entry.dxl->setIndirectAddress(indirect_address_index_, entry.register_name, indirect_data_address);
+    if (!entry.dxl->setIndirectAddress(indirect_address_index_, entry.register_name, indirect_data_address)) {
+      ROS_ERROR_STREAM("Failed to set indirect address mapping");
+      return false;
+    }
     if (first) { // Save address of first dynamixel, should be the same for every one
       indirect_data_address_ = indirect_data_address;
       first = false;
@@ -87,10 +90,18 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, std
   }
 
   // Check if data length matches
+  uint8_t register_data_length;
+  try {
+    register_data_length = dxl.getItem(register_name).data_length();
+  } catch(const std::out_of_range&) {
+    ROS_ERROR_STREAM("Failed to add write entry");
+    return write_entries_.end();
+  }
+
   if (data_length_ == 0) {
-    data_length_ = dxl.getItem(register_name).data_length();
+    data_length_ = register_data_length;
   } else {
-    if (data_length_ != dxl.getItem(register_name).data_length()) {
+    if (data_length_ != register_data_length) {
       ROS_ERROR_STREAM("Data length of register '" << register_name << "' does not match the data length of previous write entries.");
       return write_entries_.end();
     }

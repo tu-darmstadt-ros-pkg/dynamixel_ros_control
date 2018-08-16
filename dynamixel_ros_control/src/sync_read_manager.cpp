@@ -95,7 +95,10 @@ bool SyncReadManager::init(DynamixelDriver& driver)
     for (std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: read_kv.second.dxl_value_pairs) {
       Dynamixel* dxl = dxl_value_pair.first;
       uint16_t indirect_data_address;
-      dxl->setIndirectAddress(current_indirect_address_index, register_name, indirect_data_address);
+      if(!dxl->setIndirectAddress(current_indirect_address_index, register_name, indirect_data_address)) {
+        ROS_ERROR_STREAM("Failed to set indirect address mapping");
+        return false;
+      }
       if (first_register) {
         indirect_data_address_ = indirect_data_address;
         first_register = false;

@@ -21,14 +21,14 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh)
 {
   // Load Parameters
-  nh_.param<bool>("debug", debug_, false);
+  pnh_.param<bool>("debug", debug_, false);
   if (debug_) {
     if (ros::console::set_logger_level(ROSCONSOLE_DEFAULT_NAME, ros::console::levels::Debug)) {
       ros::console::notifyLoggerLevelsChanged();
     }
   }
-  nh_.param("torque_on_startup", torque_on_startup_, false);
-  nh_.param("torque_off_on_shutdown", torque_off_on_shutdown_, false);
+  pnh_.param("torque_on_startup", torque_on_startup_, false);
+  pnh_.param("torque_off_on_shutdown", torque_off_on_shutdown_, false);
 
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");
   if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
@@ -152,7 +152,7 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
     }
 
     int model_number_config;
-    dxl_nh.param("model_number", model_number_config, -1);
+    bool model_number_set = dxl_nh.param("model_number", model_number_config, -1);
 
     // Ping dynamixel to retrieve model number
     uint16_t model_number_ping;
@@ -161,7 +161,7 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
       return false;
     } else {
       // Ping successful, add to list
-      if (model_number_config != model_number_ping) {
+      if (model_number_set && model_number_config != model_number_ping) {
         ROS_WARN_STREAM("Model number in config [" << model_number_config
                         << "] does not match servo model number [" << model_number_ping << "] for joint '"
                         << joint_name << "', ID: " << id_int);
@@ -173,7 +173,6 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
       if (!joint.dynamixel.loadControlTable(nh)) {
         return false;
       }
-      joints_.push_back(std::move(joint));
 
       std::stringstream ss;
       ss << "Loaded dynamixel:" << std::endl;
@@ -181,6 +180,8 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
       ss << "-- id: " << static_cast<int>(joint.dynamixel.getId()) << std::endl;
       ss << "-- model number: " << joint.dynamixel.getModelNumber() << std::endl;
       ROS_DEBUG_STREAM(ss.str());
+
+      joints_.push_back(std::move(joint));
     }
   }
   return true;
