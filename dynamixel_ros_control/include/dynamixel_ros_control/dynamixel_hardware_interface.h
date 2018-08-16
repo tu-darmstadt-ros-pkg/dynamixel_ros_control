@@ -11,6 +11,8 @@
 #include <dynamixel_ros_control/sync_read_manager.h>
 #include <dynamixel_ros_control/sync_write_manager.h>
 
+#include <dynamixel_ros_control/joint.h>
+
 namespace dynamixel_ros_control {
 
 class DynamixelHardwareInterface : public hardware_interface::RobotHW
@@ -24,6 +26,7 @@ public:
   void write(const ros::Time& time, const ros::Duration& period) override;
 
 private:
+  bool loadDynamixels(const ros::NodeHandle& nh);
   void setTorque(bool enabled);
   void setTorque(std_msgs::BoolConstPtr enabled);
 

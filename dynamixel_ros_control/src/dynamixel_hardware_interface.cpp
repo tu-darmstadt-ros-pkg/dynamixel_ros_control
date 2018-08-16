@@ -1,5 +1,7 @@
 #include <dynamixel_ros_control/dynamixel_hardware_interface.h>
 
+#include <dynamixel_ros_control/common.h>
+
 namespace dynamixel_ros_control {
 
 DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
@@ -29,7 +31,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   nh_.param("torque_off_on_shutdown", torque_off_on_shutdown_, false);
 
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");
-  if (!driver_.loadDynamixels(dxl_nh, joints_)) {
+  if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
     return false;
   }
 
@@ -100,7 +102,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   read_manager_.addRegister("present_current", effort_mapping);
 
   // Initialize sync reads/writes
-  control_write_manager_.init();
+  control_write_manager_.init(driver_);
   read_manager_.init(driver_);
 
   if (torque_on_startup_) {
@@ -124,6 +126,64 @@ void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duratio
   if (!control_write_manager_.write()) {
     ROS_ERROR_STREAM("Sync write failed!");
   }
+}
+
+bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
+{
+  // Get dxl info
+  XmlRpc::XmlRpcValue dxls;
+  nh.getParam("device_info", dxls);
+  ROS_ASSERT(dxls.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+  for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = dxls.begin(); it != dxls.end(); ++it)
+  {
+    std::string joint_name = static_cast<std::string>(it->first);
+    ros::NodeHandle dxl_nh(nh, "device_info/" + joint_name);
+
+    int id_int;
+    if (!loadRequiredParameter(dxl_nh, "id", id_int)) {
+      return false;
+    }
+    uint8_t id;
+    if (id_int < 256) {
+      id = static_cast<uint8_t>(id_int);
+    } else {
+      ROS_ERROR_STREAM("ID " << id_int << " exceeds 256.");
+      continue;
+    }
+
+    int model_number_config;
+    dxl_nh.param("model_number", model_number_config, -1);
+
+    // Ping dynamixel to retrieve model number
+    uint16_t model_number_ping;
+    if (!driver_.ping(id, model_number_ping)) {
+      ROS_ERROR_STREAM("Failed to ping motor '" << joint_name << "' with id " << id_int);
+      return false;
+    } else {
+      // Ping successful, add to list
+      if (model_number_config != model_number_ping) {
+        ROS_WARN_STREAM("Model number in config [" << model_number_config
+                        << "] does not match servo model number [" << model_number_ping << "] for joint '"
+                        << joint_name << "', ID: " << id_int);
+      }
+
+      Joint joint(joint_name, id, model_number_ping, driver_);
+      dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0);
+      dxl_nh.param("offset", joint.offset, 0.0);
+      if (!joint.dynamixel.loadControlTable(nh)) {
+        return false;
+      }
+      joints_.push_back(std::move(joint));
+
+      std::stringstream ss;
+      ss << "Loaded dynamixel:" << std::endl;
+      ss << "-- name: " << joint.name << std::endl;
+      ss << "-- id: " << static_cast<int>(joint.dynamixel.getId()) << std::endl;
+      ss << "-- model number: " << joint.dynamixel.getModelNumber() << std::endl;
+      ROS_DEBUG_STREAM(ss.str());
+    }
+  }
+  return true;
 }
 
 

@@ -3,7 +3,6 @@
 
 #include <ros/ros.h>
 
-#include <dynamixel_ros_control/joint.h>
 #include <dynamixel_sdk/port_handler.h>
 #include <dynamixel_sdk/packet_handler.h>
 #include <dynamixel_sdk/group_sync_read.h>
@@ -14,24 +13,20 @@ namespace dynamixel_ros_control {
 class DynamixelDriver {
 public:
   DynamixelDriver();
-  bool loadDynamixels(const ros::NodeHandle& nh, std::vector<Joint>& joints);
-  void addDynamixel(const Dynamixel& dxl);
+
+  bool init(const ros::NodeHandle& nh);
 
   bool ping(uint8_t id);
   bool ping(uint8_t id, uint16_t& model_number);
+  std::vector<std::pair<uint8_t /*id*/, uint16_t /*model_number*/>> scan();
 
   bool writeMultiRegister(std::string register_name, uint32_t value);
-  bool writeRegister(const Dynamixel& dxl, std::string register_name, uint32_t value);
-  bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, uint32_t value);
-
-  bool readRegister(const Dynamixel& dxl, std::string register_name, uint32_t& value_out);
-  bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, uint32_t& value_out);
+  bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value);
+  bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out);
 
   dynamixel::GroupSyncWrite* setSyncWrite(uint16_t address, uint8_t data_length);
 
   dynamixel::GroupSyncRead* setSyncRead(uint16_t address, uint8_t data_length);
-
-  const std::vector<Dynamixel>& getDynamixels();
 
   bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start);
 private:

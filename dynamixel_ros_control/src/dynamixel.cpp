@@ -1,11 +1,12 @@
 #include <dynamixel_ros_control/dynamixel.h>
 
 #include <dynamixel_ros_control/common.h>
+#include <boost/algorithm/string.hpp>
 
 namespace dynamixel_ros_control {
 
-Dynamixel::Dynamixel(uint8_t id, uint16_t model_number)
-  : id_(id), model_number_(model_number){}
+Dynamixel::Dynamixel(uint8_t id, uint16_t model_number, DynamixelDriver& driver)
+  :  driver_(driver), id_(id), model_number_(model_number) {}
 
 bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
 {
@@ -29,11 +30,47 @@ bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
 
   // Load unit conversion ratios
   if (!loadUnitConversionRatios(device_nh)) {
-    ROS_ERROR_STREAM("Failed to load unit conversion ratios.");
-    return false;
+    ROS_WARN_STREAM("Failed to load unit conversion ratios.");
+  }
+
+  // Load indirect addresses
+  if (!loadIndirectAddresses(device_nh)) {
+    ROS_WARN_STREAM("Failed to load indirect addresses.");
   }
 
   return success;
+}
+
+bool Dynamixel::writeRegister(std::string register_name, int32_t value) const
+{
+  const ControlTableItem* item;
+  try {
+    item = &getItem(register_name);
+  } catch (const std::out_of_range&) {
+    return false;
+  }
+  return writeRegister(item->address(), item->data_length(), value);
+}
+
+bool Dynamixel::writeRegister(uint16_t address, uint8_t data_length, int32_t value) const
+{
+  return driver_.writeRegister(getId(), address, data_length, value);
+}
+
+bool Dynamixel::readRegister(std::string register_name, int32_t& value_out)
+{
+  const ControlTableItem* item;
+  try {
+    item = &getItem(register_name);
+  } catch (const std::out_of_range&) {
+    return false;
+  }
+  return readRegister(item->address(), item->data_length(), value_out);
+}
+
+bool Dynamixel::readRegister(uint16_t address, uint8_t data_length, int32_t& value_out)
+{
+  return driver_.readRegister(getId(), address, data_length, value_out);
 }
 
 double Dynamixel::dxlValueToUnit(std::string register_name, int32_t value)
@@ -123,6 +160,39 @@ bool Dynamixel::loadUnitConversionRatios(const ros::NodeHandle& nh)
   return true;
 }
 
+bool Dynamixel::loadIndirectAddresses(const ros::NodeHandle& nh)
+{
+  std::vector<std::string> lines;
+  if (loadRequiredParameter(nh, "indirect_addresses", lines)) {
+    return false;
+  }
+  for (std::string line: lines) {
+    boost::trim(line);
+    std::vector<std::string> parts;
+    boost::split(parts, line, boost::is_any_of("|"));
+    if (parts.size() != 2) {
+      ROS_ERROR_STREAM("Indirect address line has invalid size " << parts.size());
+      continue;
+    }
+    IndirectAddressInfo info;
+    try {
+      info.indirect_address_start = static_cast<uint16_t>(std::stoi(parts[0]));
+    } catch (const std::invalid_argument&) {
+      ROS_ERROR_STREAM("Indirect address start '" << parts[0] << "' is not an integer.");
+      continue;
+    }
+    try {
+      info.count = static_cast<unsigned int>(std::stoi(parts[1]));
+    } catch (const std::invalid_argument&) {
+      ROS_ERROR_STREAM("Indirect address count '" << parts[1] << "' is not an integer.");
+      continue;
+    }
+    info.indirect_data_start = info.indirect_address_start + static_cast<uint16_t>(2 * info.count);
+    indirect_addresses_.push_back(info);
+  }
+  return true;
+}
+
 uint16_t Dynamixel::getModelNumber() const
 {
   return model_number_;
@@ -130,7 +200,34 @@ uint16_t Dynamixel::getModelNumber() const
 
 bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address)
 {
+  uint16_t indirect_address;
+  if (!indirectIndexToAddresses(indirect_address_index, indirect_address, indirect_data_address)) {
+    return false;
+  }
+  uint16_t register_address;
+  try {
+    register_address = getItem(register_name).address();
+  } catch (const std::out_of_range&) {
+    return false;
+  }
+  return writeRegister(indirect_address, sizeof(register_address), register_address);
+}
 
+bool Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address)
+{
+  const IndirectAddressInfo* info;
+  unsigned int total_count = 0;
+  unsigned int local_index;
+  for (const IndirectAddressInfo& i: indirect_addresses_) {
+    total_count += i.count;
+    if (indirect_address_index < total_count) {
+      info = &i;
+      local_index = indirect_address_index - (total_count - i.count);
+      break;
+    }
+  }
+  indirect_address = info->indirect_address_start + static_cast<uint16_t>(local_index * 2);
+  indirect_data_address = info->indirect_data_start + static_cast<uint16_t>(local_index);
 }
 
 uint8_t Dynamixel::getId() const

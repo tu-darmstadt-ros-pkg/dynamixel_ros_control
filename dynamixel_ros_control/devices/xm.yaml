@@ -16,7 +16,7 @@ xm:
     
   indirect_addresses:
   # start addr  | count
-    - 168       | 28
+    #- 168       | 28
     - 578       | 28
 
   control_table:

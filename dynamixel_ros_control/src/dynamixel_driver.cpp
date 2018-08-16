@@ -7,75 +7,24 @@ namespace dynamixel_ros_control {
 DynamixelDriver::DynamixelDriver()
   : next_indirect_address_(0) {}
 
-bool DynamixelDriver::loadDynamixels(const ros::NodeHandle& nh, std::vector<Joint>& joints)
+bool DynamixelDriver::init(const ros::NodeHandle& nh)
 {
   // Get port info
   std::string port_name;
   nh.getParam("port_info/port_name", port_name);
-  setPortHandler(port_name);
+  if (!setPortHandler(port_name)) {
+    return false;
+  }
 
   int baudrate;
   nh.getParam("port_info/baudrate", baudrate);
-  setBaudRate(baudrate);
+  if (!setBaudRate(baudrate)) {
+    return false;
+  }
 
   float protocol_version;
   nh.getParam("port_info/protocol_version", protocol_version);
-  setPacketHandler(protocol_version);
-
-  // Get dxl info
-  XmlRpc::XmlRpcValue dxls;
-  nh.getParam("device_info", dxls);
-  ROS_ASSERT(dxls.getType() == XmlRpc::XmlRpcValue::TypeStruct);
-  for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = dxls.begin(); it != dxls.end(); ++it)
-  {
-    std::string joint_name = (std::string)(it->first);
-    ros::NodeHandle dxl_nh(nh, "device_info/" + joint_name);
-
-    int id_int;
-    if (!loadRequiredParameter(dxl_nh, "id", id_int)) {
-      return false;
-    }
-    uint8_t id;
-    if (id_int < 256) {
-      id = static_cast<uint8_t>(id_int);
-    } else {
-      ROS_ERROR_STREAM("ID " << id_int << " exceeds 256.");
-      continue;
-    }
-
-    int model_number_config;
-    dxl_nh.param("model_number", model_number_config, -1);
-
-    // Ping dynamixel to retrieve model number
-    uint16_t model_number_ping;
-    if (!ping(id, model_number_ping)) {
-      ROS_ERROR_STREAM("Failed to ping motor '" << joint_name << "' with id " << id_int);
-      return false;
-    } else {
-      // Ping successful, add to list
-      if (model_number_config != model_number_ping) {
-        ROS_WARN_STREAM("Model number in config [" << model_number_config
-                        << "] does not match servo model number [" << model_number_ping << "] for joint '"
-                        << joint_name << "', ID: " << id_int);
-      }
-
-      Joint joint(joint_name, id, model_number_ping);
-      dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0);
-      dxl_nh.param("offset", joint.offset, 0.0);
-      if (!joint.dynamixel.loadControlTable(nh)) {
-        return false;
-      }
-      joints.push_back(joint); // TODO prevent copy?
-
-      std::stringstream ss;
-      ss << "Loaded dynamixel:" << std::endl;
-      ss << "-- name: " << joint.name << std::endl;
-      ss << "-- id: " << static_cast<int>(joint.dynamixel.getId()) << std::endl;
-      ss << "-- model number: " << joint.dynamixel.getModelNumber() << std::endl;
-      ROS_DEBUG_STREAM(ss.str());
-    }
-  }
-  return true;
+  return setPacketHandler(protocol_version);
 }
 
 bool DynamixelDriver::ping(uint8_t id)
@@ -90,14 +39,89 @@ bool DynamixelDriver::ping(uint8_t id, uint16_t& model_number)
   return packet_handler_->ping(port_handler_, id, &model_number, &error) == COMM_SUCCESS;
 }
 
+std::vector<std::pair<uint8_t, uint16_t>> DynamixelDriver::scan()
+{
+  std::vector<std::pair<uint8_t, uint16_t>> dxl_list;
+  for (int id = 0; id <= std::numeric_limits<uint8_t>::max(); id++) {
+    uint8_t idc = static_cast<uint8_t>(id);
+    uint16_t model_number;
+    if (ping(idc, model_number)) {
+      dxl_list.push_back(std::make_pair(idc, model_number));
+    }
+  }
+  return dxl_list;
+}
+
+bool DynamixelDriver::writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value)
+{
+  uint8_t error = 0;
+  int comm_result = COMM_TX_FAIL;
+
+  if (data_length == 1) {
+    comm_result = packet_handler_->write1ByteTxRx(port_handler_, id, address, static_cast<uint8_t>(value), &error);
+  }
+  else if (data_length == 2) {
+    comm_result = packet_handler_->write2ByteTxRx(port_handler_, id, address, static_cast<uint16_t>(value), &error);
+  }
+  else if (data_length == 4) {
+    comm_result = packet_handler_->write4ByteTxRx(port_handler_, id, address, static_cast<uint32_t>(value), &error);
+  }
+
+  if (comm_result == COMM_SUCCESS) {
+    if (error != 0) {
+      const char* error_cstr = packet_handler_->getRxPacketError(error);
+      ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Failed to write: " << error_cstr);
+      return false;
+    }
+    return true;
+  } else {
+    const char* error_cstr = packet_handler_->getTxRxResult(comm_result);
+    ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Communication error while writing: " << error_cstr);
+    return false;
+  }
+}
+
+bool DynamixelDriver::readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out)
+{
+  uint8_t error = 0;
+  int comm_result = COMM_RX_FAIL;
+
+  uint32_t* value_ptr = reinterpret_cast<uint32_t*>(&value_out);
+
+  if (data_length == 1) {
+    comm_result = packet_handler_->read1ByteTxRx(port_handler_, id, address, reinterpret_cast<uint8_t*>(value_ptr), &error);
+  }
+  else if (data_length == 2)
+  {
+    comm_result = packet_handler_->read2ByteTxRx(port_handler_, id, address, reinterpret_cast<uint16_t*>(value_ptr), &error);
+  }
+  else if (data_length == 4)
+  {
+    comm_result = packet_handler_->read4ByteTxRx(port_handler_, id, address, value_ptr, &error);
+  }
+
+  if (comm_result == COMM_SUCCESS) {
+    if (error != 0) {
+      const char* error_cstr = packet_handler_->getRxPacketError(error);
+      ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Read error: " << error_cstr);
+      return false;
+    }
+    return true;
+  } else {
+    const char* error_cstr = packet_handler_->getTxRxResult(comm_result);
+    ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Read communication error: " << error_cstr);
+    return false;
+  }
+}
+
 dynamixel::GroupSyncWrite*DynamixelDriver::setSyncWrite(uint16_t address, uint8_t data_length)
 {
-
+  return new dynamixel::GroupSyncWrite(port_handler_, packet_handler_, address, data_length);
 }
 
 dynamixel::GroupSyncRead* DynamixelDriver::setSyncRead(uint16_t address, uint8_t data_length)
 {
-
+  return new dynamixel::GroupSyncRead(port_handler_, packet_handler_, address, data_length);
 }
 
 bool DynamixelDriver::requestIndirectAddresses(unsigned int data_length, unsigned int& address_start)
