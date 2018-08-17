@@ -65,8 +65,10 @@ bool SyncWriteManager::write()
     int32_t dxl_value;
     if (entry.d_value != nullptr) {
       dxl_value = entry.dxl->unitToDxlValue(entry.register_name, *entry.d_value);
+      ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] Value: " << dxl_value << ", Converted: " << *entry.d_value);
     } else if (entry.b_value != nullptr) {
       dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);
+      ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] Value: " << dxl_value << ", Converted: " << *entry.b_value);
     }
     unsigned char* value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
     sync_write_->changeParam(entry.dxl->getId(), value_ptr);

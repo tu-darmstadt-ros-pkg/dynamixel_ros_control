@@ -1,7 +1,7 @@
 debug: true
 control_rate: 20.0 
 torque_on_startup: true
-torque_off_on_shutdown: false
+torque_off_on_shutdown: true
 dynamixels:
   port_info:
     port_name: /dev/ttyUSB0

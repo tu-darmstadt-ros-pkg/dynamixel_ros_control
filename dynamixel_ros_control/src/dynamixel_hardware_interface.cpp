@@ -14,6 +14,7 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 {
   if (torque_off_on_shutdown_)
   {
+    std::cout << "Disabling torque on shutdown!" << std::endl;
     setTorque(false);
   }
 }
@@ -118,6 +119,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   read_manager_.init(driver_);
 
   if (torque_on_startup_) {
+    ROS_INFO_STREAM("Enabling torque on startup");
     setTorque(true);
   }
 
@@ -128,16 +130,12 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
-  if (!read_manager_.read()) {
-    ROS_ERROR_STREAM("Sync read failed!");
-  }
+  read_manager_.read();
 }
 
 void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duration& period)
 {
-  if (!control_write_manager_.write()) {
-    ROS_ERROR_STREAM("Sync write failed!");
-  }
+  control_write_manager_.write();
 }
 
 bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)

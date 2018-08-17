@@ -208,13 +208,22 @@ bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::str
   if (!indirectIndexToAddresses(indirect_address_index, indirect_address, indirect_data_address)) {
     return false;
   }
-  uint16_t register_address;
+  const ControlTableItem* item;
   try {
-    register_address = getItem(register_name).address();
+    item = &getItem(register_name);
   } catch (const std::out_of_range&) {
     return false;
   }
-  return writeRegister(indirect_address, sizeof(register_address), register_address);
+  uint16_t register_address = item->address();
+  uint8_t data_length = item->data_length();
+
+  ROS_DEBUG_STREAM("[INDIRECT ADDRESS] Setting indirect address " << indirect_address << " to " << register_address << "(" << register_name <<
+                   "), data_address: " << indirect_data_address);
+  bool success = true;
+  for (uint16_t i = 0; i < data_length; i++) {
+    success &= writeRegister(indirect_address + (2*i), sizeof(register_address), register_address + i);
+  }
+  return success;
 }
 
 bool Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address)

@@ -144,7 +144,9 @@ bool SyncReadManager::read()
       Dynamixel* dxl = dxl_value_pair.first;
       if (sync_read_->isAvailable(dxl->getId(), register_data_address, register_data_length)) {
         int32_t value = static_cast<int32_t>(sync_read_->getData(dxl->getId(), register_data_address, register_data_length));
-        *dxl_value_pair.second = dxl->dxlValueToUnit(register_name, value);
+        double dvalue = dxl->dxlValueToUnit(register_name, value);
+        ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << value << ", Converted: " << dvalue);
+        *dxl_value_pair.second = dvalue;
       }
     }
   }
