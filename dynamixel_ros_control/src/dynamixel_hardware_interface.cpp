@@ -5,7 +5,7 @@
 namespace dynamixel_ros_control {
 
 DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
-  : nh_(nh), pnh_(pnh)
+  : nh_(nh), pnh_(pnh), first_cycle_(true)
 {
 
 }
@@ -21,6 +21,7 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 
 bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh)
 {
+  first_cycle_ = true;
   // Load Parameters
   pnh_.param<bool>("debug", debug_, false);
   if (debug_) {
@@ -131,6 +132,12 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
   read_manager_.read();
+  if (first_cycle_) {
+    first_cycle_ = false;
+    for (Joint& joint: joints_) {
+      joint.goal_state = joint.current_state;
+    }
+  }
 }
 
 void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duration& period)
