@@ -44,6 +44,18 @@ bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
   return success;
 }
 
+bool Dynamixel::writeRegister(std::string register_name, bool value) const
+{
+  int32_t dxl_value = boolToDxlValue(register_name, value);
+  return writeRegister(register_name, dxl_value);
+}
+
+bool Dynamixel::writeRegister(std::string register_name, double value) const
+{
+  int32_t dxl_value = unitToDxlValue(register_name, value);
+  return writeRegister(register_name, dxl_value);
+}
+
 bool Dynamixel::writeRegister(std::string register_name, int32_t value) const
 {
   const ControlTableItem* item;
@@ -97,12 +109,12 @@ bool Dynamixel::dxlValueToBool(std::string register_name, int32_t value)
   }
 }
 
-int32_t Dynamixel::unitToDxlValue(std::string register_name, double unit_value)
+int32_t Dynamixel::unitToDxlValue(std::string register_name, double unit_value) const
 {
   return static_cast<int32_t>(unit_value / getItem(register_name).dxlValueToUnitRatio());
 }
 
-int32_t Dynamixel::boolToDxlValue(std::string register_name, bool b)
+int32_t Dynamixel::boolToDxlValue(std::string register_name, bool b) const
 {
   std::string unit = getItem(register_name).unit();
   if (unit == "bool") {

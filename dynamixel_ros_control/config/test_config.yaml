@@ -15,10 +15,11 @@ dynamixels:
   device_info: # read/write all devices with one packet
     arm_joint:
       id: 0
-      control_mode: effort
+      control_mode: current_based_position
   write_registers:
     arm_joint:
       led: true # radian
+      goal_current: 0.05
   publish_registers:
     present_temperature: 
       topic: /dynamixels/temperature

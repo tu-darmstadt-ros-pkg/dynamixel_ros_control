@@ -13,7 +13,7 @@
   
     <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"
           args="joint_state_controller 
-                arm_effort_controller">    
+                arm_position_controller">    
     </node>
   </group>
 </launch>

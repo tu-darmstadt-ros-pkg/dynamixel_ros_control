@@ -37,6 +37,8 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     return false;
   }
 
+  writeInitialValues(dxl_nh);
+
   // Register interfaces
   for (Joint& joint: joints_)
   {
@@ -44,7 +46,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
                                                       &joint.current_state.effort);
     jnt_state_interface_.registerHandle(state_handle);
 
-    if (joint.getControlMode() == POSITION) {
+    if (joint.getControlMode() == POSITION || joint.getControlMode() == EXTENDED_POSITION || joint.getControlMode() == CURRENT_BASED_POSITION) {
       hardware_interface::JointHandle pos_handle(state_handle, &joint.goal_state.position);
       jnt_pos_interface_.registerHandle(pos_handle);
     } else if (joint.getControlMode() == VELOCITY) {
@@ -227,6 +229,43 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
   return true;
 }
 
+void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
+{
+  XmlRpc::XmlRpcValue joints;
+  if (!nh.getParam("write_registers", joints)) {
+    return;
+  }
+  ROS_INFO_STREAM("Writing initial values:")
+  ROS_ASSERT(dxls.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+  for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = joints.begin(); it != joints.end(); ++it)
+  {
+    std::string joint_name = static_cast<std::string>(it->first);
+    Joint* joint = getJointByName(joint_name);
+    if (!joint) {
+      ROS_ERROR_STREAM("Unknown joint '" << joint_name << "'.");
+      continue;
+    }
+    ROS_INFO_STREAM(joint_name << ":");
+
+    XmlRpc::XmlRpcValue registers;
+    nh.getParam("write_registers/" + joint_name, registers);
+    ROS_ASSERT(registers.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+    for(XmlRpc::XmlRpcValue::ValueStruct::iterator it = registers.begin(); it != registers.end(); ++it)
+    {
+      std::string register_name = static_cast<std::string>(it->first);
+      if (it->second.getType() == XmlRpc::XmlRpcValue::TypeDouble) {
+        double value = static_cast<double>(it->second);
+        joint->dynamixel.writeRegister(register_name, value);
+        ROS_INFO_STREAM("--- " << register_name << ": " << value);
+      } else if (it->second.getType() == XmlRpc::XmlRpcValue::TypeBoolean) {
+        bool value = static_cast<bool>(it->second);
+        joint->dynamixel.writeRegister(register_name, value);
+        ROS_INFO_STREAM("--- " << register_name << ": " << value);
+      }
+    }
+  }
+}
+
 
 void DynamixelHardwareInterface::setTorque(bool enabled)
 {
@@ -241,6 +280,16 @@ void DynamixelHardwareInterface::setTorque(bool enabled)
 void DynamixelHardwareInterface::setTorque(std_msgs::BoolConstPtr enabled)
 {
   setTorque(enabled->data);
+}
+
+Joint* DynamixelHardwareInterface::getJointByName(std::string name)
+{
+  for (Joint& joint: joints_) {
+    if (joint.name == name) {
+      return &joint;
+    }
+  }
+  return nullptr;
 }
 
 }

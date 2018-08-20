@@ -36,6 +36,8 @@ public:
   bool loadControlTable(const ros::NodeHandle& nh);
 
   // Register access
+  bool writeRegister(std::string register_name, bool value) const;
+  bool writeRegister(std::string register_name, double value) const;
   bool writeRegister(std::string register_name, int32_t value) const;
   bool writeRegister(uint16_t address, uint8_t data_length, int32_t value) const;
 
@@ -47,8 +49,8 @@ public:
   // Value conversion functions
   double dxlValueToUnit(std::string register_name, int32_t value);
   bool dxlValueToBool(std::string register_name, int32_t value);
-  int32_t unitToDxlValue(std::string register_name, double unit_value);
-  int32_t boolToDxlValue(std::string register_name, bool b);
+  int32_t unitToDxlValue(std::string register_name, double unit_value) const;
+  int32_t boolToDxlValue(std::string register_name, bool b) const;
 
   const ControlTableItem& getItem(std::string& name) const;
   uint8_t getId() const;

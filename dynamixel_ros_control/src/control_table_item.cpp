@@ -30,14 +30,14 @@ bool ControlTableItem::loadFromString(std::string control_table_string)
   // load data
   try {
     address_ = static_cast<uint16_t>(std::stoi(parts[0]));
-  } catch (const std::invalid_argument& e) {
+  } catch (const std::invalid_argument&) {
     ROS_ERROR_STREAM("Failed to read address '" << parts[0] << "'.");
     return false;
   }
   name_ = parts[1];
   try {
     data_length_ = static_cast<uint8_t>(std::stoi(parts[2]));
-  } catch (const std::invalid_argument& e) {
+  } catch (const std::invalid_argument&) {
     ROS_ERROR_STREAM("Failed to read data length '" << parts[2] << "'.");
     return false;
   }
