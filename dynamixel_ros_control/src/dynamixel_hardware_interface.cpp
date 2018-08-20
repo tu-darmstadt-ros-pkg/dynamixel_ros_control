@@ -44,13 +44,13 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
                                                       &joint.current_state.effort);
     jnt_state_interface_.registerHandle(state_handle);
 
-    if (joint.control_mode == POSITION) {
+    if (joint.getControlMode() == POSITION) {
       hardware_interface::JointHandle pos_handle(state_handle, &joint.goal_state.position);
       jnt_pos_interface_.registerHandle(pos_handle);
-    } else if (joint.control_mode == VELOCITY) {
+    } else if (joint.getControlMode() == VELOCITY) {
       hardware_interface::JointHandle vel_handle(state_handle, &joint.goal_state.velocity);
       jnt_vel_interface_.registerHandle(vel_handle);
-    } else if (joint.control_mode == CURRENT) {
+    } else if (joint.getControlMode() == CURRENT) {
       hardware_interface::JointHandle eff_handle(state_handle, &joint.goal_state.effort);
       jnt_eff_interface_.registerHandle(eff_handle);
     }
@@ -80,11 +80,11 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   for (Joint& joint: joints_) {
     // Register writes
     torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
-    if (joint.control_mode == POSITION) {
+    if (joint.getControlMode() == POSITION || joint.getControlMode() == EXTENDED_POSITION || joint.getControlMode() == CURRENT_BASED_POSITION) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position); // TODO read register name from config
-    } else if (joint.control_mode == VELOCITY) {
+    } else if (joint.getControlMode() == VELOCITY) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
-    } else if (joint.control_mode == CURRENT) {
+    } else if (joint.getControlMode() == CURRENT) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_current", joint.goal_state.effort); // TODO effort = current?
     }
 
@@ -147,6 +147,16 @@ void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duratio
 
 bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
 {
+  // Load default control mode for all joints
+  std::string default_control_mode_str;
+  nh.param<std::string>("control_mode", default_control_mode_str, "position_control");
+  ControlMode default_control_mode = POSITION;
+  try {
+    default_control_mode = stringToControlMode(default_control_mode_str);
+  } catch (const std::invalid_argument& e) {
+    ROS_ERROR_STREAM(e.what() << std::endl << "Defaulting to position control.");
+  }
+
   // Get dxl info
   XmlRpc::XmlRpcValue dxls;
   nh.getParam("device_info", dxls);
@@ -161,10 +171,10 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
       return false;
     }
     uint8_t id;
-    if (id_int < 256) {
+    if (id_int >= 0 && id_int < 256) {
       id = static_cast<uint8_t>(id_int);
     } else {
-      ROS_ERROR_STREAM("ID " << id_int << " exceeds 256.");
+      ROS_ERROR_STREAM("ID " << id_int << " is not in the valid range [0;255]");
       continue;
     }
 
@@ -185,10 +195,23 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
       }
 
       Joint joint(joint_name, id, model_number_ping, driver_);
-      dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0);
+      dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0); // TODO unused
       dxl_nh.param("offset", joint.offset, 0.0);
       if (!joint.dynamixel.loadControlTable(nh)) {
         return false;
+      }
+
+      // Local control mode can override default control mode
+      std::string control_mode_str;
+      if (dxl_nh.getParam("control_mode", control_mode_str)) {
+        try {
+          joint.setControlMode(stringToControlMode(control_mode_str));
+        } catch(const std::invalid_argument& e) {
+          ROS_ERROR_STREAM(e.what() << std::endl << "Using default control mode.");
+          joint.setControlMode(default_control_mode);
+        }
+      } else {
+        joint.setControlMode(default_control_mode);
       }
 
       std::stringstream ss;

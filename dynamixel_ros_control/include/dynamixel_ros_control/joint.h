@@ -16,26 +16,25 @@ struct State
   bool torque;
 };
 
-enum ControlMode {
-  CURRENT,
-  VELOCITY,
-  POSITION,
-  EXTENDED_POSITION,
-  CURRENT_BASED_POSITION,
-  PWM
-};
-
-struct Joint {
+class Joint {
+public:
   Joint(std::string _name, uint8_t id, uint16_t model_number, dynamixel_ros_control::DynamixelDriver& driver);
+
   std::string name;
   Dynamixel dynamixel;
 
   State current_state;
   State goal_state;
 
-  ControlMode control_mode;
   double mounting_offset;
   double offset;
+
+  ControlMode getControlMode() const;
+  bool setControlMode(const ControlMode& value);
+
+private:
+  ControlMode control_mode;
+
 };
 
 }

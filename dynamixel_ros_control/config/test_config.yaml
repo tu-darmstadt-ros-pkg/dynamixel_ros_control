@@ -10,16 +10,15 @@ dynamixels:
   read_values: # write values are given by the control mode
     read_position: true
     read_velocity: true
-    read_torque: false
+    read_effort: true
   control_mode: position
   device_info: # read/write all devices with one packet
     arm_joint:
       id: 0
+      control_mode: effort
   write_registers:
-    arm_yaw_joint:
-      max_position_limit: 3.14 # radian
-    lidar_spin_joint:
-      goal_velocity: 1 # radian per second
+    arm_joint:
+      led: true # radian
   publish_registers:
     present_temperature: 
       topic: /dynamixels/temperature

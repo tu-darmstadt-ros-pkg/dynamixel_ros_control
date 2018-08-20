@@ -19,6 +19,17 @@ struct IndirectAddressInfo {
   }
 };
 
+enum ControlMode {
+  CURRENT,
+  VELOCITY,
+  POSITION,
+  EXTENDED_POSITION,
+  CURRENT_BASED_POSITION,
+  PWM
+};
+
+ControlMode stringToControlMode(const std::string& str);
+
 class Dynamixel {
 public:
   Dynamixel(uint8_t id, uint16_t model_number, dynamixel_ros_control::DynamixelDriver& driver);
@@ -30,6 +41,8 @@ public:
 
   bool readRegister(std::string register_name, int32_t& value_out);
   bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out);
+
+  bool writeControlMode(ControlMode mode);
 
   // Value conversion functions
   double dxlValueToUnit(std::string register_name, int32_t value);

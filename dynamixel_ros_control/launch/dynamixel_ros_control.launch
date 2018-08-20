@@ -12,7 +12,8 @@
     </node>
   
     <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"
-          args="joint_state_controller arm_controller">    
+          args="joint_state_controller 
+                arm_effort_controller">    
     </node>
   </group>
 </launch>

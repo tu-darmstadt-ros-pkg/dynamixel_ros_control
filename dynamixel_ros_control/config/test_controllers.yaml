@@ -7,9 +7,23 @@ arm_traj_controller:
   joints:
     - arm_joint
     
-arm_controller:
+arm_position_controller:
   type: "position_controllers/JointPositionController"
   joint: arm_joint
+  
+arm_velocity_controller:
+  type: "velocity_controllers/JointVelocityController"
+  joint: arm_joint
+  
+arm_effort_controller:
+  type: "effort_controllers/JointEffortController"
+  joint: arm_joint
+  
+arm_effort_position_controller:
+  type: "effort_controllers/JointPositionController"
+  joint: arm_joint
+  
+  pid: {p: 100, d: 0.0, i: 0, i_clamp: 2}
   
   
 

@@ -76,6 +76,11 @@ bool Dynamixel::readRegister(uint16_t address, uint8_t data_length, int32_t& val
   return driver_.readRegister(getId(), address, data_length, value_out);
 }
 
+bool Dynamixel::writeControlMode(ControlMode mode)
+{
+  return writeRegister("operating_mode", static_cast<int32_t>(mode));
+}
+
 double Dynamixel::dxlValueToUnit(std::string register_name, int32_t value)
 {
   return static_cast<double>(value) * getItem(register_name).dxlValueToUnitRatio();
@@ -246,6 +251,28 @@ bool Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, ui
 uint8_t Dynamixel::getId() const
 {
   return id_;
+}
+
+ControlMode stringToControlMode(const std::string& str) {
+  if (str == "effort" || str == "current") {
+    return CURRENT;
+  }
+  if (str == "velocity") {
+    return VELOCITY;
+  }
+  if (str == "position") {
+    return POSITION;
+  }
+  if (str == "extended_position") {
+    return EXTENDED_POSITION;
+  }
+  if (str == "current_based_position") {
+    return CURRENT_BASED_POSITION;
+  }
+  if (str == "pwm") {
+    return PWM;
+  }
+  throw std::invalid_argument("Control Mode '" + str + "' is unknown.");
 }
 
 }
