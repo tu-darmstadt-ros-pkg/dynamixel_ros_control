@@ -20,12 +20,12 @@ struct IndirectAddressInfo {
 };
 
 enum ControlMode {
-  CURRENT,
-  VELOCITY,
-  POSITION,
-  EXTENDED_POSITION,
-  CURRENT_BASED_POSITION,
-  PWM
+  CURRENT = 0,
+  VELOCITY = 1,
+  POSITION = 3,
+  EXTENDED_POSITION = 4,
+  CURRENT_BASED_POSITION = 5,
+  PWM = 16
 };
 
 ControlMode stringToControlMode(const std::string& str);
