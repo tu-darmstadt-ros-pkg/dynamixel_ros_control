@@ -13,7 +13,8 @@
   
     <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"
           args="joint_state_controller 
-                arm_position_controller">    
+                joint_0_position_controller
+                joint_1_velocity_controller">    
     </node>
   </group>
 </launch>

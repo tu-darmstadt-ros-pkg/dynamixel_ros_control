@@ -13,13 +13,16 @@ dynamixels:
     read_effort: true
   control_mode: position
   device_info: # read/write all devices with one packet
-    arm_joint:
+    joint_0:
       id: 0
-      control_mode: current_based_position
-  write_registers:
-    arm_joint:
-      led: true # radian
-      goal_current: 0.05
+    joint_1:
+      id: 1
+      control_mode: velocity
+  #write_registers:
+    #joint_0:
+      #goal_current: 0.05
+    #joint_1:
+      #goal_current: 0.05
   publish_registers:
     present_temperature: 
       topic: /dynamixels/temperature

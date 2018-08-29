@@ -2,28 +2,41 @@ joint_state_controller:
   type: joint_state_controller/JointStateController
   publish_rate: 50 
 
-arm_traj_controller:
+traj_controller:
   type: "position_controllers/JointTrajectoryController"
   joints:
-    - arm_joint
+    - joint_0
+    - joint_1
     
-arm_position_controller:
+joint_0_position_controller:
   type: "position_controllers/JointPositionController"
-  joint: arm_joint
+  joint: joint_0
   
-arm_velocity_controller:
+joint_1_position_controller:
+  type: "position_controllers/JointPositionController"
+  joint: joint_1
+  
+joint_0_velocity_controller:
   type: "velocity_controllers/JointVelocityController"
-  joint: arm_joint
+  joint: joint_0
   
-arm_effort_controller:
+joint_1_velocity_controller:
+  type: "velocity_controllers/JointVelocityController"
+  joint: joint_1
+  
+joint_0_effort_controller:
   type: "effort_controllers/JointEffortController"
-  joint: arm_joint
+  joint: joint_0
   
-arm_effort_position_controller:
-  type: "effort_controllers/JointPositionController"
-  joint: arm_joint
+joint_1_effort_controller:
+  type: "effort_controllers/JointEffortController"
+  joint: joint_1
   
-  pid: {p: 100, d: 0.0, i: 0, i_clamp: 2}
+#arm_effort_position_controller:
+  #type: "effort_controllers/JointPositionController"
+  #joint: arm_joint
+  
+  #pid: {p: 100, d: 0.0, i: 0, i_clamp: 2}
   
   
 
