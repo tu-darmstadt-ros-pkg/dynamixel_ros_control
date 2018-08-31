@@ -235,8 +235,8 @@ void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
   if (!nh.getParam("write_registers", joints)) {
     return;
   }
-  ROS_INFO_STREAM("Writing initial values:")
-  ROS_ASSERT(dxls.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+  ROS_INFO_STREAM("Writing initial values:");
+  ROS_ASSERT(joints.getType() == XmlRpc::XmlRpcValue::TypeStruct);
   for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = joints.begin(); it != joints.end(); ++it)
   {
     std::string joint_name = static_cast<std::string>(it->first);
