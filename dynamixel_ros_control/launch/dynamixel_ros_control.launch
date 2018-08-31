@@ -6,9 +6,6 @@
     <remap from="joint_states" to="/joint_states" />
     <node pkg="dynamixel_ros_control" type="dynamixel_controller_manager_node" name="controller_manager_node" output="screen" respawn="false" clear_params="true">
       <rosparam file="$(find dynamixel_ros_control)/config/test_config.yaml" command="load" />
-      
-      <rosparam file="$(find dynamixel_ros_control)/devices/model_list.yaml" command="load" ns="dynamixels" />
-      <rosparam file="$(find dynamixel_ros_control)/devices/XM.yaml" command="load" ns="dynamixels/devices" />
     </node>
   
     <node name="controller_spawner" pkg="controller_manager" type="spawner" respawn="false" output="screen"

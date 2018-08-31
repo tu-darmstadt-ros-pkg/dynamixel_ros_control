@@ -19,6 +19,7 @@
   <depend>controller_manager</depend>
   <depend>dynamixel_sdk</depend>
   <depend>hardware_interface</depend>
+  <depend>yaml-cpp</depend>
   <export>
   </export>
 </package>

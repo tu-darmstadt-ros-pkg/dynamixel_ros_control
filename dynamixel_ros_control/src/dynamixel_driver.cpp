@@ -1,6 +1,8 @@
 #include <dynamixel_ros_control/dynamixel_driver.h>
 
 #include <dynamixel_ros_control/common.h>
+#include <ros/package.h>
+#include <yaml-cpp/yaml.h>
 
 namespace dynamixel_ros_control {
 
@@ -9,6 +11,18 @@ DynamixelDriver::DynamixelDriver()
 
 bool DynamixelDriver::init(const ros::NodeHandle& nh)
 {
+  // Get package path
+  package_path_ = ros::package::getPath(PACKAGE_NAME);
+  if (package_path_ == "") {
+    ROS_FATAL_STREAM("Could not find own package path.");
+    return false;
+  }
+  // Get model number to series mapping
+  if (!loadSeriesMapping()) {
+    ROS_FATAL_STREAM("Failed to load model number to series mapping.");
+    return false;
+  }
+
   // Get port info
   std::string port_name;
   if (!loadRequiredParameter(nh, "port_info/port_name", port_name) || !setPortHandler(port_name)) {
@@ -25,6 +39,60 @@ bool DynamixelDriver::init(const ros::NodeHandle& nh)
     return false;
   }
   return setPacketHandler(protocol_version);
+}
+
+bool DynamixelDriver::loadSeriesMapping()
+{
+  std::string path = package_path_ + "/devices/model_list.yaml";
+  YAML::Node config = YAML::LoadFile(path); // TODO check if file exists
+  if (!config.IsMap()) {
+    ROS_ERROR_STREAM("model_list.yaml is not a map (wrong format).");
+    return false;
+  }
+  for(YAML::const_iterator it = config.begin();it != config.end(); ++it) {
+    // TODO check if types are valid
+    uint16_t model_number = it->first.as<uint16_t>();
+    std::string series = it->second.as<std::string>();
+    model_number_to_series_.emplace(model_number, series);
+  }
+  return true;
+}
+
+ControlTable* DynamixelDriver::readControlTable(std::string series)
+{
+  ControlTable table;
+  std::pair<std::map<std::string, ControlTable>::iterator, bool> result = series_to_control_table_.emplace(series, table);
+  ControlTable* table_ptr = &result.first->second;
+  std::string path = package_path_ + "/devices/models/" + series + ".yaml";
+  if (!table_ptr->loadFromYaml(path)) {
+    ROS_ERROR_STREAM("Failed to read control table for '" << series << "'");
+    return nullptr;
+  }
+  return table_ptr;
+}
+
+ControlTable* DynamixelDriver::loadControlTable(uint16_t model_number)
+{
+  std::string series;
+  try {
+    series = model_number_to_series_.at(model_number);
+  } catch (const std::out_of_range&) {
+    ROS_FATAL_STREAM("Could not find series of model number " << model_number);
+    return nullptr;
+  }
+
+  // Check if control table was loaded already
+  ControlTable* control_table;
+  try {
+    control_table = &series_to_control_table_.at(series);
+  } catch (const std::out_of_range&) {
+    control_table = nullptr;
+  }
+  if (!control_table) {
+    // Read it
+    control_table = readControlTable(series);
+  }
+  return control_table;
 }
 
 bool DynamixelDriver::ping(uint8_t id)

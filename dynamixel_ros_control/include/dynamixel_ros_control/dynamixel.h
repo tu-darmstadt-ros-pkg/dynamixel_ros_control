@@ -2,22 +2,10 @@
 #define DYNAMIXEL_ROS_CONTROL_DYNAMIXEL_H
 
 #include <ros/ros.h>
-#include <dynamixel_ros_control/control_table_item.h>
+#include <dynamixel_ros_control/control_table.h>
 #include <dynamixel_ros_control/dynamixel_driver.h>
 
 namespace dynamixel_ros_control {
-
-struct IndirectAddressInfo {
-  uint16_t indirect_address_start;
-  unsigned int count;
-  uint16_t indirect_data_start;
-
-  std::string toString() const {
-    return " --- Indirect address start: " + std::to_string(indirect_address_start) + "\n" +
-           " --- Count: " + std::to_string(count) + "\n" +
-           " --- Indirect data start: " + std::to_string(indirect_data_start);
-  }
-};
 
 enum ControlMode {
   CURRENT = 0,
@@ -33,7 +21,7 @@ ControlMode stringToControlMode(const std::string& str);
 class Dynamixel {
 public:
   Dynamixel(uint8_t id, uint16_t model_number, dynamixel_ros_control::DynamixelDriver& driver);
-  bool loadControlTable(const ros::NodeHandle& nh);
+  bool loadControlTable();
 
   // Register access
   bool writeRegister(std::string register_name, bool value) const;
@@ -60,18 +48,14 @@ public:
 
 private:
   bool indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
-  std::string getSeries(const ros::NodeHandle& nh) const;
-  bool loadUnitConversionRatios(const ros::NodeHandle& nh);
-  bool loadIndirectAddresses(const ros::NodeHandle& nh);
 
   dynamixel_ros_control::DynamixelDriver& driver_;
+  ControlTable* control_table_;
+
 
   uint8_t id_;
   uint16_t model_number_;
   std::string model_name_;
-
-  std::map<std::string, ControlTableItem> control_table_;
-  std::vector<IndirectAddressInfo> indirect_addresses_;
 };
 
 }

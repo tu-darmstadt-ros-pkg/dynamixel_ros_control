@@ -11,6 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   hardware_interface
 )
 
+find_package(yaml-cpp)
+
 ################################################
 ## Declare ROS dynamic reconfigure parameters ##
 ################################################
@@ -49,12 +51,14 @@ catkin_package(
 include_directories(
   include
   ${catkin_INCLUDE_DIRS}
+  ${YAML_CPP_INCLUDE_DIRS}
 )
 
 set(HEADERS
   include/${PROJECT_NAME}/common.h
   include/${PROJECT_NAME}/joint.h
   include/${PROJECT_NAME}/dynamixel.h
+  include/${PROJECT_NAME}/control_table.h
   include/${PROJECT_NAME}/control_table_item.h
   include/${PROJECT_NAME}/dynamixel_driver.h
   include/${PROJECT_NAME}/dynamixel_hardware_interface.h
@@ -66,6 +70,7 @@ set(SOURCES
   src/common.cpp
   src/joint.cpp
   src/dynamixel.cpp
+  src/control_table.cpp
   src/control_table_item.cpp
   src/dynamixel_driver.cpp
   src/dynamixel_hardware_interface.cpp
@@ -76,7 +81,7 @@ set(SOURCES
 ## Declare a C++ library
 add_library(${PROJECT_NAME} ${HEADERS} ${SOURCES})
 add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES})
+target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YAML_CPP_LIBRARIES})
 
 ## Declare a C++ executable
 add_executable(dynamixel_controller_manager_node src/dynamixel_controller_manager_node.cpp)

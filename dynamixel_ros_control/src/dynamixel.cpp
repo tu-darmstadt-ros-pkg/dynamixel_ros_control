@@ -8,40 +8,14 @@ namespace dynamixel_ros_control {
 Dynamixel::Dynamixel(uint8_t id, uint16_t model_number, DynamixelDriver& driver)
   :  driver_(driver), id_(id), model_number_(model_number) {}
 
-bool Dynamixel::loadControlTable(const ros::NodeHandle& nh)
+bool Dynamixel::loadControlTable()
 {
-  std::string series = getSeries(nh);
-
-  ros::NodeHandle device_nh(nh, "devices/" + series);
-
-  // Load table
-  bool success = true;
-  std::vector<std::string> control_table_entries;
-  if (!loadRequiredParameter(device_nh, "control_table", control_table_entries)) {
+  control_table_ = driver_.loadControlTable(getModelNumber());
+  if (!control_table_) {
     return false;
   }
-  for (const std::string& entry_str: control_table_entries) {
-//    ROS_INFO_STREAM("Processing: " << entry_str);
-    ControlTableItem entry;
-    if (entry.loadFromString(entry_str)) {
-      control_table_.emplace(entry.name(), entry); // TODO prevent copy?
-    } else {
-      ROS_ERROR_STREAM("Failed to load control table entry '" << entry_str << "'.");
-      success = false;
-    }
-  }
 
-  // Load unit conversion ratios
-  if (!loadUnitConversionRatios(device_nh)) {
-    ROS_WARN_STREAM("Failed to load unit conversion ratios.");
-  }
-
-  // Load indirect addresses
-  if (!loadIndirectAddresses(device_nh)) {
-    ROS_WARN_STREAM("Failed to load indirect addresses.");
-  }
-
-  return success;
+  return true;
 }
 
 bool Dynamixel::writeRegister(std::string register_name, bool value) const
@@ -127,91 +101,7 @@ int32_t Dynamixel::boolToDxlValue(std::string register_name, bool b) const
 
 const ControlTableItem& Dynamixel::getItem(std::string& name) const
 {
-  try {
-    return control_table_.at(name);
-  } catch (const std::out_of_range&) {
-    ROS_ERROR_STREAM("Could not find register '" << name << "'.");
-    throw;
-  }
-}
-
-std::string Dynamixel::getSeries(const ros::NodeHandle& nh) const
-{
-  std::string series;
-  if (!nh.getParam("model_list/" + std::to_string(model_number_), series)) {
-    ROS_ERROR_STREAM("Unknown model number " << model_number_ << ". nh: " << nh.getNamespace() << "/model_list/" << model_number_);
-    return "";
-  } else {
-    return series;
-  }
-}
-
-bool Dynamixel::loadUnitConversionRatios(const ros::NodeHandle& nh)
-{
-  XmlRpc::XmlRpcValue units;
-  nh.getParam("unit_conversions", units);
-  if (units.getType() != XmlRpc::XmlRpcValue::TypeStruct) {
-    return false;
-  }
-  std::map<std::string, double> unit_to_ratio;
-  for(XmlRpc::XmlRpcValue::ValueStruct::iterator it = units.begin(); it != units.end(); ++it)
-  {
-    std::string unit_name = static_cast<std::string>(it->first);
-    if (it->second.getType() != XmlRpc::XmlRpcValue::TypeDouble) {
-      ROS_ERROR_STREAM("Ratio of unit '" << unit_name << "_ is not of type double.");
-      return false;
-    }
-    double ratio = static_cast<double>(it->second);
-    unit_to_ratio.emplace(unit_name, ratio);
-  }
-
-  // Assign ratios to control table entries
-  for (std::map<std::string, ControlTableItem>::value_type& kv: control_table_) {
-    if (kv.second.unit() != "" && kv.second.unit() != "bool") {
-      double ratio = 1.0;
-      try {
-        ratio = unit_to_ratio.at(kv.second.unit());
-      } catch (const std::out_of_range&) {
-        ROS_ERROR_STREAM("Undefined unit '" << kv.second.unit() << "' in control table entry '" << kv.first << "'.");
-      }
-      kv.second.setDxlValueToUnitRatio(ratio);
-    }
-  }
-  return true;
-}
-
-bool Dynamixel::loadIndirectAddresses(const ros::NodeHandle& nh)
-{
-  std::vector<std::string> lines;
-  if (!loadRequiredParameter(nh, "indirect_addresses", lines)) {
-    return false;
-  }
-  for (std::string line: lines) {
-    removeWhitespace(line);
-    std::vector<std::string> parts;
-    boost::split(parts, line, boost::is_any_of("|"));
-    if (parts.size() != 2) {
-      ROS_ERROR_STREAM("Indirect address line has invalid size " << parts.size());
-      continue;
-    }
-    IndirectAddressInfo info;
-    try {
-      info.indirect_address_start = static_cast<uint16_t>(std::stoi(parts[0]));
-    } catch (const std::invalid_argument&) {
-      ROS_ERROR_STREAM("Indirect address start '" << parts[0] << "' is not an integer.");
-      continue;
-    }
-    try {
-      info.count = static_cast<unsigned int>(std::stoi(parts[1]));
-    } catch (const std::invalid_argument&) {
-      ROS_ERROR_STREAM("Indirect address count '" << parts[1] << "' is not an integer.");
-      continue;
-    }
-    info.indirect_data_start = info.indirect_address_start + static_cast<uint16_t>(2 * info.count);
-    ROS_DEBUG_STREAM("Added indirect address: " << std::endl << info.toString());
-    indirect_addresses_.push_back(info);
-  }
-  return true;
+  return control_table_->getItem(name);
 }
 
 uint16_t Dynamixel::getModelNumber() const
@@ -248,7 +138,7 @@ bool Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, ui
   const IndirectAddressInfo* info;
   unsigned int total_count = 0;
   unsigned int local_index;
-  for (const IndirectAddressInfo& i: indirect_addresses_) {
+  for (const IndirectAddressInfo& i: control_table_->getIndirectAddressInfo()) {
     total_count += i.count;
     if (indirect_address_index < total_count) {
       info = &i;

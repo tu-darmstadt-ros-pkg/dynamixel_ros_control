@@ -8,13 +8,20 @@
 #include <dynamixel_sdk/group_sync_read.h>
 #include <dynamixel_sdk/group_sync_write.h>
 
+#include <dynamixel_ros_control/control_table.h>
+#include <dynamixel_ros_control/control_table_item.h>
+
 namespace dynamixel_ros_control {
+
+//typedef std::map<std::string, ControlTableItem> ControlTable;
 
 class DynamixelDriver {
 public:
   DynamixelDriver();
 
   bool init(const ros::NodeHandle& nh);
+
+  ControlTable* loadControlTable(uint16_t model_number);
 
   bool ping(uint8_t id);
   bool ping(uint8_t id, uint16_t& model_number);
@@ -30,6 +37,8 @@ public:
 
   bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start);
 private:
+  bool loadSeriesMapping();
+  ControlTable* readControlTable(std::string series);
   bool setPacketHandler(float protocol_version);
   bool setPortHandler(std::string port_name);
   bool setBaudRate(int baud_rate);
@@ -38,6 +47,10 @@ private:
   dynamixel::PortHandler* port_handler_;
 
   unsigned int next_indirect_address_;
+
+  std::string package_path_;
+  std::map<uint16_t, std::string> model_number_to_series_;
+  std::map<std::string, ControlTable> series_to_control_table_;
 };
 
 }

@@ -3,6 +3,8 @@
 
 #include <ros/ros.h>
 
+const std::string PACKAGE_NAME = "dynamixel_ros_control";
+
 namespace dynamixel_ros_control {
 
 template <typename T>
