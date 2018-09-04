@@ -122,7 +122,7 @@ bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::str
   uint16_t register_address = item->address();
   uint8_t data_length = item->data_length();
 
-  ROS_DEBUG_STREAM("[INDIRECT ADDRESS] Setting indirect address " << indirect_address << " to " << register_address << "(" << register_name <<
+  ROS_DEBUG_STREAM("[INDIRECT ADDRESS] Setting indirect address " << indirect_address << " to " << register_address << " (" << register_name <<
                    "), data_address: " << indirect_data_address);
   bool success = true;
   for (uint16_t i = 0; i < data_length; i++) {

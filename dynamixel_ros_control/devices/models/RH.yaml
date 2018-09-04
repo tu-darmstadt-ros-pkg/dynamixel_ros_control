@@ -10,7 +10,7 @@ unit_conversions: # dxl value to unit ratio
   
 indirect_addresses:
 # address start | data start  | count
-  - 578         | 634         | 256
+  - 49          | 634         | 256
   
 #register_names:
   #enable_torque_name:    torque_enable
