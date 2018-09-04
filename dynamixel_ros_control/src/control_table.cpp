@@ -47,24 +47,32 @@ bool ControlTable::loadIndirectAddressInfo(const YAML::Node& node)
     removeWhitespace(line);
     std::vector<std::string> parts;
     boost::split(parts, line, boost::is_any_of("|"));
-    if (parts.size() != 2) {
+    if (parts.size() != 3) {
       ROS_ERROR_STREAM("Indirect address line has invalid size " << parts.size());
       continue;
     }
     IndirectAddressInfo info;
+    // Load address start
     try {
       info.indirect_address_start = static_cast<uint16_t>(std::stoi(parts[0]));
     } catch (const std::invalid_argument&) {
       ROS_ERROR_STREAM("Indirect address start '" << parts[0] << "' is not an integer.");
       continue;
     }
+    // Load data start
     try {
-      info.count = static_cast<unsigned int>(std::stoi(parts[1]));
+      info.indirect_data_start = static_cast<uint16_t>(std::stoi(parts[1]));
     } catch (const std::invalid_argument&) {
-      ROS_ERROR_STREAM("Indirect address count '" << parts[1] << "' is not an integer.");
+      ROS_ERROR_STREAM("Indirect data start '" << parts[1] << "' is not an integer.");
       continue;
     }
-    info.indirect_data_start = info.indirect_address_start + static_cast<uint16_t>(2 * info.count);
+    // Load count
+    try {
+      info.count = static_cast<unsigned int>(std::stoi(parts[2]));
+    } catch (const std::invalid_argument&) {
+      ROS_ERROR_STREAM("Indirect address count '" << parts[2] << "' is not an integer.");
+      continue;
+    }
     ROS_DEBUG_STREAM("Added indirect address: " << std::endl << info.toString());
     indirect_addresses_.push_back(info);
   }

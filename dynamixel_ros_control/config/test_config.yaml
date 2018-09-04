@@ -17,7 +17,6 @@ dynamixels:
       id: 0
     joint_1:
       id: 1
-      control_mode: velocity
   #write_registers:
     #joint_0:
       #goal_current: 0.05

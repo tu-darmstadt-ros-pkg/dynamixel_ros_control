@@ -1,9 +1,4 @@
-# XM series
-info:
-  velocity_to_value_ratio: 41.7012
-  torque_to_current_value_ratio: 149.795386991
-  ticks_per_revolution: 4096
-  
+# XM series  
 unit_conversions: # dxl value to unit ratio
   rad: 0.001533936
   rad_per_s: 0.023980117
@@ -15,9 +10,18 @@ unit_conversions: # dxl value to unit ratio
   A: 0.00269
   
 indirect_addresses:
-# start addr  | count
-  #- 168       | 28
-  - 578       | 28
+# address start | data start  | count
+  #- 168        | 224         | 28
+  - 578         | 634         | 28
+  
+#register_names:
+  #enable_torque_name:    torque_enable
+  #current_position_name: present_position
+  #current_velocity_name: present_velocity
+  #current_torque_name:   present_current
+  #goal_position_name:    goal_position
+  #goal_velocity_name:    goal_velocity
+  #goal_torque_name:      goal_current
 
 control_table:
 # addr  | item name                | length | access | memory | unit/type
@@ -56,7 +60,7 @@ control_table:
   - 90  | feedforward_1st_gain     | 2      | RW     | RAM    |
   - 98  | bus_watchdog             | 1      | RW     | RAM    |
   - 100 | goal_pwm                 | 2      | RW     | RAM    |
-  - 102 | goal_current             | 2      | RW     | RAM    | Nm
+  - 102 | goal_torque              | 2      | RW     | RAM    | Nm
   - 104 | goal_velocity            | 4      | RW     | RAM    | rad_per_s
   - 108 | profile_acceleration     | 4      | RW     | RAM    |
   - 112 | profile_velocity         | 4      | RW     | RAM    |

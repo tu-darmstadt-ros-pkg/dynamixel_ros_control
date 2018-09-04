@@ -87,7 +87,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     } else if (joint.getControlMode() == VELOCITY) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
     } else if (joint.getControlMode() == CURRENT) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_current", joint.goal_state.effort); // TODO effort = current?
+      control_write_manager_.addRegister(joint.dynamixel, "goal_torque", joint.goal_state.effort);
     }
 
     // Register reads
