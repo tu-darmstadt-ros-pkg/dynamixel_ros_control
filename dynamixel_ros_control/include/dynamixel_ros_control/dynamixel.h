@@ -47,7 +47,7 @@ public:
   bool setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address);
 
 private:
-  bool indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
+  void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 
   dynamixel_ros_control::DynamixelDriver& driver_;
   ControlTable* control_table_;

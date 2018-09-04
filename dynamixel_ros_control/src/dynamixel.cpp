@@ -112,9 +112,7 @@ uint16_t Dynamixel::getModelNumber() const
 bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address)
 {
   uint16_t indirect_address;
-  if (!indirectIndexToAddresses(indirect_address_index, indirect_address, indirect_data_address)) {
-    return false;
-  }
+  indirectIndexToAddresses(indirect_address_index, indirect_address, indirect_data_address);
   const ControlTableItem* item;
   try {
     item = &getItem(register_name);
@@ -133,7 +131,7 @@ bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::str
   return success;
 }
 
-bool Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address)
+void Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address)
 {
   const IndirectAddressInfo* info;
   unsigned int total_count = 0;
