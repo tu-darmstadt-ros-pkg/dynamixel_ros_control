@@ -32,12 +32,21 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   pnh_.param("torque_on_startup", torque_on_startup_, false);
   pnh_.param("torque_off_on_shutdown", torque_off_on_shutdown_, false);
 
+  // Load dynamixels
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");
   if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
     return false;
   }
 
+  // Write initial values
   writeInitialValues(dxl_nh);
+
+  // Write control mode
+  bool write_control_mode;
+  pnh_.param("write_control_mode", write_control_mode, true);
+  if (write_control_mode) {
+    writeControlMode();
+  }
 
   // Register interfaces
   for (Joint& joint: joints_)
@@ -262,6 +271,15 @@ void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
         joint->dynamixel.writeRegister(register_name, value);
         ROS_INFO_STREAM("--- " << register_name << ": " << value);
       }
+    }
+  }
+}
+
+void DynamixelHardwareInterface::writeControlMode()
+{
+  for (const Joint& joint: joints_) {
+    if (!joint.dynamixel.writeControlMode(joint.getControlMode())) {
+      ROS_ERROR_STREAM("Failed to set control mode for joint '" << joint.name << "'.");
     }
   }
 }

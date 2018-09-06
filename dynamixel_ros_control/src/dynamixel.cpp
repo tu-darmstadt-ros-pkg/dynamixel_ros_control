@@ -46,7 +46,7 @@ bool Dynamixel::writeRegister(uint16_t address, uint8_t data_length, int32_t val
   return driver_.writeRegister(getId(), address, data_length, value);
 }
 
-bool Dynamixel::readRegister(std::string register_name, int32_t& value_out)
+bool Dynamixel::readRegister(std::string register_name, int32_t& value_out) const
 {
   const ControlTableItem* item;
   try {
@@ -57,12 +57,12 @@ bool Dynamixel::readRegister(std::string register_name, int32_t& value_out)
   return readRegister(item->address(), item->data_length(), value_out);
 }
 
-bool Dynamixel::readRegister(uint16_t address, uint8_t data_length, int32_t& value_out)
+bool Dynamixel::readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const
 {
   return driver_.readRegister(getId(), address, data_length, value_out);
 }
 
-bool Dynamixel::writeControlMode(ControlMode mode)
+bool Dynamixel::writeControlMode(ControlMode mode) const
 {
   return writeRegister("operating_mode", static_cast<int32_t>(mode));
 }

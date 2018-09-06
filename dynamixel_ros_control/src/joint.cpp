@@ -18,8 +18,6 @@ ControlMode Joint::getControlMode() const
 bool Joint::setControlMode(const ControlMode& value)
 {
   control_mode = value;
-  // TODO check if torqued
-  dynamixel.writeControlMode(control_mode);
 }
 
 }

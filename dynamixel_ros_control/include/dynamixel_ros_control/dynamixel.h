@@ -29,10 +29,10 @@ public:
   bool writeRegister(std::string register_name, int32_t value) const;
   bool writeRegister(uint16_t address, uint8_t data_length, int32_t value) const;
 
-  bool readRegister(std::string register_name, int32_t& value_out);
-  bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out);
+  bool readRegister(std::string register_name, int32_t& value_out) const;
+  bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const;
 
-  bool writeControlMode(ControlMode mode);
+  bool writeControlMode(ControlMode mode) const;
 
   // Value conversion functions
   double dxlValueToUnit(std::string register_name, int32_t value);

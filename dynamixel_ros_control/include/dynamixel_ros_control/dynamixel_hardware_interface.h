@@ -28,6 +28,7 @@ public:
 private:
   bool loadDynamixels(const ros::NodeHandle& nh);
   void writeInitialValues(const ros::NodeHandle& nh);
+  void writeControlMode();
   void setTorque(bool enabled);
   void setTorque(std_msgs::BoolConstPtr enabled);
   Joint* getJointByName(std::string name);
