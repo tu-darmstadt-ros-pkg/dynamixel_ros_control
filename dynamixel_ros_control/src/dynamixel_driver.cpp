@@ -122,7 +122,8 @@ std::vector<std::pair<uint8_t, uint16_t>> DynamixelDriver::scan()
 
 bool DynamixelDriver::writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value)
 {
-  ROS_DEBUG_STREAM("[Register Write] id " << id << ", address: " << address << ", length: " << data_length << ", value: " << value);
+  ROS_DEBUG_STREAM("[Register Write] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: " << static_cast<unsigned int>(data_length)
+                   << ", value: " << value);
   uint8_t error = 0;
   int comm_result = COMM_TX_FAIL;
 
