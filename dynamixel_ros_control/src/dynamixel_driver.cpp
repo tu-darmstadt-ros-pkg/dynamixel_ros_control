@@ -122,6 +122,7 @@ std::vector<std::pair<uint8_t, uint16_t>> DynamixelDriver::scan()
 
 bool DynamixelDriver::writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value)
 {
+  ROS_DEBUG_STREAM("[Register Write] id " << id << ", address: " << address << ", length: " << data_length << ", value: " << value);
   uint8_t error = 0;
   int comm_result = COMM_TX_FAIL;
 
@@ -167,7 +168,7 @@ bool DynamixelDriver::readRegister(uint8_t id, uint16_t address, uint8_t data_le
   {
     comm_result = packet_handler_->read4ByteTxRx(port_handler_, id, address, value_ptr, &error);
   }
-
+  ROS_DEBUG_STREAM("[Register Read] id " << id << ", address: " << address << ", length: " << data_length << ", value: " << value_out);
   if (comm_result == COMM_SUCCESS) {
     if (error != 0) {
       const char* error_cstr = packet_handler_->getRxPacketError(error);
