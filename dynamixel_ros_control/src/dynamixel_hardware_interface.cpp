@@ -144,6 +144,12 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
   read_manager_.read();
+
+  for (const Joint& j: joints_) {
+    double goal_torque;
+    j.dynamixel.readRegister("goal_torque", goal_torque);
+    ROS_DEBUG_STREAM("[GOAL TORQUE] " << j.name << ": " << goal_torque);
+  }
   if (first_cycle_) {
     first_cycle_ = false;
     for (Joint& joint: joints_) {
