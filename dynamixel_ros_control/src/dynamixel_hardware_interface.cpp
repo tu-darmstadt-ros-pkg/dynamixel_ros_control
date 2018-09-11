@@ -5,7 +5,7 @@
 namespace dynamixel_ros_control {
 
 DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
-  : nh_(nh), pnh_(pnh), first_cycle_(true)
+  : nh_(nh), pnh_(pnh), first_cycle_(true), initialized_(false)
 {
 
 }
@@ -15,7 +15,7 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
   if (torque_off_on_shutdown_)
   {
     std::cout << "Disabling torque on shutdown!" << std::endl;
-    setTorque(false);
+    if (initialized_) setTorque(false);
   }
 }
 
@@ -37,6 +37,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
     return false;
   }
+  initialized_ = true;
 
   // Write initial values
   writeInitialValues(dxl_nh);

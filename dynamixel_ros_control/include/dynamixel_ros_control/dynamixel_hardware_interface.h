@@ -36,6 +36,8 @@ private:
   ros::NodeHandle nh_;
   ros::NodeHandle pnh_;
 
+  bool initialized_;
+
   bool first_cycle_;
 
   dynamixel_ros_control::DynamixelDriver driver_;
