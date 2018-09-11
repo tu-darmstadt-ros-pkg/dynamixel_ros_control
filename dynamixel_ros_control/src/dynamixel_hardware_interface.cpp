@@ -38,6 +38,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     return false;
   }
 
+  // Disable torque for indirect address remapping
   for (const Joint& j: joints_) {
     j.dynamixel.writeRegister("torque_enable", false);
   }
@@ -111,8 +112,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   writeInitialValues(dxl_nh);
 
   // Register interfaces
-  for (Joint& joint: joints_)
-  {
+  for (Joint& joint: joints_) {
     hardware_interface::JointStateHandle state_handle(joint.name, &joint.current_state.position, &joint.current_state.velocity,
                                                       &joint.current_state.effort);
     jnt_state_interface_.registerHandle(state_handle);
@@ -129,16 +129,13 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     }
   }
   registerInterface(&jnt_state_interface_);
-  if (!jnt_pos_interface_.getNames().empty())
-  {
+  if (!jnt_pos_interface_.getNames().empty()) {
     registerInterface(&jnt_pos_interface_);
   }
-  if (!jnt_vel_interface_.getNames().empty())
-  {
+  if (!jnt_vel_interface_.getNames().empty()) {
     registerInterface(&jnt_vel_interface_);
   }
-  if (!jnt_eff_interface_.getNames().empty())
-  {
+  if (!jnt_eff_interface_.getNames().empty()) {
     registerInterface(&jnt_eff_interface_);
   }
 
@@ -154,11 +151,6 @@ void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration
 {
   read_manager_.read();
 
-  for (const Joint& j: joints_) {
-    double goal_torque;
-    j.dynamixel.readRegister("goal_torque", goal_torque);
-    ROS_DEBUG_STREAM("[GOAL TORQUE] " << j.name << ": " << goal_torque);
-  }
   if (first_cycle_) {
     first_cycle_ = false;
     for (Joint& joint: joints_) {
