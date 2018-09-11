@@ -37,49 +37,6 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
     return false;
   }
-  initialized_ = true;
-
-  // Write initial values
-  writeInitialValues(dxl_nh);
-
-  // Write control mode
-  bool write_control_mode;
-  pnh_.param("write_control_mode", write_control_mode, true);
-  if (write_control_mode) {
-    writeControlMode();
-  }
-
-  // Register interfaces
-  for (Joint& joint: joints_)
-  {
-    hardware_interface::JointStateHandle state_handle(joint.name, &joint.current_state.position, &joint.current_state.velocity,
-                                                      &joint.current_state.effort);
-    jnt_state_interface_.registerHandle(state_handle);
-
-    if (joint.getControlMode() == POSITION || joint.getControlMode() == EXTENDED_POSITION || joint.getControlMode() == CURRENT_BASED_POSITION) {
-      hardware_interface::JointHandle pos_handle(state_handle, &joint.goal_state.position);
-      jnt_pos_interface_.registerHandle(pos_handle);
-    } else if (joint.getControlMode() == VELOCITY) {
-      hardware_interface::JointHandle vel_handle(state_handle, &joint.goal_state.velocity);
-      jnt_vel_interface_.registerHandle(vel_handle);
-    } else if (joint.getControlMode() == CURRENT) {
-      hardware_interface::JointHandle eff_handle(state_handle, &joint.goal_state.effort);
-      jnt_eff_interface_.registerHandle(eff_handle);
-    }
-  }
-  registerInterface(&jnt_state_interface_);
-  if (!jnt_pos_interface_.getNames().empty())
-  {
-    registerInterface(&jnt_pos_interface_);
-  }
-  if (!jnt_vel_interface_.getNames().empty())
-  {
-    registerInterface(&jnt_vel_interface_);
-  }
-  if (!jnt_eff_interface_.getNames().empty())
-  {
-    registerInterface(&jnt_eff_interface_);
-  }
 
   // Register sync reads/writes
   pnh_.param("dynamixels/read_values/read_position", read_position_, true);
@@ -137,12 +94,54 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     return false;
   }
 
+  initialized_ = true;
+
+  // Write initial values
+  writeInitialValues(dxl_nh);
+
+  // Write control mode
+  bool write_control_mode;
+  pnh_.param("write_control_mode", write_control_mode, true);
+  if (write_control_mode) {
+    writeControlMode();
+  }
+
+  // Register interfaces
+  for (Joint& joint: joints_)
+  {
+    hardware_interface::JointStateHandle state_handle(joint.name, &joint.current_state.position, &joint.current_state.velocity,
+                                                      &joint.current_state.effort);
+    jnt_state_interface_.registerHandle(state_handle);
+
+    if (joint.getControlMode() == POSITION || joint.getControlMode() == EXTENDED_POSITION || joint.getControlMode() == CURRENT_BASED_POSITION) {
+      hardware_interface::JointHandle pos_handle(state_handle, &joint.goal_state.position);
+      jnt_pos_interface_.registerHandle(pos_handle);
+    } else if (joint.getControlMode() == VELOCITY) {
+      hardware_interface::JointHandle vel_handle(state_handle, &joint.goal_state.velocity);
+      jnt_vel_interface_.registerHandle(vel_handle);
+    } else if (joint.getControlMode() == CURRENT) {
+      hardware_interface::JointHandle eff_handle(state_handle, &joint.goal_state.effort);
+      jnt_eff_interface_.registerHandle(eff_handle);
+    }
+  }
+  registerInterface(&jnt_state_interface_);
+  if (!jnt_pos_interface_.getNames().empty())
+  {
+    registerInterface(&jnt_pos_interface_);
+  }
+  if (!jnt_vel_interface_.getNames().empty())
+  {
+    registerInterface(&jnt_vel_interface_);
+  }
+  if (!jnt_eff_interface_.getNames().empty())
+  {
+    registerInterface(&jnt_eff_interface_);
+  }
+
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
     setTorque(true);
   }
-
-  // Initialize subscribers and publishers
 
   return true;
 }
