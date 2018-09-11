@@ -46,6 +46,15 @@ bool Dynamixel::writeRegister(uint16_t address, uint8_t data_length, int32_t val
   return driver_.writeRegister(getId(), address, data_length, value);
 }
 
+bool Dynamixel::readRegister(std::string register_name, double& value_out) const
+{
+  int32_t dxl_value;
+  if (!readRegister(register_name, dxl_value)) {
+    return false;
+  }
+  value_out = dxlValueToUnit(register_name, dxl_value);
+}
+
 bool Dynamixel::readRegister(std::string register_name, int32_t& value_out) const
 {
   const ControlTableItem* item;
@@ -67,12 +76,12 @@ bool Dynamixel::writeControlMode(ControlMode mode) const
   return writeRegister("operating_mode", static_cast<int32_t>(mode));
 }
 
-double Dynamixel::dxlValueToUnit(std::string register_name, int32_t value)
+double Dynamixel::dxlValueToUnit(std::string register_name, int32_t value) const
 {
   return static_cast<double>(value) * getItem(register_name).dxlValueToUnitRatio();
 }
 
-bool Dynamixel::dxlValueToBool(std::string register_name, int32_t value)
+bool Dynamixel::dxlValueToBool(std::string register_name, int32_t value) const
 {
   std::string unit = getItem(register_name).unit();
   if (unit == "bool") {
