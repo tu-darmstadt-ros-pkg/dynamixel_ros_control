@@ -96,8 +96,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
   initialized_ = true;
 
-  // Write initial values
-  writeInitialValues(dxl_nh);
+  setTorque(false);
 
   // Write control mode
   bool write_control_mode;
@@ -105,6 +104,9 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   if (write_control_mode) {
     writeControlMode();
   }
+
+  // Write initial values
+  writeInitialValues(dxl_nh);
 
   // Register interfaces
   for (Joint& joint: joints_)
