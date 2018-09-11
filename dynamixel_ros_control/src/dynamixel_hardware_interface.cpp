@@ -127,9 +127,15 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   }
 
   // Initialize sync reads/writes
-  torque_write_manager_.init(driver_);
-  control_write_manager_.init(driver_);
-  read_manager_.init(driver_);
+  if (!torque_write_manager_.init(driver_)) {
+    return false;
+  }
+  if (!control_write_manager_.init(driver_)) {
+    return false;
+  }
+  if (!read_manager_.init(driver_)) {
+    return false;
+  }
 
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
