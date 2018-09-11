@@ -169,7 +169,8 @@ bool DynamixelDriver::readRegister(uint8_t id, uint16_t address, uint8_t data_le
   {
     comm_result = packet_handler_->read4ByteTxRx(port_handler_, id, address, value_ptr, &error);
   }
-  ROS_DEBUG_STREAM("[Register Read] id " << id << ", address: " << address << ", length: " << data_length << ", value: " << value_out);
+  ROS_DEBUG_STREAM("[Register Read] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: " << static_cast<unsigned int>(data_length)
+                   << ", value: " << value_out);
   if (comm_result == COMM_SUCCESS) {
     if (error != 0) {
       const char* error_cstr = packet_handler_->getRxPacketError(error);
