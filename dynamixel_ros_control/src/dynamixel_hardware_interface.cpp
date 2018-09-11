@@ -38,6 +38,10 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     return false;
   }
 
+  for (const Joint& j: joints_) {
+    j.dynamixel.writeRegister("torque_enable", false);
+  }
+
   // Register sync reads/writes
   pnh_.param("dynamixels/read_values/read_position", read_position_, true);
   pnh_.param("dynamixels/read_values/read_velocity", read_velocity_, false);
@@ -95,8 +99,6 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   }
 
   initialized_ = true;
-
-  setTorque(false);
 
   // Write control mode
   bool write_control_mode;
