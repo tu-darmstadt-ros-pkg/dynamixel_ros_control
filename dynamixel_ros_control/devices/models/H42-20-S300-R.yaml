@@ -1,6 +1,6 @@
 # H42-20-S300-R
 unit_conversions: # dxl value to unit ratio
-  rad: 0.02068538372
+  rad: 0.00002068538
   rad_per_s: 0.000344746
   Nm: 0.006675773 # TODO
   rad_per_s2: 1.123489409 # TODO
