@@ -24,20 +24,28 @@ int main(int argc, char** argv)
   controller_manager::ControllerManager cm(&hw, nh);
 
   // Start control loop
-  ros::Time current_time = ros::Time::now();
+  ros::Time previous_time = ros::Time::now();
   bool first_update = true;
-  ros::Rate rate(pnh.param("control_rate", 25));
+  double control_rate = pnh.param("control_rate", 25);
+  ros::Rate rate(control_rate);
   while (ros::ok())
   {
-    ros::Duration period = ros::Time::now() - current_time;
-    current_time = ros::Time::now();
-    hw.read(current_time, period);
+    ros::Time now = ros::Time::now();
+    ros::Duration period;
+    if (now < previous_time) {
+      ROS_ERROR_STREAM("Jump in time detected.");
+      period = ros::Duration(1.0/control_rate); // Fallback: Set to expected period
+    } else {
+      period = ros::Time::now() - previous_time;
+    }
+    previous_time = now;
+    hw.read(now, period);
     if (first_update) {
       first_update = false;
     } else {
-      cm.update(current_time, period);
+      cm.update(now, period);
     }
-    hw.write(current_time, period);
+    hw.write(now, period);
     rate.sleep();
     ros::spinOnce();
   }
