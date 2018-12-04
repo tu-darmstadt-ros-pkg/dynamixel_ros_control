@@ -1,6 +1,6 @@
 # XM series  
 unit_conversions: # dxl value to unit ratio
-  rad: rad(2.0 * pi / 4096.0)
+  rad: 0.001533980787885641
   rad_per_s: 0.023980117
   Nm: 0.006675773
   rad_per_s2: 1.123489409
