@@ -108,8 +108,14 @@ bool ControlTable::loadUnitConversions(const YAML::Node& node)
   for(YAML::const_iterator it = node.begin();it != node.end(); ++it) {
     // TODO check types
     std::string unit_name = it->first.as<std::string>();
-    double ratio = it->second.as<double>();
-    unit_to_ratio.emplace(unit_name, ratio);
+    if (it->second.IsScalar()) {
+      double ratio = it->second.as<double>();
+      unit_to_ratio.emplace(unit_name, ratio);
+    } else {
+      ROS_ERROR_STREAM("Bad type in unit conversion value. Expected scalar, received " << it->second.Type());
+      return false;
+    }
+
   }
   return true;
 }
