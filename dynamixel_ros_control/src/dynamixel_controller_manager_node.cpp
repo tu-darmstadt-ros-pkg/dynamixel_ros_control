@@ -33,6 +33,7 @@ int main(int argc, char** argv)
     ros::Duration period;
     if (now < previous_time) {
       ROS_ERROR_STREAM("Time moved backwards.");
+      rate.reset();
       period = ros::Duration(1.0/control_rate); // Fallback: Set to expected period
     } else {
       period = ros::Time::now() - previous_time;
