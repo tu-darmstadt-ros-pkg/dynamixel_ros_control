@@ -106,7 +106,6 @@ bool ControlTable::loadUnitConversions(const YAML::Node& node)
     return false;
   }
   for(YAML::const_iterator it = node.begin();it != node.end(); ++it) {
-    // TODO check types
     std::string unit_name = it->first.as<std::string>();
     if (it->second.IsScalar()) {
       double ratio = it->second.as<double>();
