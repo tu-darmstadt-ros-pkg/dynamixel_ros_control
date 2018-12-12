@@ -28,14 +28,19 @@ int main(int argc, char** argv)
   bool first_update = true;
   double control_rate = pnh.param("control_rate", 25);
   ros::Rate rate(control_rate);
+  ros::Duration expected_period(1.0/control_rate);
   while (ros::ok()) {
     ros::Time now = ros::Time::now();
     ros::Duration period;
+    if (now.toSec() > previous_time.toSec() + 1.5*expected_period.toSec()) {
+      ros::Duration diff = now - previous_time;
+      ROS_ERROR_STREAM("Jump in time detected (+" << diff.toSec() << " s).");
+    }
     if (now < previous_time) {
       ros::Duration diff = previous_time - now;
       ROS_ERROR_STREAM("Time moved backwards (-" << diff.toSec() << " s).");
       rate.reset();
-      period = ros::Duration(1.0/control_rate); // Fallback: Set to expected period
+      period = expected_period; // Fallback: Set to expected period
     } else {
       period = ros::Time::now() - previous_time;
     }
