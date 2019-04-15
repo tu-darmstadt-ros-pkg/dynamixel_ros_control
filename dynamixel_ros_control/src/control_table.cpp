@@ -7,7 +7,14 @@ namespace dynamixel_ros_control {
 
 bool ControlTable::loadFromYaml(const std::string& path)
 {
-  YAML::Node config = YAML::LoadFile(path); // TODO check if file exists
+  YAML::Node config;
+  try {
+    config = YAML::LoadFile(path);
+  } catch (YAML::BadFile&) {
+    ROS_ERROR_STREAM("Failed to read control table at '" << path << "'. Does the file exist?");
+    return false;
+  }
+
   if (!loadIndirectAddressInfo(config["indirect_addresses"])) {
     return false;
   }
