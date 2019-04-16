@@ -217,7 +217,7 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
       }
 
       Joint joint(joint_name, id, model_number_ping, driver_);
-      dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0); // TODO unused
+      dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0);
       dxl_nh.param("offset", joint.offset, 0.0);
       if (!joint.dynamixel.loadControlTable()) {
         return false;
