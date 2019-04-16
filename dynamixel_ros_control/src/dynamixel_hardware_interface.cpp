@@ -241,6 +241,8 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
       ss << "-- name: " << joint.name << std::endl;
       ss << "-- id: " << static_cast<int>(joint.dynamixel.getId()) << std::endl;
       ss << "-- model number: " << joint.dynamixel.getModelNumber() << std::endl;
+      ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
+      ss << "-- offset: " << joint.offset << std::endl;
       ROS_DEBUG_STREAM(ss.str());
 
       joints_.push_back(std::move(joint));
