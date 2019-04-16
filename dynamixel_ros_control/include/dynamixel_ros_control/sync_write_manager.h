@@ -9,17 +9,18 @@ namespace dynamixel_ros_control {
 
 struct WriteEntry {
   WriteEntry()
-    : dxl(nullptr), register_name(""), d_value(nullptr), b_value(nullptr){}
+    : dxl(nullptr), register_name(""), d_value(nullptr), b_value(nullptr), offset(0.0){}
   Dynamixel* dxl;
   std::string register_name;
   double* d_value;
   bool* b_value;
+  double offset;
 };
 
 class SyncWriteManager {
 public:
   SyncWriteManager();
-  void addRegister(Dynamixel& dxl, std::string register_name, double& value);
+  void addRegister(Dynamixel& dxl, std::string register_name, double& value, double offset = 0.0);
   void addRegister(Dynamixel& dxl, std::string register_name, bool& value);
 
   bool init(DynamixelDriver& driver);

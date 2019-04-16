@@ -39,8 +39,8 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   }
 
   // Disable torque for indirect address remapping
-  for (const Joint& j: joints_) {
-    j.dynamixel.writeRegister("torque_enable", false);
+  for (const Joint& joint: joints_) {
+    joint.dynamixel.writeRegister("torque_enable", false);
   }
 
   // Register sync reads/writes
@@ -49,13 +49,15 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   pnh_.param("dynamixels/read_values/read_effort", read_effort_, false);
 
   DxlValueMappingList<double> position_mapping;
+  std::vector<double> position_offsets;
   DxlValueMappingList<double> velocity_mapping;
   DxlValueMappingList<double> effort_mapping;
   for (Joint& joint: joints_) {
+    double position_offset = joint.offset + joint.mounting_offset;
     // Register writes
     torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
     if (joint.getControlMode() == POSITION || joint.getControlMode() == EXTENDED_POSITION || joint.getControlMode() == CURRENT_BASED_POSITION) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position); // TODO read register name from config
+      control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position, position_offset); // TODO read register name from config
     } else if (joint.getControlMode() == VELOCITY) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
     } else if (joint.getControlMode() == CURRENT) {
@@ -66,6 +68,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     read_manager_.addDynamixel(&joint.dynamixel);
     if (read_position_) {
       position_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.position));
+      position_offsets.push_back(-position_offset); // Subtract offset on read
 //      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
     }
     if (read_velocity_) {

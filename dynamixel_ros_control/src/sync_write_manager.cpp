@@ -5,11 +5,12 @@ namespace dynamixel_ros_control {
 SyncWriteManager::SyncWriteManager()
   : indirect_data_address_(0), data_length_(0) {}
 
-void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, double& value)
+void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, double& value, double offset)
 {
   std::vector<WriteEntry>::iterator it = addEntry(dxl, register_name);
   if (it != write_entries_.end()) {
     it->d_value = &value;
+    it->offset = offset;
   }
 }
 
@@ -61,10 +62,11 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
 bool SyncWriteManager::write()
 {
   // Convert values and update params
-  for (std::vector<WriteEntry>::value_type& entry: write_entries_) {
+  for (const std::vector<WriteEntry>::value_type& entry: write_entries_) {
     int32_t dxl_value;
     if (entry.d_value != nullptr) {
-      dxl_value = entry.dxl->unitToDxlValue(entry.register_name, *entry.d_value);
+      double unit_value = *entry.d_value + entry.offset;
+      dxl_value = entry.dxl->unitToDxlValue(entry.register_name, unit_value);
       ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] Value: " << dxl_value << ", Converted: " << *entry.d_value);
     } else if (entry.b_value != nullptr) {
       dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);

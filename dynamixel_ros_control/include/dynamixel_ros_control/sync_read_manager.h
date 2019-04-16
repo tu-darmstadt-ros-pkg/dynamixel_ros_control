@@ -18,6 +18,7 @@ struct ReadEntry {
   uint8_t data_length;
 
   DxlValueMappingList<double> dxl_value_pairs;
+  std::vector<double> offsets;
 };
 
 class SyncReadManager {
@@ -27,7 +28,7 @@ public:
 
   void addDynamixel(Dynamixel* dxl);
 //  void addRegister(Dynamixel& dxl, std::string register_name, uint32_t* value);
-  bool addRegister(std::string register_name, const DxlValueMappingList<double>& dxl_value_pairs);
+  bool addRegister(std::string register_name, const DxlValueMappingList<double>& dxl_value_pairs, std::vector<double> offsets = {});
   bool addRegister(std::string register_name, DxlValueMappingList<bool> dxl_value_pairs);
 
 
