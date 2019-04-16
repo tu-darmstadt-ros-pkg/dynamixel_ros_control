@@ -82,7 +82,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   }
 
   if (read_position_) {
-    read_manager_.addRegister("present_position", position_mapping);
+    read_manager_.addRegister("present_position", position_mapping, position_offsets);
   }
   if (read_velocity_) {
     read_manager_.addRegister("present_velocity", velocity_mapping);
