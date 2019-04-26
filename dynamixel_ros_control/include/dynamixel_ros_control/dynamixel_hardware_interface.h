@@ -33,12 +33,14 @@ private:
   void setTorque(std_msgs::BoolConstPtr enabled);
   Joint* getJointByName(std::string name);
 
+  void estopCb(const std_msgs::BoolConstPtr& bool_ptr);
+
   ros::NodeHandle nh_;
   ros::NodeHandle pnh_;
 
   bool initialized_;
-
   bool first_cycle_;
+  bool estop_;
 
   dynamixel_ros_control::DynamixelDriver driver_;
 
@@ -64,9 +66,8 @@ private:
 
   std::vector<Joint> joints_;
 
-
-  // subscriber
-  ros::Subscriber set_torque_sub_;
+  // Subscribers
+  ros::Subscriber estop_sub_;
 };
 
 }

@@ -5,10 +5,8 @@
 namespace dynamixel_ros_control {
 
 DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
-  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true)
-{
-
-}
+  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true), estop_(false)
+{}
 
 DynamixelHardwareInterface::~DynamixelHardwareInterface()
 {
@@ -56,11 +54,11 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     double position_offset = joint.offset + joint.mounting_offset;
     // Register writes
     torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
-    if (joint.getControlMode() == POSITION || joint.getControlMode() == EXTENDED_POSITION || joint.getControlMode() == CURRENT_BASED_POSITION) {
+    if (joint.isPositionControlled()) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position, position_offset); // TODO read register name from config
-    } else if (joint.getControlMode() == VELOCITY) {
+    } else if (joint.isVelocityControlled()) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
-    } else if (joint.getControlMode() == CURRENT) {
+    } else if (joint.isEffortControlled()) {
       control_write_manager_.addRegister(joint.dynamixel, "goal_torque", joint.goal_state.effort);
     }
 
@@ -120,13 +118,13 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
                                                       &joint.current_state.effort);
     jnt_state_interface_.registerHandle(state_handle);
 
-    if (joint.getControlMode() == POSITION || joint.getControlMode() == EXTENDED_POSITION || joint.getControlMode() == CURRENT_BASED_POSITION) {
+    if (joint.isPositionControlled()) {
       hardware_interface::JointHandle pos_handle(state_handle, &joint.goal_state.position);
       jnt_pos_interface_.registerHandle(pos_handle);
-    } else if (joint.getControlMode() == VELOCITY) {
+    } else if (joint.isVelocityControlled()) {
       hardware_interface::JointHandle vel_handle(state_handle, &joint.goal_state.velocity);
       jnt_vel_interface_.registerHandle(vel_handle);
-    } else if (joint.getControlMode() == CURRENT) {
+    } else if (joint.isEffortControlled()) {
       hardware_interface::JointHandle eff_handle(state_handle, &joint.goal_state.effort);
       jnt_eff_interface_.registerHandle(eff_handle);
     }
@@ -141,6 +139,9 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   if (!jnt_eff_interface_.getNames().empty()) {
     registerInterface(&jnt_eff_interface_);
   }
+
+  // Initialize subscribers
+  estop_sub_ = pnh_.subscribe("estop", 100, &DynamixelHardwareInterface::estopCb, this);
 
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
@@ -164,6 +165,13 @@ void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration
 
 void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duration& period)
 {
+  if (estop_) {
+    for (Joint& joint: joints_) {
+      joint.goal_state.position = joint.current_state.position;
+      joint.goal_state.velocity = 0;
+      joint.goal_state.effort = 0;
+    }
+  }
   control_write_manager_.write();
 }
 
@@ -321,6 +329,12 @@ Joint* DynamixelHardwareInterface::getJointByName(std::string name)
     }
   }
   return nullptr;
+}
+
+void DynamixelHardwareInterface::estopCb(const std_msgs::BoolConstPtr& bool_ptr)
+{
+  estop_ = bool_ptr->data;
+  ROS_WARN_STREAM("E-Stop has been " << (estop_ ? "activated" : "deactivated"));
 }
 
 }

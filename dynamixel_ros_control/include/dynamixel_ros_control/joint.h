@@ -32,6 +32,10 @@ public:
   ControlMode getControlMode() const;
   bool setControlMode(const ControlMode& value);
 
+  bool isPositionControlled();
+  bool isVelocityControlled();
+  bool isEffortControlled();
+
 private:
   ControlMode control_mode;
 

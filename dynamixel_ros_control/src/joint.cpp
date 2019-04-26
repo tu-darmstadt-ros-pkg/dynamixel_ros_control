@@ -20,4 +20,19 @@ bool Joint::setControlMode(const ControlMode& value)
   control_mode = value;
 }
 
+bool Joint::isPositionControlled()
+{
+  return getControlMode() == POSITION || getControlMode() == EXTENDED_POSITION || getControlMode() == CURRENT_BASED_POSITION;
+}
+
+bool Joint::isVelocityControlled()
+{
+  return getControlMode() == VELOCITY;
+}
+
+bool Joint::isEffortControlled()
+{
+  return getControlMode() == CURRENT;
+}
+
 }
