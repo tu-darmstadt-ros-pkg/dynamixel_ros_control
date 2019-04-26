@@ -30,7 +30,7 @@ private:
   void writeInitialValues(const ros::NodeHandle& nh);
   void writeControlMode();
   void setTorque(bool enabled);
-  void setTorque(std_msgs::BoolConstPtr enabled);
+  void setTorque(const std_msgs::BoolConstPtr& enabled);
   Joint* getJointByName(std::string name);
 
   void estopCb(const std_msgs::BoolConstPtr& bool_ptr);
@@ -68,6 +68,7 @@ private:
 
   // Subscribers
   ros::Subscriber estop_sub_;
+  ros::Subscriber set_torque_sub_;
 };
 
 }

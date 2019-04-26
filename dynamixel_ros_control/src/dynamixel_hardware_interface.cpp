@@ -142,6 +142,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
   // Initialize subscribers
   estop_sub_ = pnh_.subscribe("estop", 100, &DynamixelHardwareInterface::estopCb, this);
+  set_torque_sub_ = pnh_.subscribe("set_torque", 100, &DynamixelHardwareInterface::setTorque, this);
 
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
@@ -316,7 +317,7 @@ void DynamixelHardwareInterface::setTorque(bool enabled)
   }
 }
 
-void DynamixelHardwareInterface::setTorque(std_msgs::BoolConstPtr enabled)
+void DynamixelHardwareInterface::setTorque(const std_msgs::BoolConstPtr& enabled)
 {
   setTorque(enabled->data);
 }
