@@ -7,6 +7,7 @@ add_compile_options(-std=c++11)
 ## Find catkin macros and libraries
 find_package(catkin REQUIRED COMPONENTS
   controller_manager
+  cuckoo_time_translator
   dynamixel_sdk
   hardware_interface
 )
@@ -39,7 +40,7 @@ find_package(yaml-cpp)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES dynamixel_ros_control
-  CATKIN_DEPENDS controller_manager dynamixel_sdk hardware_interface
+  CATKIN_DEPENDS controller_manager cuckoo_time_translator dynamixel_sdk hardware_interface
 #  DEPENDS system_lib
 )
 

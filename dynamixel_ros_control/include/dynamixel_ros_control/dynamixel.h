@@ -5,6 +5,8 @@
 #include <dynamixel_ros_control/control_table.h>
 #include <dynamixel_ros_control/dynamixel_driver.h>
 
+#include <cuckoo_time_translator/DeviceTimeTranslator.h>
+
 namespace dynamixel_ros_control {
 
 enum ControlMode {
@@ -46,8 +48,13 @@ public:
   uint16_t getModelNumber() const;
 
   bool setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address);
-
+  
+  bool translateTime(const ros::Time& receive_time);
+  
   double realtime_tick_ms_;
+  
+  std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator> device_time_translator_;
+  ros::Time stamp_;
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 

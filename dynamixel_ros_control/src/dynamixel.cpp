@@ -3,10 +3,20 @@
 #include <dynamixel_ros_control/common.h>
 #include <boost/algorithm/string.hpp>
 
+#include <memory>
+
 namespace dynamixel_ros_control {
 
 Dynamixel::Dynamixel(uint8_t id, uint16_t model_number, DynamixelDriver& driver)
-  :  driver_(driver), id_(id), model_number_(model_number) {}
+  :  driver_(driver), id_(id), model_number_(model_number)
+{
+  //@TODO Assign unique namespace per servo as every one of the gets a dynrec server
+  ros::NodeHandle pnh("~/dynamixel");
+  device_time_translator_ = std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator>(
+                               new cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator(
+                                 cuckoo_time_translator::WrappingClockParameters(std::numeric_limits<int16_t>::max(), 1000.0),
+                                 pnh.getNamespace()));  
+}
 
 bool Dynamixel::loadControlTable()
 {
@@ -160,6 +170,17 @@ void Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, ui
 uint8_t Dynamixel::getId() const
 {
   return id_;
+}
+
+bool Dynamixel::translateTime(const ros::Time& receive_time)
+{
+  // Offset between device and host time, we guess 5ms for now
+  double offset = -0.005;
+  
+  // @TODO Make sure we really only use strightly monotonic increasing device stamps
+  stamp_ = device_time_translator_->update(realtime_tick_ms_, receive_time, offset);
+
+  return true;
 }
 
 ControlMode stringToControlMode(const std::string& str) {
