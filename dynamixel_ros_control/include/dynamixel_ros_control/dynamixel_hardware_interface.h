@@ -63,6 +63,7 @@ private:
   bool debug_;
   bool torque_on_startup_;
   bool torque_off_on_shutdown_;
+  bool reset_controllers_after_estop_;
 
   bool read_position_;
   bool read_velocity_;

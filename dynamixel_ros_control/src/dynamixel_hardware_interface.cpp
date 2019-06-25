@@ -29,6 +29,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   }
   pnh_.param("torque_on_startup", torque_on_startup_, false);
   pnh_.param("torque_off_on_shutdown", torque_off_on_shutdown_, false);
+  pnh_.param("reset_controllers_after_estop", reset_controllers_after_estop_, true);
 
   // Load dynamixels
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");
@@ -337,7 +338,7 @@ void DynamixelHardwareInterface::estopCb(const std_msgs::BoolConstPtr& bool_ptr)
   if (estop_ != bool_ptr->data) {
     estop_ = bool_ptr->data;
     ROS_WARN_STREAM("E-Stop has been " << (estop_ ? "activated" : "deactivated"));
-    if (!estop_) {
+    if (!estop_ && reset_controllers_after_estop_) {
       // Reset controllers if e-stop has been turned off
       reset_required_ = true;
     }
