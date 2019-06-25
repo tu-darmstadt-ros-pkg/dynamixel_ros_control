@@ -51,6 +51,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   std::vector<double> position_offsets;
   DxlValueMappingList<double> velocity_mapping;
   DxlValueMappingList<double> effort_mapping;
+  DxlValueMappingList<double> clock_mapping;
   for (Joint& joint: joints_) {
     double position_offset = joint.offset + joint.mounting_offset;
     // Register writes
@@ -65,6 +66,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
     // Register reads
     read_manager_.addDynamixel(&joint.dynamixel);
+    clock_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.dynamixel.realtime_tick_ms_));
     if (read_position_) {
       position_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.position));
       position_offsets.push_back(-position_offset); // Subtract offset on read
@@ -80,6 +82,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     }
   }
 
+  read_manager_.addRegister("realtime_tick", clock_mapping);
   if (read_position_) {
     read_manager_.addRegister("present_position", position_mapping, position_offsets);
   }

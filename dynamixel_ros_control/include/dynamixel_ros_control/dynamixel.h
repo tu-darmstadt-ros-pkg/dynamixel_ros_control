@@ -47,6 +47,7 @@ public:
 
   bool setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address);
 
+  double realtime_tick_ms_;
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 
