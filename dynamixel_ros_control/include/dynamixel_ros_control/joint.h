@@ -29,6 +29,8 @@ public:
   double mounting_offset;
   double offset;
 
+  double estop_position;
+
   ControlMode getControlMode() const;
   bool setControlMode(const ControlMode& value);
 

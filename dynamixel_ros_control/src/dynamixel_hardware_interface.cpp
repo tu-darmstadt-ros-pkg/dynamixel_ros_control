@@ -169,7 +169,7 @@ void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duratio
 {
   if (estop_) {
     for (Joint& joint: joints_) {
-      joint.goal_state.position = joint.current_state.position;
+      joint.goal_state.position = joint.estop_position;
       joint.goal_state.velocity = 0;
       joint.goal_state.effort = 0;
     }
@@ -338,9 +338,17 @@ void DynamixelHardwareInterface::estopCb(const std_msgs::BoolConstPtr& bool_ptr)
   if (estop_ != bool_ptr->data) {
     estop_ = bool_ptr->data;
     ROS_WARN_STREAM("E-Stop has been " << (estop_ ? "activated" : "deactivated"));
+
+    // Reset controllers if e-stop has been turned off
     if (!estop_ && reset_controllers_after_estop_) {
-      // Reset controllers if e-stop has been turned off
       reset_required_ = true;
+    }
+
+    // Save current position
+    if (estop_) {
+      for (Joint& joint: joints_) {
+        joint.estop_position = joint.current_state.position;
+      }
     }
   }
 }
