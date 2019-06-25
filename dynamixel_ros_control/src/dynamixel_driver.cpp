@@ -24,21 +24,29 @@ bool DynamixelDriver::init(const ros::NodeHandle& nh)
   }
 
   // Get port info
-  std::string port_name;
-  if (!loadRequiredParameter(nh, "port_info/port_name", port_name) || !setPortHandler(port_name)) {
+  if (!loadRequiredParameter(nh, "port_info/port_name", port_name_)) {
     return false;
   }
 
-  int baudrate;
-  if (!loadRequiredParameter(nh, "port_info/baud_rate", baudrate) || !setBaudRate(baudrate)) {
+  if (!loadRequiredParameter(nh, "port_info/baud_rate", baud_rate_)) {
     return false;
   }
 
-  float protocol_version;
-  if (!loadRequiredParameter(nh, "port_info/protocol_version", protocol_version)) {
+  if (!loadRequiredParameter(nh, "port_info/protocol_version", protocol_version_)) {
     return false;
   }
-  return setPacketHandler(protocol_version);
+  return true;
+}
+
+bool DynamixelDriver::connect()
+{
+  if (!setPortHandler(port_name_)) {
+    return false;
+  }
+  if (!setBaudRate(baud_rate_)) {
+    return false;
+  }
+  return setPacketHandler(protocol_version_);
 }
 
 bool DynamixelDriver::loadSeriesMapping()

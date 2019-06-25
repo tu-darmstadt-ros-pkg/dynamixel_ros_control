@@ -21,6 +21,8 @@ public:
 
   bool init(const ros::NodeHandle& nh);
 
+  bool connect();
+
   ControlTable* loadControlTable(uint16_t model_number);
 
   bool ping(uint8_t id);
@@ -50,6 +52,11 @@ private:
   std::string package_path_;
   std::map<uint16_t, std::string> model_number_to_series_;
   std::map<std::string, ControlTable> series_to_control_table_;
+
+  // Parameters
+  std::string port_name_;
+  int baud_rate_;
+  float protocol_version_;
 };
 
 }

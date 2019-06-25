@@ -34,6 +34,8 @@ private:
   uint8_t data_length_;
 
   dynamixel::GroupSyncWrite* sync_write_;
+
+  unsigned int error_count_;
 };
 
 }
