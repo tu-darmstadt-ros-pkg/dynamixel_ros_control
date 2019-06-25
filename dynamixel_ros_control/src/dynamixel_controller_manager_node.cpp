@@ -49,7 +49,8 @@ int main(int argc, char** argv)
     if (first_update) {
       first_update = false;
     } else {
-      cm.update(now, period);
+      cm.update(now, period, hw.resetRequired());
+      hw.clearResetRequired();
     }
     hw.write(now, period);
     rate.sleep();

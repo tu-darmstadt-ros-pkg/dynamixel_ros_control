@@ -5,7 +5,7 @@
 namespace dynamixel_ros_control {
 
 DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
-  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true), estop_(false)
+  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true), estop_(false), reset_required_(false)
 {}
 
 DynamixelHardwareInterface::~DynamixelHardwareInterface()
@@ -334,8 +334,24 @@ Joint* DynamixelHardwareInterface::getJointByName(std::string name)
 
 void DynamixelHardwareInterface::estopCb(const std_msgs::BoolConstPtr& bool_ptr)
 {
-  estop_ = bool_ptr->data;
-  ROS_WARN_STREAM("E-Stop has been " << (estop_ ? "activated" : "deactivated"));
+  if (estop_ != bool_ptr->data) {
+    estop_ = bool_ptr->data;
+    ROS_WARN_STREAM("E-Stop has been " << (estop_ ? "activated" : "deactivated"));
+    if (!estop_) {
+      // Reset controllers if e-stop has been turned off
+      reset_required_ = true;
+    }
+  }
+}
+
+bool DynamixelHardwareInterface::resetRequired() const
+{
+  return reset_required_;
+}
+
+void DynamixelHardwareInterface::clearResetRequired()
+{
+  reset_required_ = false;
 }
 
 }

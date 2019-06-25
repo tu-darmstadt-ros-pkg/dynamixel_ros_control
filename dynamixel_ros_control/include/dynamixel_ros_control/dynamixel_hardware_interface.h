@@ -25,6 +25,9 @@ public:
   void read(const ros::Time& time, const ros::Duration& period) override;
   void write(const ros::Time& time, const ros::Duration& period) override;
 
+  bool resetRequired() const;
+  void clearResetRequired();
+
 private:
   bool loadDynamixels(const ros::NodeHandle& nh);
   void writeInitialValues(const ros::NodeHandle& nh);
@@ -41,6 +44,7 @@ private:
   bool initialized_;
   bool first_cycle_;
   bool estop_;
+  bool reset_required_;
 
   dynamixel_ros_control::DynamixelDriver driver_;
 
