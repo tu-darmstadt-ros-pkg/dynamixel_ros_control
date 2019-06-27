@@ -4,8 +4,8 @@
 
 namespace dynamixel_ros_control {
 
-DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
-  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true), estop_(false), reset_required_(false)
+DynamixelHardwareInterface::DynamixelHardwareInterface()
+  : initialized_(false), first_cycle_(true), estop_(false), reset_required_(false)
 {}
 
 DynamixelHardwareInterface::~DynamixelHardwareInterface()
@@ -19,6 +19,8 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 
 bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh)
 {
+  nh_ = root_nh;
+  pnh_ = robot_hw_nh;
   first_cycle_ = true;
   // Load Parameters
   pnh_.param<bool>("debug", debug_, false);

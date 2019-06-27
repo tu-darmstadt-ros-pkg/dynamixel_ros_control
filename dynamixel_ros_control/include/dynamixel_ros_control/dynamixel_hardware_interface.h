@@ -18,7 +18,7 @@ namespace dynamixel_ros_control {
 class DynamixelHardwareInterface : public hardware_interface::RobotHW
 {
 public:
-  DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh);
+  DynamixelHardwareInterface();
   ~DynamixelHardwareInterface() override;
 
   bool init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh) override;
