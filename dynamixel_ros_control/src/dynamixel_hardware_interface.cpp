@@ -180,9 +180,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
-  ros::Time packet_received_time;
-  read_manager_.read(packet_received_time);
-
+  read_manager_.read();
   joints_[time_sync_joint_idx_].dynamixel.translateTime(time);
 
   if (first_cycle_) {
