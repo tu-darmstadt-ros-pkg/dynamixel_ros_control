@@ -17,6 +17,7 @@
 
   <buildtool_depend>catkin</buildtool_depend>
   <depend>controller_manager</depend>
+  <depend>cuckoo_time_translator</depend>
   <depend>dynamixel_sdk</depend>
   <depend>hardware_interface</depend>
   <depend>yaml-cpp</depend>

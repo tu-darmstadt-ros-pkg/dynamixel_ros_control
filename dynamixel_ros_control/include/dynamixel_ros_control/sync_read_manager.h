@@ -39,6 +39,7 @@ public:
    */
   bool init(DynamixelDriver& driver);
   bool read();
+  bool read(ros::Time& packet_receive_time);
 private:
   dynamixel::GroupSyncRead* sync_read_;
 
