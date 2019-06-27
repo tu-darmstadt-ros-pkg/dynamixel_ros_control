@@ -57,7 +57,6 @@ private:
   // Parameters
   std::string port_name_;
   int baud_rate_;
-  float protocol_version_;
 };
 
 }

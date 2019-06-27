@@ -32,9 +32,6 @@ bool DynamixelDriver::init(const ros::NodeHandle& nh)
     return false;
   }
 
-  if (!loadRequiredParameter(nh, "port_info/protocol_version", protocol_version_)) {
-    return false;
-  }
   return true;
 }
 
@@ -46,7 +43,7 @@ bool DynamixelDriver::connect()
   if (!setBaudRate(baud_rate_)) {
     return false;
   }
-  return setPacketHandler(protocol_version_);
+  return setPacketHandler(2.0);
 }
 
 bool DynamixelDriver::loadSeriesMapping()
