@@ -183,7 +183,7 @@ void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration
   ros::Time packet_received_time;
   read_manager_.read(packet_received_time);
 
-  joints_[time_sync_joint_idx_].dynamixel.translateTime(packet_received_time);
+  joints_[time_sync_joint_idx_].dynamixel.translateTime(time);
 
   if (first_cycle_) {
     first_cycle_ = false;
