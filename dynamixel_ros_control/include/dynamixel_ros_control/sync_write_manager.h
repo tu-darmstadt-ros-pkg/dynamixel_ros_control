@@ -33,6 +33,7 @@ private:
   uint16_t indirect_data_address_;
   uint8_t data_length_;
 
+  DynamixelDriver* driver_;
   dynamixel::GroupSyncWrite* sync_write_;
 };
 

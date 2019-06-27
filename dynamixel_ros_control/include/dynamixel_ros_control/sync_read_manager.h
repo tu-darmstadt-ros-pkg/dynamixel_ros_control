@@ -42,6 +42,7 @@ public:
 private:
   dynamixel::GroupSyncRead* sync_read_;
 
+  DynamixelDriver* driver_;
   std::set<Dynamixel*> dynamixels_;
 
   std::map<std::string, ReadEntry> read_entries_;

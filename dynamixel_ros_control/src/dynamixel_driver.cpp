@@ -139,14 +139,12 @@ bool DynamixelDriver::writeRegister(uint8_t id, uint16_t address, uint8_t data_l
 
   if (comm_result == COMM_SUCCESS) {
     if (error != 0) {
-      const char* error_cstr = packet_handler_->getRxPacketError(error);
-      ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Failed to write: " << error_cstr);
+      ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Failed to write: " << packetErrorToString(error));
       return false;
     }
     return true;
   } else {
-    const char* error_cstr = packet_handler_->getTxRxResult(comm_result);
-    ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Communication error while writing: " << error_cstr);
+    ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Communication error while writing: " << communicationErrorToString(comm_result));
     return false;
   }
 }
@@ -173,14 +171,12 @@ bool DynamixelDriver::readRegister(uint8_t id, uint16_t address, uint8_t data_le
                    << ", value: " << value_out);
   if (comm_result == COMM_SUCCESS) {
     if (error != 0) {
-      const char* error_cstr = packet_handler_->getRxPacketError(error);
-      ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Read error: " << error_cstr);
+      ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Read error: " << packetErrorToString(error));
       return false;
     }
     return true;
   } else {
-    const char* error_cstr = packet_handler_->getTxRxResult(comm_result);
-    ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Read communication error: " << error_cstr);
+    ROS_ERROR_STREAM("[ID " << static_cast<int>(id) << "] Read communication error: " << communicationErrorToString(comm_result));
     return false;
   }
 }
@@ -200,6 +196,18 @@ bool DynamixelDriver::requestIndirectAddresses(unsigned int data_length, unsigne
   address_start = next_indirect_address_;
   next_indirect_address_ += data_length;
   return true;
+}
+
+std::string DynamixelDriver::communicationErrorToString(int comm_result) const
+{
+  const char* error_cstr = packet_handler_->getTxRxResult(comm_result);
+  return std::string(error_cstr);
+}
+
+std::string DynamixelDriver::packetErrorToString(uint8_t error) const
+{
+  const char* error_cstr = packet_handler_->getRxPacketError(error);
+  return std::string(error_cstr);
 }
 
 bool DynamixelDriver::setPacketHandler(float protocol_version)

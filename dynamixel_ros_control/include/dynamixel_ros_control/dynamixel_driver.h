@@ -13,8 +13,6 @@
 
 namespace dynamixel_ros_control {
 
-//typedef std::map<std::string, ControlTableItem> ControlTable;
-
 class DynamixelDriver {
 public:
   DynamixelDriver();
@@ -35,6 +33,9 @@ public:
   dynamixel::GroupSyncRead* setSyncRead(uint16_t address, uint8_t data_length);
 
   bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start);
+
+  std::string communicationErrorToString(int comm_result) const;
+  std::string packetErrorToString(uint8_t error) const;
 private:
   bool loadSeriesMapping();
   ControlTable* readControlTable(std::string series);

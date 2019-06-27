@@ -85,6 +85,7 @@ bool SyncReadManager::addRegister(std::string /*register_name*/, DxlValueMapping
 
 bool SyncReadManager::init(DynamixelDriver& driver)
 {
+  driver_ = &driver;
   // Compute total data length by going through all read entries
   total_data_length_ = 0;
   for (std::map<std::string, ReadEntry>::value_type& read_kv: read_entries_) {
@@ -144,7 +145,7 @@ bool SyncReadManager::read()
   int dxl_comm_result = sync_read_->txRxPacket();
 
   if (dxl_comm_result != COMM_SUCCESS) {
-    ROS_ERROR_STREAM("Sync Read failed with error code: " << dxl_comm_result);
+    ROS_ERROR_STREAM("Sync Read failed with error code: " << driver_->communicationErrorToString(dxl_comm_result));
     return false;
   }
 

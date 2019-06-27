@@ -24,6 +24,7 @@ void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, bo
 
 bool SyncWriteManager::init(DynamixelDriver& driver)
 {
+  driver_ = &driver;
   // Request indirect address space from dynamixel_driver
   if (!driver.requestIndirectAddresses(data_length_, indirect_address_index_)) {
     ROS_ERROR_STREAM("Failed to aquire indirect addresses for register with data length of " << data_length_ << ".");
@@ -77,7 +78,7 @@ bool SyncWriteManager::write()
   }
   int result = sync_write_->txPacket();
   if (result != COMM_SUCCESS) {
-    ROS_ERROR_STREAM("Sync Write failed.");
+    ROS_ERROR_STREAM("Sync Write failed with error: " << driver_->communicationErrorToString(result));
     return false;
   }
   return true;
