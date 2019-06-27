@@ -49,12 +49,14 @@ public:
 
   bool setIndirectAddress(unsigned int indirect_address_index, std::string register_name, uint16_t& indirect_data_address);
   
+  // Time translator
+  void addTimeTranslator(const ros::NodeHandle& nh);
   bool translateTime(const ros::Time& receive_time);
+  ros::Time getStamp() const;
   
   double realtime_tick_ms_;
   
   std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator> device_time_translator_;
-  ros::Time stamp_;
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 
@@ -65,6 +67,8 @@ private:
   uint8_t id_;
   uint16_t model_number_;
   std::string model_name_;
+
+  ros::Time stamp_;
 };
 
 }

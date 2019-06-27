@@ -25,6 +25,8 @@ public:
   void read(const ros::Time& time, const ros::Duration& period) override;
   void write(const ros::Time& time, const ros::Duration& period) override;
 
+  ros::Time getLastReadTime() const;
+
   bool resetRequired() const;
   void clearResetRequired();
 
@@ -68,6 +70,8 @@ private:
   bool read_position_;
   bool read_velocity_;
   bool read_effort_;
+
+  std::vector<Joint>::size_type time_sync_joint_idx_;
 
   std::vector<Joint> joints_;
 

@@ -5,7 +5,7 @@
 namespace dynamixel_ros_control {
 
 DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
-  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true), estop_(false), reset_required_(false)
+  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true), estop_(false), reset_required_(false), time_sync_joint_idx_(0)
 {}
 
 DynamixelHardwareInterface::~DynamixelHardwareInterface()
@@ -20,6 +20,7 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh)
 {
   first_cycle_ = true;
+
   // Load Parameters
   pnh_.param<bool>("debug", debug_, false);
   if (debug_) {
@@ -36,6 +37,27 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
     return false;
   }
+
+  // Time sync
+  std::string time_sync_joint_name;
+  if (pnh_.getParam("time_sync_joint", time_sync_joint_name)) {
+    bool found = false;
+    for (unsigned int i = 0; i < joints_.size(); i++) {
+      if (joints_[i].name == time_sync_joint_name) {
+        time_sync_joint_idx_ = i;
+        found = true;
+        break;
+      }
+    }
+    // If no matching joint is found, the default of '0' is used.
+    if (!found) {
+      ROS_ERROR_STREAM("No joint with the name '" << time_sync_joint_name << "' was found for time synchronization.");
+      time_sync_joint_idx_ = 0;
+    }
+  } else {
+    time_sync_joint_idx_ = 0;
+  }
+  joints_[time_sync_joint_idx_].dynamixel.addTimeTranslator(ros::NodeHandle(pnh_, "time_translator"));
 
   // Disable torque for indirect address remapping
   for (const Joint& joint: joints_) {
@@ -158,7 +180,10 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
-  read_manager_.read();
+  ros::Time packet_received_time;
+  read_manager_.read(packet_received_time);
+
+  joints_[time_sync_joint_idx_].dynamixel.translateTime(packet_received_time);
 
   if (first_cycle_) {
     first_cycle_ = false;
@@ -178,6 +203,11 @@ void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duratio
     }
   }
   control_write_manager_.write();
+}
+
+ros::Time DynamixelHardwareInterface::getLastReadTime() const
+{
+  return joints_[time_sync_joint_idx_].dynamixel.getStamp();
 }
 
 bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)

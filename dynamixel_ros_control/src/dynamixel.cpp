@@ -9,14 +9,7 @@ namespace dynamixel_ros_control {
 
 Dynamixel::Dynamixel(uint8_t id, uint16_t model_number, DynamixelDriver& driver)
   :  driver_(driver), id_(id), model_number_(model_number)
-{
-  //@TODO Assign unique namespace per servo as every one of the gets a dynrec server
-  ros::NodeHandle pnh("~/dynamixel");
-  device_time_translator_ = std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator>(
-                               new cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator(
-                                 cuckoo_time_translator::WrappingClockParameters(std::numeric_limits<int16_t>::max(), 1000.0),
-                                 pnh.getNamespace()));  
-}
+{}
 
 bool Dynamixel::loadControlTable()
 {
@@ -150,6 +143,14 @@ bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::str
   return success;
 }
 
+void Dynamixel::addTimeTranslator(const ros::NodeHandle& nh)
+{
+  device_time_translator_ = std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator>(
+                               new cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator(
+                                 cuckoo_time_translator::WrappingClockParameters(std::numeric_limits<int16_t>::max(), 1000.0),
+                                 nh.getNamespace()));
+}
+
 void Dynamixel::indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address)
 {
   const IndirectAddressInfo* info;
@@ -174,6 +175,10 @@ uint8_t Dynamixel::getId() const
 
 bool Dynamixel::translateTime(const ros::Time& receive_time)
 {
+  if (!device_time_translator_) {
+    ROS_ERROR_STREAM("Device time translator has not been initialized yet");
+    return false;
+  }
   // Offset between device and host time, we guess 5ms for now
   double offset = -0.005;
   
@@ -181,6 +186,15 @@ bool Dynamixel::translateTime(const ros::Time& receive_time)
   stamp_ = device_time_translator_->update(realtime_tick_ms_, receive_time, offset);
 
   return true;
+}
+
+ros::Time Dynamixel::getStamp() const
+{
+  if (!device_time_translator_) {
+    ROS_ERROR_STREAM("Device time translator has not been initialized yet");
+    return ros::Time::now();
+  }
+  return stamp_;
 }
 
 ControlMode stringToControlMode(const std::string& str) {
