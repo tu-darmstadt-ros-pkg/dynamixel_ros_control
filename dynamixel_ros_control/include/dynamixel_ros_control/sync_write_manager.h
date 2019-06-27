@@ -25,6 +25,8 @@ public:
 
   bool init(DynamixelDriver& driver);
   bool write();
+
+  bool isOk() const;
 private:
   std::vector<WriteEntry>::iterator addEntry(Dynamixel& dxl, std::string register_name);
   std::vector<WriteEntry> write_entries_;
@@ -36,7 +38,7 @@ private:
   DynamixelDriver* driver_;
   dynamixel::GroupSyncWrite* sync_write_;
 
-  unsigned int error_count_;
+  unsigned int subsequent_error_count_;
 };
 
 }
