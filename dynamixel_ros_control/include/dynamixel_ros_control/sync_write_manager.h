@@ -35,6 +35,8 @@ private:
 
   DynamixelDriver* driver_;
   dynamixel::GroupSyncWrite* sync_write_;
+
+  unsigned int error_count_;
 };
 
 }

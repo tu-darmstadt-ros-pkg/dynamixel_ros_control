@@ -33,7 +33,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
   // Load dynamixels
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");
-  if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
+  if (!driver_.init(dxl_nh) || ! driver_.connect() || !loadDynamixels(dxl_nh)) {
     return false;
   }
 
