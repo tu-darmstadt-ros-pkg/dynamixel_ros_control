@@ -210,9 +210,6 @@ bool DynamixelHardwareInterface::connect()
 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
-  for (const Joint& j: joints_) {
-    ROS_INFO_STREAM(j.name << ": " << j.goal_state.torque);
-  }
   last_read_time_ = time;
   if (!connected_ && last_connect_try_ + ros::Duration(1) < ros::Time::now()) {
     if (!connect()) {
@@ -228,7 +225,7 @@ void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration
       if (first_cycle_) {
         first_cycle_ = false;
         for (Joint& joint: joints_) {
-          joint.goal_state = joint.current_state;
+          joint.goal_state.position = joint.current_state.position;
         }
       }
     } else {
