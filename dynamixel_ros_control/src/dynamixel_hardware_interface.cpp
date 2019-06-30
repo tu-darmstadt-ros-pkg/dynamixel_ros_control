@@ -422,6 +422,8 @@ bool DynamixelHardwareInterface::rebootCb(std_srvs::EmptyRequest& request, std_s
       j.dynamixel.reboot();
     }
   }
+  // Wait for motors to come back
+  ros::Duration(0.05).sleep();
   // write torque
   if (!torque_write_manager_.write()) {
     return false;
