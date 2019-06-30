@@ -77,7 +77,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   estop_sub_ = pnh_.subscribe("estop", 100, &DynamixelHardwareInterface::estopCb, this);
   set_torque_sub_ = pnh_.subscribe("set_torque", 100, &DynamixelHardwareInterface::setTorque, this);
   reboot_server_ = pnh_.advertiseService("reboot_if_error_state", &DynamixelHardwareInterface::rebootCb, this);
-  write_register_sub_ = pnh_.subscribe("write_register", 10, &DynamixelHardwareInterface::writeRegisterCb, this);
+  write_register_server_ = pnh_.advertiseService("write_register", &DynamixelHardwareInterface::writeRegisterCb, this);
 
   // Try to connect
   connect();
@@ -412,35 +412,36 @@ void DynamixelHardwareInterface::setTorque(const std_msgs::BoolConstPtr& enabled
   setTorque(enabled->data);
 }
 
-void DynamixelHardwareInterface::writeRegisterCb(const dynamixel_ros_control_msgs::WriteRegisterConstPtr& write_register_msg)
+bool DynamixelHardwareInterface::writeRegisterCb(dynamixel_ros_control_msgs::WriteRegisterRequest& request, dynamixel_ros_control_msgs::WriteRegisterResponse& response)
 {
   Joint* joint;
-  if (!write_register_msg->joint_name.empty()) {
-    joint = getJointByName(write_register_msg->joint_name);
+  if (!request.joint_name.empty()) {
+    joint = getJointByName(request.joint_name);
     if (!joint) {
-      ROS_ERROR_STREAM("Could not find joint with name '" << write_register_msg->joint_name << "'. Failed to write register.");
-      return;
+      ROS_ERROR_STREAM("Could not find joint with name '" << request.joint_name << "'. Failed to write register.");
+      return false;
     }
   } else {
-    joint = getJointByDxlId(write_register_msg->id);
+    joint = getJointByDxlId(request.id);
     if (!joint) {
-      ROS_ERROR_STREAM("Could not find joint with ID '" << static_cast<int>(write_register_msg->id) << "'. Failed to write register.");
-      return;
+      ROS_ERROR_STREAM("Could not find joint with ID '" << static_cast<int>(request.id) << "'. Failed to write register.");
+      return false;
     }
   }
-  switch (write_register_msg->value_type) {
-    case dynamixel_ros_control_msgs::WriteRegister::DOUBLE_VALUE:
-      joint->dynamixel.writeRegister(write_register_msg->register_name, write_register_msg->dvalue);
+  switch (request.value_type) {
+    case dynamixel_ros_control_msgs::WriteRegisterRequest::DOUBLE_VALUE:
+      joint->dynamixel.writeRegister(request.register_name, request.dvalue);
       break;
-    case dynamixel_ros_control_msgs::WriteRegister::BOOL_VALUE:
-      joint->dynamixel.writeRegister(write_register_msg->register_name, write_register_msg->bvalue);
+    case dynamixel_ros_control_msgs::WriteRegisterRequest::BOOL_VALUE:
+      joint->dynamixel.writeRegister(request.register_name, request.bvalue);
       break;
-    case dynamixel_ros_control_msgs::WriteRegister::INT_VALUE:
-      joint->dynamixel.writeRegister(write_register_msg->register_name, write_register_msg->ivalue);
+    case dynamixel_ros_control_msgs::WriteRegisterRequest::INT_VALUE:
+      joint->dynamixel.writeRegister(request.register_name, request.ivalue);
       break;
     default:
-      ROS_ERROR_STREAM("Unknown value type: " << static_cast<int>(write_register_msg->value_type));
+      ROS_ERROR_STREAM("Unknown value type: " << static_cast<int>(request.value_type));
   }
+  return true;
 }
 
 bool DynamixelHardwareInterface::rebootCb(std_srvs::EmptyRequest& request, std_srvs::EmptyResponse& response)

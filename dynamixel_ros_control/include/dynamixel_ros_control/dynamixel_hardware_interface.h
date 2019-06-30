@@ -40,7 +40,7 @@ private:
   void writeControlMode();
   void setTorque(bool enabled);
   void setTorque(const std_msgs::BoolConstPtr& enabled);
-  void writeRegisterCb(const dynamixel_ros_control_msgs::WriteRegisterConstPtr& write_register_msg);
+  bool writeRegisterCb(dynamixel_ros_control_msgs::WriteRegisterRequest& request, dynamixel_ros_control_msgs::WriteRegisterResponse& response);
   bool rebootCb(std_srvs::EmptyRequest& request, std_srvs::EmptyResponse& response);
 
   Joint* getJointByName(std::string name);
@@ -90,7 +90,7 @@ private:
   // Subscribers
   ros::Subscriber estop_sub_;
   ros::Subscriber set_torque_sub_;
-  ros::Subscriber write_register_sub_;
+  ros::ServiceServer write_register_server_;
   ros::ServiceServer reboot_server_;
 };
 
