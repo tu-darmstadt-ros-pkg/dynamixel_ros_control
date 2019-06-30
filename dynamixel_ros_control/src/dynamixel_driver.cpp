@@ -127,6 +127,12 @@ std::vector<std::pair<uint8_t, uint16_t>> DynamixelDriver::scan()
   return dxl_list;
 }
 
+bool DynamixelDriver::reboot(uint8_t id)
+{
+  uint8_t error;
+  return packet_handler_->reboot(port_handler_, id, &error);
+}
+
 bool DynamixelDriver::writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value)
 {
   ROS_DEBUG_STREAM("[Register Write] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: " << static_cast<unsigned int>(data_length)

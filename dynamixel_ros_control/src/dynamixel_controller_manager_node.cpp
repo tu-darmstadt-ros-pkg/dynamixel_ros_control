@@ -24,35 +24,40 @@ int main(int argc, char** argv)
   controller_manager::ControllerManager cm(&hw, nh);
 
   // Start control loop
-  ros::Time previous_time = ros::Time::now();
+  ros::Time previous_read_time = ros::Time::now();
   bool first_update = true;
   double control_rate = pnh.param("control_rate", 25);
   ros::Rate rate(control_rate);
   ros::Duration expected_period(1.0/control_rate);
   while (ros::ok()) {
+    // Compute period and detect jumps in time
     ros::Time now = ros::Time::now();
     ros::Duration period;
-    if (now.toSec() > previous_time.toSec() + 1.5*expected_period.toSec()) {
-      ros::Duration diff = now - previous_time;
+    if (now.toSec() > previous_read_time.toSec() + 1.5*expected_period.toSec()) {
+      ros::Duration diff = now - previous_read_time;
       ROS_ERROR_STREAM("Jump in time detected (+" << diff.toSec() << " s).");
     }
-    if (now < previous_time) {
-      ros::Duration diff = previous_time - now;
+    if (now < previous_read_time) {
+      ros::Duration diff = previous_read_time - now;
       ROS_ERROR_STREAM("Time moved backwards (-" << diff.toSec() << " s).");
       rate.reset();
       period = expected_period; // Fallback: Set to expected period
     } else {
-      period = ros::Time::now() - previous_time;
+      period = ros::Time::now() - previous_read_time;
     }
-    previous_time = now;
+
     hw.read(now, period);
+    ros::Time read_time = hw.getLastReadTime();
+    ros::Duration read_period = read_time - previous_read_time;
+    previous_read_time = read_time;
+
     if (first_update) {
       first_update = false;
     } else {
-      cm.update(now, period, hw.resetRequired());
+      cm.update(read_time, read_period, hw.resetRequired());
       hw.clearResetRequired();
     }
-    hw.write(now, period);
+    hw.write(read_time, read_period);
     rate.sleep();
     ros::spinOnce();
   }

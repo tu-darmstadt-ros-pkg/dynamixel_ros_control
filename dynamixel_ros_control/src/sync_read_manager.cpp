@@ -144,7 +144,14 @@ bool SyncReadManager::init(DynamixelDriver& driver)
 
 bool SyncReadManager::read()
 {
+  ros::Time time;
+  return read(time);
+}
+
+bool SyncReadManager::read(ros::Time& packet_receive_time)
+{
   int dxl_comm_result = sync_read_->txRxPacket();
+  packet_receive_time = ros::Time::now();
 
   if (dxl_comm_result != COMM_SUCCESS) {
     ROS_ERROR_STREAM("Sync Read failed with error code: " << driver_->communicationErrorToString(dxl_comm_result));
