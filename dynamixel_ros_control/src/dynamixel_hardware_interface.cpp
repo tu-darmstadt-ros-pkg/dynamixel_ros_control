@@ -242,7 +242,7 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
     std::string joint_name = static_cast<std::string>(it->first);
     ros::NodeHandle dxl_nh(nh, "device_info/" + joint_name);
 
-    Joint joint;
+    Joint joint(driver_);
     joint.initFromNh(dxl_nh);
 
     // Local control mode can override default control mode

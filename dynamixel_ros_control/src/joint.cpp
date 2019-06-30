@@ -2,13 +2,13 @@
 
 namespace dynamixel_ros_control {
 
-Joint::Joint() :
-{
+Joint::Joint(dynamixel_ros_control::DynamixelDriver& driver)
+  : dynamixel(driver)
+{}
 
-}
-
-Joint::Joint(std::string _name, uint8_t id, uint16_t model_number, DynamixelDriver& driver)
+Joint::Joint(std::string _name, uint8_t id, DynamixelDriver& driver)
   : name(_name),
+    dynamixel(id, driver),
     mounting_offset(0.0),
     offset(0.0),
     control_mode(POSITION)

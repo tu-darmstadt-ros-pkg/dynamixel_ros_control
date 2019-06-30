@@ -20,6 +20,7 @@ ControlMode stringToControlMode(const std::string& str);
 
 class Dynamixel {
 public:
+  Dynamixel(dynamixel_ros_control::DynamixelDriver& driver);
   Dynamixel(uint8_t id, dynamixel_ros_control::DynamixelDriver& driver);
 
   bool initFromNh(const ros::NodeHandle& nh);

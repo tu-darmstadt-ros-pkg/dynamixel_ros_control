@@ -5,6 +5,10 @@
 
 namespace dynamixel_ros_control {
 
+Dynamixel::Dynamixel(DynamixelDriver& driver)
+  : driver_(driver)
+{}
+
 Dynamixel::Dynamixel(uint8_t id, DynamixelDriver& driver)
   :  driver_(driver), id_(id)
 {}
