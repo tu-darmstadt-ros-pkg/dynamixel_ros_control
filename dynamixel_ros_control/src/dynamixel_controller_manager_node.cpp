@@ -15,7 +15,7 @@ int main(int argc, char** argv)
   spinner.start();
 
   // Initialize hardware interface
-  dynamixel_ros_control::DynamixelHardwareInterface hw(nh, pnh);
+  dynamixel_ros_control::DynamixelHardwareInterface hw;
   if (!hw.init(nh, pnh))
   {
     ROS_ERROR_STREAM("Failed to initialize hardware interface.");

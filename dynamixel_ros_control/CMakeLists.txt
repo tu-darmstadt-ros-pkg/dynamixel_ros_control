@@ -11,6 +11,8 @@ find_package(catkin REQUIRED COMPONENTS
   dynamixel_sdk
   hardware_interface
   dynamixel_ros_control_msgs
+  std_msgs
+  std_srvs
 )
 
 find_package(yaml-cpp)

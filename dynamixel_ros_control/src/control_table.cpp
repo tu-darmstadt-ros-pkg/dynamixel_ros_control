@@ -28,6 +28,11 @@ bool ControlTable::loadFromYaml(const std::string& path)
   return true;
 }
 
+bool ControlTable::itemAvailable(std::string name) const
+{
+  return control_table_.find(name) != control_table_.end();
+}
+
 const ControlTableItem& ControlTable::getItem(std::string& name) const
 {
   try {

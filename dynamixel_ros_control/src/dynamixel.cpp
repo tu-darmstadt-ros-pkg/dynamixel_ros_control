@@ -7,18 +7,61 @@
 
 namespace dynamixel_ros_control {
 
-Dynamixel::Dynamixel(uint8_t id, uint16_t model_number, DynamixelDriver& driver)
-  :  driver_(driver), id_(id), model_number_(model_number)
+Dynamixel::Dynamixel(DynamixelDriver& driver)
+  : driver_(driver)
+{}
+
+Dynamixel::Dynamixel(uint8_t id, DynamixelDriver& driver)
+  :  driver_(driver), id_(id)
+
 {}
 
 bool Dynamixel::loadControlTable()
 {
-  control_table_ = driver_.loadControlTable(getModelNumber());
-  if (!control_table_) {
+  int model_number_config;
+  bool model_number_set = nh_.param("model_number", model_number_config, -1);
+  if (!driver_.ping(getId(), model_number_)) {
+    ROS_ERROR_STREAM("Failed to ping ID " << static_cast<int>(getId()));
     return false;
+  } else {
+    // Ping successful, add to list
+    if (model_number_set && model_number_config != model_number_) {
+      ROS_WARN_STREAM("Model number in config [" << model_number_config
+                      << "] does not match servo model number [" << model_number_ << "] for ID: " << static_cast<int>(getId()));
+    }
+    control_table_ = driver_.loadControlTable(getModelNumber());
+    if (!control_table_) {
+      return false;
+    }
   }
 
   return true;
+}
+
+bool Dynamixel::initFromNh(const ros::NodeHandle& nh)
+{
+  nh_ = nh;
+  int id_int;
+  if (!loadRequiredParameter(nh, "id", id_int)) {
+    return false;
+  }
+  if (id_int >= 0 && id_int < 256) {
+    id_ = static_cast<uint8_t>(id_int);
+  } else {
+    ROS_ERROR_STREAM("ID " << id_int << " is not in the valid range [0;255]");
+    return false;
+  }
+  return true;
+}
+
+bool Dynamixel::ping()
+{
+  return driver_.ping(getId());
+}
+
+bool Dynamixel::reboot()
+{
+  return driver_.reboot(getId());
 }
 
 bool Dynamixel::writeRegister(std::string register_name, bool value) const
@@ -56,6 +99,7 @@ bool Dynamixel::readRegister(std::string register_name, double& value_out) const
     return false;
   }
   value_out = dxlValueToUnit(register_name, dxl_value);
+  return true;
 }
 
 bool Dynamixel::readRegister(std::string register_name, int32_t& value_out) const
@@ -109,6 +153,11 @@ int32_t Dynamixel::boolToDxlValue(std::string register_name, bool b) const
     ROS_ERROR_STREAM("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
     return false;
   }
+}
+
+bool Dynamixel::registerAvailable(std::string register_name) const
+{
+  return control_table_->itemAvailable(register_name);
 }
 
 const ControlTableItem& Dynamixel::getItem(std::string& name) const
@@ -195,6 +244,31 @@ ros::Time Dynamixel::getStamp() const
     return ros::Time::now();
   }
   return stamp_;
+}
+
+std::string Dynamixel::getHardwareErrorStatusString() const
+{
+  std::stringstream ss;
+  if (hardware_error_status & VOLTAGE_ERROR) {
+    ss << "Voltage Error, ";
+  }
+  if (hardware_error_status & HALL_SENSOR_ERROR) {
+    ss << "Hall Sensor Error, ";
+  }
+  if (hardware_error_status & OVERHEATING_ERROR) {
+    ss << "Overheating Error, ";
+  }
+  if (hardware_error_status & MOTOR_ENCODER_ERROR) {
+    ss << "Motor Encoder Error, ";
+  }
+  if (hardware_error_status & ELECTRICAL_SHOCK_ERROR) {
+    ss << "Electrical Shock Error, ";
+  }
+  if (hardware_error_status & OVERLOAD_ERROR) {
+    ss << "Overload Error, ";
+  }
+  ss << std::endl;
+  return ss.str();
 }
 
 ControlMode stringToControlMode(const std::string& str) {

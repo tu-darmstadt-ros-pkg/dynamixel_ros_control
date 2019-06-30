@@ -3,7 +3,7 @@
 namespace dynamixel_ros_control {
 
 SyncWriteManager::SyncWriteManager()
-  : indirect_data_address_(0), data_length_(0), error_count_(0) {}
+  : indirect_data_address_(0), data_length_(0), subsequent_error_count_(0) {}
 
 void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, double& value, double offset)
 {
@@ -79,10 +79,16 @@ bool SyncWriteManager::write()
   int result = sync_write_->txPacket();
   if (result != COMM_SUCCESS) {
     ROS_ERROR_STREAM("Sync Write failed with error: " << driver_->communicationErrorToString(result));
-    error_count_++;
+    subsequent_error_count_++;
     return false;
   }
+  subsequent_error_count_ = 0;
   return true;
+}
+
+bool SyncWriteManager::isOk() const
+{
+  return subsequent_error_count_ < 25;
 }
 
 std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, std::string register_name)
