@@ -10,8 +10,9 @@
 #include <dynamixel_ros_control/dynamixel_driver.h>
 #include <dynamixel_ros_control/sync_read_manager.h>
 #include <dynamixel_ros_control/sync_write_manager.h>
-
 #include <dynamixel_ros_control/joint.h>
+
+#include <dynamixel_ros_control_msgs/WriteRegister.h>
 
 namespace dynamixel_ros_control {
 
@@ -36,7 +37,9 @@ private:
   void writeControlMode();
   void setTorque(bool enabled);
   void setTorque(const std_msgs::BoolConstPtr& enabled);
+  void writeRegisterCb(const dynamixel_ros_control_msgs::WriteRegisterConstPtr& write_register_msg);
   Joint* getJointByName(std::string name);
+  Joint* getJointByDxlId(uint8_t id);
 
   void estopCb(const std_msgs::BoolConstPtr& bool_ptr);
 
@@ -78,6 +81,7 @@ private:
   // Subscribers
   ros::Subscriber estop_sub_;
   ros::Subscriber set_torque_sub_;
+  ros::Subscriber write_register_sub_;
 };
 
 }

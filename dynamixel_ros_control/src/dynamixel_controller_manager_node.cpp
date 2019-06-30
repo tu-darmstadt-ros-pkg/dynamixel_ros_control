@@ -8,6 +8,12 @@ int main(int argc, char** argv)
   ros::NodeHandle nh;
   ros::NodeHandle pnh("~");
 
+  // Create separate queue, because otherwise CM will freeze
+  ros::CallbackQueue queue;
+  nh.setCallbackQueue(&queue);
+  ros::AsyncSpinner spinner(1, &queue);
+  spinner.start();
+
   // Initialize hardware interface
   dynamixel_ros_control::DynamixelHardwareInterface hw(nh, pnh);
   if (!hw.init(nh, pnh))
@@ -15,12 +21,7 @@ int main(int argc, char** argv)
     ROS_ERROR_STREAM("Failed to initialize hardware interface.");
     return 0;
   }
-
-  // Create separate queue, because otherwise CM will freeze
-  ros::CallbackQueue queue;
-  nh.setCallbackQueue(&queue);
-  ros::AsyncSpinner spinner(1, &queue);
-  spinner.start();
+  // Initialize controller manager
   controller_manager::ControllerManager cm(&hw, nh);
 
   // Start control loop

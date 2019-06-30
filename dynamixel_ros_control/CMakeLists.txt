@@ -10,6 +10,7 @@ find_package(catkin REQUIRED COMPONENTS
   cuckoo_time_translator
   dynamixel_sdk
   hardware_interface
+  dynamixel_ros_control_msgs
 )
 
 find_package(yaml-cpp)
@@ -40,7 +41,7 @@ find_package(yaml-cpp)
 catkin_package(
   INCLUDE_DIRS include
   LIBRARIES dynamixel_ros_control
-  CATKIN_DEPENDS controller_manager cuckoo_time_translator dynamixel_sdk hardware_interface
+  CATKIN_DEPENDS controller_manager cuckoo_time_translator dynamixel_sdk hardware_interface dynamixel_ros_control_msgs
 #  DEPENDS system_lib
 )
 

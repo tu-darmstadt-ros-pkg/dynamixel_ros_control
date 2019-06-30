@@ -169,6 +169,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   // Initialize subscribers
   estop_sub_ = pnh_.subscribe("estop", 100, &DynamixelHardwareInterface::estopCb, this);
   set_torque_sub_ = pnh_.subscribe("set_torque", 100, &DynamixelHardwareInterface::setTorque, this);
+  write_register_sub_ = pnh_.subscribe("write_register", 10, &DynamixelHardwareInterface::writeRegisterCb, this);
 
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
@@ -354,10 +355,51 @@ void DynamixelHardwareInterface::setTorque(const std_msgs::BoolConstPtr& enabled
   setTorque(enabled->data);
 }
 
+void DynamixelHardwareInterface::writeRegisterCb(const dynamixel_ros_control_msgs::WriteRegisterConstPtr& write_register_msg)
+{
+  Joint* joint;
+  if (!write_register_msg->joint_name.empty()) {
+    joint = getJointByName(write_register_msg->joint_name);
+    if (!joint) {
+      ROS_ERROR_STREAM("Could not find joint with name '" << write_register_msg->joint_name << "'. Failed to write register.");
+      return;
+    }
+  } else {
+    joint = getJointByDxlId(write_register_msg->id);
+    if (!joint) {
+      ROS_ERROR_STREAM("Could not find joint with ID '" << static_cast<int>(write_register_msg->id) << "'. Failed to write register.");
+      return;
+    }
+  }
+  switch (write_register_msg->value_type) {
+    case dynamixel_ros_control_msgs::WriteRegister::DOUBLE_VALUE:
+      joint->dynamixel.writeRegister(write_register_msg->register_name, write_register_msg->dvalue);
+      break;
+    case dynamixel_ros_control_msgs::WriteRegister::BOOL_VALUE:
+      joint->dynamixel.writeRegister(write_register_msg->register_name, write_register_msg->bvalue);
+      break;
+    case dynamixel_ros_control_msgs::WriteRegister::INT_VALUE:
+      joint->dynamixel.writeRegister(write_register_msg->register_name, write_register_msg->ivalue);
+      break;
+    default:
+      ROS_ERROR_STREAM("Unknown value type: " << static_cast<int>(write_register_msg->value_type));
+  }
+}
+
 Joint* DynamixelHardwareInterface::getJointByName(std::string name)
 {
   for (Joint& joint: joints_) {
     if (joint.name == name) {
+      return &joint;
+    }
+  }
+  return nullptr;
+}
+
+Joint* DynamixelHardwareInterface::getJointByDxlId(uint8_t id)
+{
+  for (Joint& joint: joints_) {
+    if (joint.dynamixel.getId() == id) {
       return &joint;
     }
   }
