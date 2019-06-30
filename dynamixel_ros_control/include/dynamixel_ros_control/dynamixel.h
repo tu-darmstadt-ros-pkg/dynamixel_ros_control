@@ -18,7 +18,7 @@ enum ControlMode {
   PWM = 16
 };
 
-enum ShutdownStatus {
+enum HardwareErrorStatus {
   OK = 0,
   VOLTAGE_ERROR = 1,           // 2^0
   HALL_SENSOR_ERROR = 2,       // 2^1
@@ -73,8 +73,8 @@ public:
   
   double realtime_tick_ms_;
 
-  std::string getShutdownStatusString() const;
-  int32_t shutdown_status_;
+  std::string getHardwareErrorStatusString() const;
+  int32_t hardware_error_status;
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 

@@ -153,13 +153,13 @@ bool DynamixelHardwareInterface::connect()
     }
 
     status_read_manager_.addDynamixel(&joint.dynamixel);
-    status_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.shutdown_status_)));
+    status_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.hardware_error_status)));
   }
 
   if (time_sync_available_) {
     read_manager_.addRegister("realtime_tick", clock_mapping);
   }
-  status_read_manager_.addRegister("shutdown", status_mapping);
+  status_read_manager_.addRegister("hardware_error_status", status_mapping);
 
   if (read_position_) {
     read_manager_.addRegister("present_position", position_mapping, position_offsets);
@@ -416,8 +416,8 @@ bool DynamixelHardwareInterface::rebootCb(std_srvs::EmptyRequest& request, std_s
   status_read_manager_.read();
   // Check for abnormalities
   for (Joint& j: joints_) {
-    if (j.dynamixel.shutdown_status_ != ShutdownStatus::OK) {
-      ROS_WARN_STREAM("Joint " << j.name << " has shutdown status: " << j.dynamixel.getShutdownStatusString());
+    if (j.dynamixel.hardware_error_status != HardwareErrorStatus::OK) {
+      ROS_WARN_STREAM("Joint " << j.name << " has shutdown status: " << j.dynamixel.getHardwareErrorStatusString());
       j.dynamixel.reboot();
     }
   }
