@@ -76,7 +76,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   // Initialize subscribers
   estop_sub_ = pnh_.subscribe("estop", 100, &DynamixelHardwareInterface::estopCb, this);
   set_torque_sub_ = pnh_.subscribe("set_torque", 100, &DynamixelHardwareInterface::setTorque, this);
-  reboot_server_ = pnh_.advertiseService("reboot_on_error", &DynamixelHardwareInterface::rebootCb, this);
+  reboot_server_ = pnh_.advertiseService("reboot_if_error_state", &DynamixelHardwareInterface::rebootCb, this);
 
   // Try to connect
   connect();
@@ -210,6 +210,9 @@ bool DynamixelHardwareInterface::connect()
 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
+  for (const Joint& j: joints_) {
+    ROS_INFO_STREAM(j.name << ": " << j.goal_state.torque);
+  }
   last_read_time_ = time;
   if (!connected_ && last_connect_try_ + ros::Duration(1) < ros::Time::now()) {
     if (!connect()) {
@@ -423,7 +426,9 @@ bool DynamixelHardwareInterface::rebootCb(std_srvs::EmptyRequest& request, std_s
     }
   }
   // write torque
-  torque_write_manager_.write();
+  if (!torque_write_manager_.write()) {
+    return false;
+  }
   // reset controllers
   reset_required_ = true;
   return true;
