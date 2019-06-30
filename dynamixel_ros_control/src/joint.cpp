@@ -2,8 +2,8 @@
 
 namespace dynamixel_ros_control {
 
-Joint::Joint(dynamixel_ros_control::DynamixelDriver& driver)
-  : dynamixel(driver)
+Joint::Joint(std::string joint_name, dynamixel_ros_control::DynamixelDriver& driver)
+  : name(joint_name), dynamixel(driver)
 {}
 
 Joint::Joint(std::string _name, uint8_t id, DynamixelDriver& driver)

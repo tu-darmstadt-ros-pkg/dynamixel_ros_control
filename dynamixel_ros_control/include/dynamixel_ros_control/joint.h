@@ -18,7 +18,7 @@ struct State
 
 class Joint {
 public:
-  Joint(dynamixel_ros_control::DynamixelDriver& driver);
+  Joint(std::string joint_name, dynamixel_ros_control::DynamixelDriver& driver);
   Joint(std::string _name, uint8_t id, dynamixel_ros_control::DynamixelDriver& driver);
 
   bool initFromNh(const ros::NodeHandle& nh);
