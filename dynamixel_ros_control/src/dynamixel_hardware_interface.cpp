@@ -44,49 +44,6 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   pnh_.param("dynamixels/read_values/read_velocity", read_velocity_, false);
   pnh_.param("dynamixels/read_values/read_effort", read_effort_, false);
 
-  DxlValueMappingList<double> position_mapping;
-  std::vector<double> position_offsets;
-  DxlValueMappingList<double> velocity_mapping;
-  DxlValueMappingList<double> effort_mapping;
-  for (Joint& joint: joints_) {
-    double position_offset = joint.offset + joint.mounting_offset;
-    // Register writes
-    torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
-    if (joint.isPositionControlled()) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position, position_offset); // TODO read register name from config
-    } else if (joint.isVelocityControlled()) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
-    } else if (joint.isEffortControlled()) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_torque", joint.goal_state.effort);
-    }
-
-    // Register reads
-    read_manager_.addDynamixel(&joint.dynamixel);
-    if (read_position_) {
-      position_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.position));
-      position_offsets.push_back(-position_offset); // Subtract offset on read
-//      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
-    }
-    if (read_velocity_) {
-      velocity_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.velocity));
-//      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
-    }
-    if (read_effort_) {
-      effort_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.effort));
-//      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
-    }
-  }
-
-  if (read_position_) {
-    read_manager_.addRegister("present_position", position_mapping, position_offsets);
-  }
-  if (read_velocity_) {
-    read_manager_.addRegister("present_velocity", velocity_mapping);
-  }
-  if (read_effort_) {
-    read_manager_.addRegister("present_current", effort_mapping);
-  }
-
   // Register interfaces
   for (Joint& joint: joints_) {
     hardware_interface::JointStateHandle state_handle(joint.name, &joint.current_state.position, &joint.current_state.velocity,
@@ -144,6 +101,53 @@ bool DynamixelHardwareInterface::connect()
   }
 
   // Initialize sync reads/writes
+  DxlValueMappingList<double> position_mapping;
+  std::vector<double> position_offsets;
+  DxlValueMappingList<double> velocity_mapping;
+  DxlValueMappingList<double> effort_mapping;
+
+  control_write_manager_ = SyncWriteManager();
+  torque_write_manager_ = SyncWriteManager();
+  read_manager_ = SyncReadManager();
+  for (Joint& joint: joints_) {
+    double position_offset = joint.offset + joint.mounting_offset;
+    // Register writes
+    torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
+    if (joint.isPositionControlled()) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position, position_offset); // TODO read register name from config
+    } else if (joint.isVelocityControlled()) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
+    } else if (joint.isEffortControlled()) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_torque", joint.goal_state.effort);
+    }
+
+    // Register reads
+    read_manager_.addDynamixel(&joint.dynamixel);
+    if (read_position_) {
+      position_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.position));
+      position_offsets.push_back(-position_offset); // Subtract offset on read
+//      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
+    }
+    if (read_velocity_) {
+      velocity_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.velocity));
+//      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
+    }
+    if (read_effort_) {
+      effort_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.effort));
+//      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
+    }
+  }
+
+  if (read_position_) {
+    read_manager_.addRegister("present_position", position_mapping, position_offsets);
+  }
+  if (read_velocity_) {
+    read_manager_.addRegister("present_velocity", velocity_mapping);
+  }
+  if (read_effort_) {
+    read_manager_.addRegister("present_current", effort_mapping);
+  }
+
   if (!torque_write_manager_.init(driver_)) {
     return false;
   }
