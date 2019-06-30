@@ -121,6 +121,11 @@ int32_t Dynamixel::boolToDxlValue(std::string register_name, bool b) const
   }
 }
 
+bool Dynamixel::registerAvailable(std::string register_name) const
+{
+  return control_table_->itemAvailable(register_name);
+}
+
 const ControlTableItem& Dynamixel::getItem(std::string& name) const
 {
   return control_table_->getItem(name);

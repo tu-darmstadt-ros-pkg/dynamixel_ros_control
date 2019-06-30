@@ -32,6 +32,7 @@ public:
 
 private:
   bool loadDynamixels(const ros::NodeHandle& nh);
+  void setUpTimeSync();
   void writeInitialValues(const ros::NodeHandle& nh);
   void writeControlMode();
   void setTorque(bool enabled);
@@ -71,7 +72,9 @@ private:
   bool read_velocity_;
   bool read_effort_;
 
+  bool time_sync_available_;
   std::vector<Joint>::size_type time_sync_joint_idx_;
+  ros::Time last_read_time_;
 
   std::vector<Joint> joints_;
 

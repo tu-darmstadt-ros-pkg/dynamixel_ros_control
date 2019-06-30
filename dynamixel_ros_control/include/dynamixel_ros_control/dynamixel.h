@@ -46,6 +46,7 @@ public:
   int32_t unitToDxlValue(std::string register_name, double unit_value) const;
   int32_t boolToDxlValue(std::string register_name, bool b) const;
 
+  bool registerAvailable(std::string register_name) const;
   const ControlTableItem& getItem(std::string& name) const;
   uint8_t getId() const;
   uint16_t getModelNumber() const;
