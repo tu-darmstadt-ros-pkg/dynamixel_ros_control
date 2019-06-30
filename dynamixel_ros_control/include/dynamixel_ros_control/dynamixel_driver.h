@@ -26,6 +26,7 @@ public:
   bool ping(uint8_t id);
   bool ping(uint8_t id, uint16_t& model_number);
   std::vector<std::pair<uint8_t /*id*/, uint16_t /*model_number*/>> scan();
+  bool reboot(uint8_t id);
 
   bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value);
   bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out);

@@ -18,12 +18,25 @@ enum ControlMode {
   PWM = 16
 };
 
+enum ShutdownStatus {
+  OK = 0,
+  VOLTAGE_ERROR = 1,           // 2^0
+  HALL_SENSOR_ERROR = 2,       // 2^1
+  OVERHEATING_ERROR = 4,       // 2^2
+  MOTOR_ENCODER_ERROR = 8,     // 2^3
+  ELECTRICAL_SHOCK_ERROR = 16, // 2^4
+  OVERLOAD_ERROR = 32,         // 2^5
+};
+
 ControlMode stringToControlMode(const std::string& str);
 
 class Dynamixel {
 public:
   Dynamixel(uint8_t id, uint16_t model_number, dynamixel_ros_control::DynamixelDriver& driver);
   bool loadControlTable();
+
+  bool ping();
+  bool reboot();
 
   // Register access
   bool writeRegister(std::string register_name, bool value) const;
@@ -55,14 +68,16 @@ public:
   ros::Time getStamp() const;
   
   double realtime_tick_ms_;
-  
-  std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator> device_time_translator_;
+
+  std::string getShutdownStatusString() const;
+  int32_t shutdown_status_;
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 
   dynamixel_ros_control::DynamixelDriver& driver_;
   ControlTable* control_table_;
 
+  std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator> device_time_translator_;
 
   uint8_t id_;
   uint16_t model_number_;

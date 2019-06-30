@@ -19,7 +19,7 @@ void SyncReadManager::addDynamixel(Dynamixel* dxl)
 
 //}
 
-bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappingList<double>& dxl_value_pairs, std::vector<double> offsets)
+bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs, std::vector<double> offsets)
 {
   if (read_entries_.find(register_name) != read_entries_.end()) {
     ROS_ERROR_STREAM("Register '" << register_name << "' has already been added.");
@@ -46,7 +46,7 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
   ReadEntry entry;
   entry.register_name = register_name;
 
-  for (const std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: dxl_value_pairs)
+  for (const std::vector<std::pair<Dynamixel*, DxlValue>>::value_type& dxl_value_pair: dxl_value_pairs)
   {
     if (dynamixels_.find(dxl_value_pair.first) == dynamixels_.end()) {
       ROS_ERROR_STREAM("Dynamixel with id " << dxl_value_pair.first->getId() << " is unknown to the SyncReadManager.");
@@ -58,7 +58,7 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
 
   // Check if data length of register is the same for each servo
   uint8_t register_data_length = 0;
-  for (const std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: dxl_value_pairs) {
+  for (const std::vector<std::pair<Dynamixel*, DxlValue>>::value_type& dxl_value_pair: dxl_value_pairs) {
     const Dynamixel* dxl = dxl_value_pair.first;
     uint8_t length = dxl->getItem(register_name).data_length();
     if (register_data_length == 0) {
@@ -75,12 +75,6 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
 
   read_entries_.emplace(register_name, entry);
   return true;
-}
-
-bool SyncReadManager::addRegister(std::string /*register_name*/, DxlValueMappingList<bool> /*dxl_value_pairs*/)
-{
-  // TODO
-  return false;
 }
 
 bool SyncReadManager::init(DynamixelDriver& driver)
@@ -106,7 +100,7 @@ bool SyncReadManager::init(DynamixelDriver& driver)
     read_kv.second.indirect_index = current_indirect_address_index;
 
     bool first_dxl = true;
-    for (std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: read_kv.second.dxl_value_pairs) {
+    for (std::vector<std::pair<Dynamixel*, DxlValue>>::value_type& dxl_value_pair: read_kv.second.dxl_value_pairs) {
       Dynamixel* dxl = dxl_value_pair.first;
       uint16_t indirect_data_address;
       if(!dxl->setIndirectAddress(current_indirect_address_index, register_name, indirect_data_address)) {
@@ -161,16 +155,26 @@ bool SyncReadManager::read(ros::Time& packet_receive_time)
 
     uint16_t register_data_address = read_kv.second.indirect_data_address;
     uint8_t register_data_length = read_kv.second.data_length;
-//    for (const std::vector<std::pair<Dynamixel*, double*>>::value_type& dxl_value_pair: read_kv.second.dxl_value_pairs) {
     for (unsigned int i = 0; i < read_kv.second.dxl_value_pairs.size(); i++) {
-      std::pair<Dynamixel*, double*>& dxl_value_pair = read_kv.second.dxl_value_pairs[i];
+      std::pair<Dynamixel*, DxlValue>& dxl_value_pair = read_kv.second.dxl_value_pairs[i];
       double offset = read_kv.second.offsets[i];
       Dynamixel* dxl = dxl_value_pair.first;
       if (sync_read_->isAvailable(dxl->getId(), register_data_address, register_data_length)) {
         int32_t dxl_value = static_cast<int32_t>(sync_read_->getData(dxl->getId(), register_data_address, register_data_length));
-        double unit_value = dxl->dxlValueToUnit(register_name, dxl_value) + offset;
-        ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << dxl_value << ", Converted: " << unit_value);
-        *dxl_value_pair.second = unit_value;
+        if (dxl_value_pair.second.dvalue) {
+          double unit_value = dxl->dxlValueToUnit(register_name, dxl_value) + offset;
+          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << dxl_value << ", Converted: " << unit_value);
+          *dxl_value_pair.second.dvalue = unit_value;
+        }
+        if (dxl_value_pair.second.bvalue) {
+          bool bool_value = dxl->dxlValueToBool(register_name, dxl_value);
+          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << dxl_value << ", Converted: " << (bool_value ? "True" : "False"));
+          *dxl_value_pair.second.bvalue = bool_value;
+        }
+        if (dxl_value_pair.second.ivalue) {
+          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << dxl_value);
+          *dxl_value_pair.second.ivalue = dxl_value;
+        }
       }
     }
   }

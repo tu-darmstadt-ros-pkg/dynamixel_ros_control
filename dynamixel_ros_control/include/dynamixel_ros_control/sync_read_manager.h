@@ -7,8 +7,16 @@
 
 namespace dynamixel_ros_control {
 
-template <typename T>
-using DxlValueMappingList = std::vector<std::pair<Dynamixel*, T*>>;
+struct DxlValue {
+  DxlValue(double* _dvalue)  : dvalue(_dvalue) {}
+  DxlValue(bool* _bvalue)    : bvalue(_bvalue) {}
+  DxlValue(int32_t* _ivalue) : ivalue(_ivalue) {}
+  double *dvalue;
+  bool *bvalue;
+  int32_t *ivalue;
+};
+
+using DxlValueMappingList = std::vector<std::pair<Dynamixel*, DxlValue>>;
 
 struct ReadEntry {
   std::string register_name;
@@ -17,7 +25,7 @@ struct ReadEntry {
   uint16_t indirect_data_address;
   uint8_t data_length;
 
-  DxlValueMappingList<double> dxl_value_pairs;
+  DxlValueMappingList dxl_value_pairs;
   std::vector<double> offsets;
 };
 
@@ -28,9 +36,7 @@ public:
 
   void addDynamixel(Dynamixel* dxl);
 //  void addRegister(Dynamixel& dxl, std::string register_name, uint32_t* value);
-  bool addRegister(std::string register_name, const DxlValueMappingList<double>& dxl_value_pairs, std::vector<double> offsets = {});
-  bool addRegister(std::string register_name, DxlValueMappingList<bool> dxl_value_pairs);
-
+  bool addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs, std::vector<double> offsets = {});
 
   /**
    * @brief init To be called by dynamixel driver.

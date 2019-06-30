@@ -6,6 +6,7 @@
 #include <hardware_interface/robot_hw.h>
 
 #include <std_msgs/Bool.h>
+#include <std_srvs/Empty.h>
 
 #include <dynamixel_ros_control/dynamixel_driver.h>
 #include <dynamixel_ros_control/sync_read_manager.h>
@@ -36,6 +37,7 @@ private:
   void writeControlMode();
   void setTorque(bool enabled);
   void setTorque(const std_msgs::BoolConstPtr& enabled);
+  bool rebootCb(std_srvs::EmptyRequest& request, std_srvs::EmptyResponse& response);
   Joint* getJointByName(std::string name);
 
   void estopCb(const std_msgs::BoolConstPtr& bool_ptr);
@@ -53,6 +55,7 @@ private:
   // Read
   hardware_interface::JointStateInterface jnt_state_interface_;
   SyncReadManager read_manager_;
+  SyncReadManager status_read_manager_;
 
   // Write
   hardware_interface::PositionJointInterface jnt_pos_interface_;
@@ -78,6 +81,7 @@ private:
   // Subscribers
   ros::Subscriber estop_sub_;
   ros::Subscriber set_torque_sub_;
+  ros::ServiceServer reboot_server_;
 };
 
 }

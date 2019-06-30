@@ -21,6 +21,8 @@
   <depend>dynamixel_sdk</depend>
   <depend>hardware_interface</depend>
   <depend>yaml-cpp</depend>
+  <depend>std_msgs</depend>
+  <depend>std_srvs</depend>
   <export>
   </export>
 </package>

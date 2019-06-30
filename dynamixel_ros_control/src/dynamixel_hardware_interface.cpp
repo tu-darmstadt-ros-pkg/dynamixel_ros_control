@@ -69,11 +69,12 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   pnh_.param("dynamixels/read_values/read_velocity", read_velocity_, false);
   pnh_.param("dynamixels/read_values/read_effort", read_effort_, false);
 
-  DxlValueMappingList<double> position_mapping;
+  DxlValueMappingList position_mapping;
   std::vector<double> position_offsets;
-  DxlValueMappingList<double> velocity_mapping;
-  DxlValueMappingList<double> effort_mapping;
-  DxlValueMappingList<double> clock_mapping;
+  DxlValueMappingList velocity_mapping;
+  DxlValueMappingList effort_mapping;
+  DxlValueMappingList clock_mapping;
+  DxlValueMappingList status_mapping;
   for (Joint& joint: joints_) {
     double position_offset = joint.offset + joint.mounting_offset;
     // Register writes
@@ -88,23 +89,27 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
     // Register reads
     read_manager_.addDynamixel(&joint.dynamixel);
-    clock_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.dynamixel.realtime_tick_ms_));
+    clock_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.realtime_tick_ms_)));
     if (read_position_) {
-      position_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.position));
+      position_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.position)));
       position_offsets.push_back(-position_offset); // Subtract offset on read
 //      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
     }
     if (read_velocity_) {
-      velocity_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.velocity));
+      velocity_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.velocity)));
 //      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
     }
     if (read_effort_) {
-      effort_mapping.push_back(std::make_pair<Dynamixel*, double*>(&joint.dynamixel, &joint.current_state.effort));
+      effort_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.effort)));
 //      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
     }
+
+    status_read_manager_.addDynamixel(&joint.dynamixel);
+    status_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.shutdown_status_)));
   }
 
   read_manager_.addRegister("realtime_tick", clock_mapping);
+  status_read_manager_.addRegister("shutdown", status_mapping);
   if (read_position_) {
     read_manager_.addRegister("present_position", position_mapping, position_offsets);
   }
@@ -123,6 +128,9 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
     return false;
   }
   if (!read_manager_.init(driver_)) {
+    return false;
+  }
+  if (!status_read_manager_.init(driver_)) {
     return false;
   }
 
@@ -169,6 +177,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   // Initialize subscribers
   estop_sub_ = pnh_.subscribe("estop", 100, &DynamixelHardwareInterface::estopCb, this);
   set_torque_sub_ = pnh_.subscribe("set_torque", 100, &DynamixelHardwareInterface::setTorque, this);
+  reboot_server_ = pnh_.advertiseService("reboot_in_error_state", &DynamixelHardwareInterface::rebootCb, this);
 
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
@@ -352,6 +361,24 @@ void DynamixelHardwareInterface::setTorque(bool enabled)
 void DynamixelHardwareInterface::setTorque(const std_msgs::BoolConstPtr& enabled)
 {
   setTorque(enabled->data);
+}
+
+bool DynamixelHardwareInterface::rebootCb(std_srvs::EmptyRequest& request, std_srvs::EmptyResponse& response)
+{
+  // Read status
+  status_read_manager_.read();
+  // Check for abnormalities
+  for (Joint& j: joints_) {
+    if (j.dynamixel.shutdown_status_ != ShutdownStatus::OK) {
+      ROS_WARN_STREAM("Joint " << j.name << " has shutdown status: " << j.dynamixel.getShutdownStatusString());
+      j.dynamixel.reboot();
+    }
+  }
+  // write torque
+  torque_write_manager_.write();
+  // reset controllers
+  reset_required_ = true;
+  return true;
 }
 
 Joint* DynamixelHardwareInterface::getJointByName(std::string name)

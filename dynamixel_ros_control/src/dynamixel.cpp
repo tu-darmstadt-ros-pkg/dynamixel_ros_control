@@ -207,6 +207,31 @@ ros::Time Dynamixel::getStamp() const
   return stamp_;
 }
 
+std::string Dynamixel::getShutdownStatusString() const
+{
+  std::stringstream ss;
+  if (shutdown_status_ & VOLTAGE_ERROR) {
+    ss << "Voltage Error, ";
+  }
+  if (shutdown_status_ & HALL_SENSOR_ERROR) {
+    ss << "Hall Sensor Error, ";
+  }
+  if (shutdown_status_ & OVERHEATING_ERROR) {
+    ss << "Overheating Error, ";
+  }
+  if (shutdown_status_ & MOTOR_ENCODER_ERROR) {
+    ss << "Motor Encoder Error, ";
+  }
+  if (shutdown_status_ & ELECTRICAL_SHOCK_ERROR) {
+    ss << "Electrical Shock Error, ";
+  }
+  if (shutdown_status_ & OVERLOAD_ERROR) {
+    ss << "Overload Error, ";
+  }
+  ss << std::endl;
+  return ss.str();
+}
+
 ControlMode stringToControlMode(const std::string& str) {
   if (str == "effort" || str == "current") {
     return CURRENT;

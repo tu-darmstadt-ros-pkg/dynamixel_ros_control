@@ -10,6 +10,8 @@ find_package(catkin REQUIRED COMPONENTS
   cuckoo_time_translator
   dynamixel_sdk
   hardware_interface
+  std_msgs
+  std_srvs
 )
 
 find_package(yaml-cpp)
