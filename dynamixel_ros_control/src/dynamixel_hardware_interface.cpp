@@ -156,7 +156,6 @@ bool DynamixelHardwareInterface::connect()
     status_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.shutdown_status_)));
   }
 
-  read_manager_.addRegister("realtime_tick", clock_mapping);
   if (time_sync_available_) {
     read_manager_.addRegister("realtime_tick", clock_mapping);
   }
