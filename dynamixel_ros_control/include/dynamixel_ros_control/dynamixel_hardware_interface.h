@@ -22,6 +22,7 @@ public:
   ~DynamixelHardwareInterface() override;
 
   bool init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh) override;
+  bool connect();
   void read(const ros::Time& time, const ros::Duration& period) override;
   void write(const ros::Time& time, const ros::Duration& period) override;
 
@@ -41,7 +42,8 @@ private:
   ros::NodeHandle nh_;
   ros::NodeHandle pnh_;
 
-  bool initialized_;
+  bool connected_;
+  ros::Time last_connect_try_;
   bool first_cycle_;
   bool estop_;
   bool reset_required_;

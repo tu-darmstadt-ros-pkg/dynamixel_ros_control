@@ -43,6 +43,7 @@ private:
   ControlTable* readControlTable(std::string series);
   bool setPacketHandler(float protocol_version);
   bool setPortHandler(std::string port_name);
+  bool connectPort();
   bool setBaudRate(int baud_rate);
 
   dynamixel::PacketHandler* packet_handler_;

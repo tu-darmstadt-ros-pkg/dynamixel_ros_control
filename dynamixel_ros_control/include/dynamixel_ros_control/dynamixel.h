@@ -20,7 +20,9 @@ ControlMode stringToControlMode(const std::string& str);
 
 class Dynamixel {
 public:
-  Dynamixel(uint8_t id, uint16_t model_number, dynamixel_ros_control::DynamixelDriver& driver);
+  Dynamixel(uint8_t id, dynamixel_ros_control::DynamixelDriver& driver);
+
+  bool initFromNh(const ros::NodeHandle& nh);
   bool loadControlTable();
 
   // Register access
@@ -50,6 +52,7 @@ public:
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 
+  ros::NodeHandle nh_;
   dynamixel_ros_control::DynamixelDriver& driver_;
   ControlTable* control_table_;
 

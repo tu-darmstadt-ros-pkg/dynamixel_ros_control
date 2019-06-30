@@ -2,13 +2,29 @@
 
 namespace dynamixel_ros_control {
 
+Joint::Joint() :
+{
+
+}
+
 Joint::Joint(std::string _name, uint8_t id, uint16_t model_number, DynamixelDriver& driver)
   : name(_name),
-    dynamixel(id, model_number, driver),
     mounting_offset(0.0),
     offset(0.0),
     control_mode(POSITION)
 {}
+
+bool Joint::initFromNh(const ros::NodeHandle& nh)
+{
+  nh_ = nh;
+  nh_.param("mounting_offset", mounting_offset, 0.0);
+  nh_.param("offset", offset, 0.0);
+}
+
+bool Joint::initDxl()
+{
+  dynamixel.initFromNh(nh_);
+}
 
 ControlMode Joint::getControlMode() const
 {
