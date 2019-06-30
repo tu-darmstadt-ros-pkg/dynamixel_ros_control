@@ -24,7 +24,7 @@ bool DynamixelDriver::init(const ros::NodeHandle& nh)
   }
 
   // Get port info
-  if (!loadRequiredParameter(nh, "port_info/port_name", port_name_) && setPortHandler(port_name_)) {
+  if (!loadRequiredParameter(nh, "port_info/port_name", port_name_) || !setPortHandler(port_name_)) {
     return false;
   }
 
