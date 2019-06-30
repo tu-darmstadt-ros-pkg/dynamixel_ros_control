@@ -25,6 +25,9 @@ public:
   Dynamixel(uint8_t id, uint16_t model_number, dynamixel_ros_control::DynamixelDriver& driver);
   bool loadControlTable();
 
+  bool ping();
+  bool reboot();
+
   // Register access
   bool writeRegister(std::string register_name, bool value) const;
   bool writeRegister(std::string register_name, double value) const;
