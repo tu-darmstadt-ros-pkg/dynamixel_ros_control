@@ -21,6 +21,16 @@ bool Dynamixel::loadControlTable()
   return true;
 }
 
+bool Dynamixel::ping()
+{
+  return driver_.ping(getId());
+}
+
+bool Dynamixel::reboot()
+{
+  return driver_.reboot(getId());
+}
+
 bool Dynamixel::writeRegister(std::string register_name, bool value) const
 {
   int32_t dxl_value = boolToDxlValue(register_name, value);
