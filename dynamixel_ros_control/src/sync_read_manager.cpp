@@ -2,7 +2,8 @@
 
 namespace dynamixel_ros_control {
 
-SyncReadManager::SyncReadManager() {
+SyncReadManager::SyncReadManager()
+  : subsequent_error_count_(0) {
 
 }
 
@@ -67,6 +68,7 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
       if (register_data_length != length) {
         ROS_ERROR_STREAM("Length mismatch for register '" << register_name << "'. "
                          "ID " << dxl->getId() << " wants size " << length << ", current is " << register_data_length << ".");
+        subsequent_error_count_++;
         return false;
       }
     }
@@ -147,8 +149,10 @@ bool SyncReadManager::read(ros::Time& packet_receive_time)
 
   if (dxl_comm_result != COMM_SUCCESS) {
     ROS_ERROR_STREAM("Sync Read failed with error code: " << driver_->communicationErrorToString(dxl_comm_result));
+    subsequent_error_count_++;
     return false;
   }
+  subsequent_error_count_ = 0;
 
   for (std::map<std::string, ReadEntry>::value_type& read_kv: read_entries_) {
     std::string register_name = read_kv.first;
@@ -180,6 +184,11 @@ bool SyncReadManager::read(ros::Time& packet_receive_time)
   }
 
   return true;
+}
+
+bool SyncReadManager::isOk() const
+{
+  return subsequent_error_count_ < 25;
 }
 
 }

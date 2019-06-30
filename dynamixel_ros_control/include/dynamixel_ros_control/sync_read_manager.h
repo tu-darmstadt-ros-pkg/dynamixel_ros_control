@@ -34,6 +34,10 @@ public:
   SyncReadManager();
   // TODO make template?
 
+  /**
+   * @brief Adds a dynamixel that is read synchronously
+   * @param dxl Pointer to dynamixel
+   */
   void addDynamixel(Dynamixel* dxl);
 //  void addRegister(Dynamixel& dxl, std::string register_name, uint32_t* value);
   bool addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs, std::vector<double> offsets = {});
@@ -46,6 +50,8 @@ public:
   bool init(DynamixelDriver& driver);
   bool read();
   bool read(ros::Time& packet_receive_time);
+
+  bool isOk() const;
 private:
   dynamixel::GroupSyncRead* sync_read_;
 
@@ -58,6 +64,7 @@ private:
   uint16_t indirect_data_address_;
   uint8_t total_data_length_;
 
+  unsigned int subsequent_error_count_;
 };
 
 }

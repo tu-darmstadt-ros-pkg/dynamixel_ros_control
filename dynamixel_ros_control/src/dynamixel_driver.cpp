@@ -24,7 +24,12 @@ bool DynamixelDriver::init(const ros::NodeHandle& nh)
   }
 
   // Get port info
-  if (!loadRequiredParameter(nh, "port_info/port_name", port_name_)) {
+  if (!loadRequiredParameter(nh, "port_info/port_name", port_name_) || !setPortHandler(port_name_)) {
+    return false;
+  }
+
+  // Set Packet handler
+  if (!setPacketHandler(2.0)) {
     return false;
   }
 
@@ -37,13 +42,10 @@ bool DynamixelDriver::init(const ros::NodeHandle& nh)
 
 bool DynamixelDriver::connect()
 {
-  if (!setPortHandler(port_name_)) {
+  if (!connectPort()) {
     return false;
   }
-  if (!setBaudRate(baud_rate_)) {
-    return false;
-  }
-  return setPacketHandler(2.0);
+  return setBaudRate(baud_rate_);
 }
 
 bool DynamixelDriver::loadSeriesMapping()
@@ -234,15 +236,20 @@ bool DynamixelDriver::setPacketHandler(float protocol_version)
 bool DynamixelDriver::setPortHandler(std::string port_name)
 {
   port_handler_ = dynamixel::PortHandler::getPortHandler(port_name.c_str());
+  return true;
+}
 
+bool DynamixelDriver::connectPort()
+{
   if (port_handler_->openPort())
   {
-    ROS_INFO_STREAM("Succeeded to open port " << port_name);
+    ROS_INFO_STREAM("Succeeded to open port " << port_handler_->getPortName());
+    next_indirect_address_ = 0;
     return true;
   }
   else
   {
-    ROS_ERROR_STREAM("Failed to open port " << port_name);
+    ROS_ERROR_STREAM("Failed to open port " << port_handler_->getPortName());
     return false;
   }
 }

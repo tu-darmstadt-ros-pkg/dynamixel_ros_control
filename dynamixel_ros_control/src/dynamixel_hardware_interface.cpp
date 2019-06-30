@@ -4,8 +4,8 @@
 
 namespace dynamixel_ros_control {
 
-DynamixelHardwareInterface::DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh)
-  : nh_(nh), pnh_(pnh), initialized_(false), first_cycle_(true), estop_(false), reset_required_(false), time_sync_joint_idx_(0)
+DynamixelHardwareInterface::DynamixelHardwareInterface()
+  : connected_(false), first_cycle_(true), estop_(false), reset_required_(false), time_sync_joint_idx_(0)
 {}
 
 DynamixelHardwareInterface::~DynamixelHardwareInterface()
@@ -13,12 +13,14 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
   if (torque_off_on_shutdown_)
   {
     std::cout << "Disabling torque on shutdown!" << std::endl;
-    if (initialized_) setTorque(false);
+    if (connected_) setTorque(false);
   }
 }
 
 bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh)
 {
+  nh_ = root_nh;
+  pnh_ = robot_hw_nh;
   first_cycle_ = true;
 
   // Load Parameters
@@ -34,117 +36,14 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 
   // Load dynamixels
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");
-  if (!driver_.init(dxl_nh) || ! driver_.connect() || !loadDynamixels(dxl_nh)) {
+  if (!driver_.init(dxl_nh) || !loadDynamixels(dxl_nh)) {
     return false;
-  }
-
-  // Time sync
-  std::string time_sync_joint_name;
-  if (pnh_.getParam("time_sync_joint", time_sync_joint_name)) {
-    bool found = false;
-    for (unsigned int i = 0; i < joints_.size(); i++) {
-      if (joints_[i].name == time_sync_joint_name) {
-        time_sync_joint_idx_ = i;
-        found = true;
-        break;
-      }
-    }
-    // If no matching joint is found, the default of '0' is used.
-    if (!found) {
-      ROS_ERROR_STREAM("No joint with the name '" << time_sync_joint_name << "' was found for time synchronization.");
-      time_sync_joint_idx_ = 0;
-    }
-  } else {
-    time_sync_joint_idx_ = 0;
-  }
-  joints_[time_sync_joint_idx_].dynamixel.addTimeTranslator(ros::NodeHandle(pnh_, "time_translator"));
-
-  // Disable torque for indirect address remapping
-  for (const Joint& joint: joints_) {
-    joint.dynamixel.writeRegister("torque_enable", false);
   }
 
   // Register sync reads/writes
   pnh_.param("dynamixels/read_values/read_position", read_position_, true);
   pnh_.param("dynamixels/read_values/read_velocity", read_velocity_, false);
   pnh_.param("dynamixels/read_values/read_effort", read_effort_, false);
-
-  DxlValueMappingList position_mapping;
-  std::vector<double> position_offsets;
-  DxlValueMappingList velocity_mapping;
-  DxlValueMappingList effort_mapping;
-  DxlValueMappingList clock_mapping;
-  DxlValueMappingList status_mapping;
-  for (Joint& joint: joints_) {
-    double position_offset = joint.offset + joint.mounting_offset;
-    // Register writes
-    torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
-    if (joint.isPositionControlled()) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position, position_offset); // TODO read register name from config
-    } else if (joint.isVelocityControlled()) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
-    } else if (joint.isEffortControlled()) {
-      control_write_manager_.addRegister(joint.dynamixel, "goal_torque", joint.goal_state.effort);
-    }
-
-    // Register reads
-    read_manager_.addDynamixel(&joint.dynamixel);
-    clock_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.realtime_tick_ms_)));
-    if (read_position_) {
-      position_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.position)));
-      position_offsets.push_back(-position_offset); // Subtract offset on read
-//      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
-    }
-    if (read_velocity_) {
-      velocity_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.velocity)));
-//      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
-    }
-    if (read_effort_) {
-      effort_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.effort)));
-//      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
-    }
-
-    status_read_manager_.addDynamixel(&joint.dynamixel);
-    status_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.shutdown_status_)));
-  }
-
-  read_manager_.addRegister("realtime_tick", clock_mapping);
-  status_read_manager_.addRegister("shutdown", status_mapping);
-  if (read_position_) {
-    read_manager_.addRegister("present_position", position_mapping, position_offsets);
-  }
-  if (read_velocity_) {
-    read_manager_.addRegister("present_velocity", velocity_mapping);
-  }
-  if (read_effort_) {
-    read_manager_.addRegister("present_current", effort_mapping);
-  }
-
-  // Initialize sync reads/writes
-  if (!torque_write_manager_.init(driver_)) {
-    return false;
-  }
-  if (!control_write_manager_.init(driver_)) {
-    return false;
-  }
-  if (!read_manager_.init(driver_)) {
-    return false;
-  }
-  if (!status_read_manager_.init(driver_)) {
-    return false;
-  }
-
-  initialized_ = true;
-
-  // Write control mode
-  bool write_control_mode;
-  pnh_.param("write_control_mode", write_control_mode, true);
-  if (write_control_mode) {
-    writeControlMode();
-  }
-
-  // Write initial values
-  writeInitialValues(dxl_nh);
 
   // Register interfaces
   for (Joint& joint: joints_) {
@@ -177,44 +76,192 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   // Initialize subscribers
   estop_sub_ = pnh_.subscribe("estop", 100, &DynamixelHardwareInterface::estopCb, this);
   set_torque_sub_ = pnh_.subscribe("set_torque", 100, &DynamixelHardwareInterface::setTorque, this);
-  reboot_server_ = pnh_.advertiseService("reboot_in_error_state", &DynamixelHardwareInterface::rebootCb, this);
+
+  // Try to connect
+  connect();
+
+  return true;
+}
+
+bool DynamixelHardwareInterface::connect()
+{
+  last_connect_try_ = ros::Time::now();
+  // Connect port
+  if (!driver_.connect()) {
+    return false;
+  }
+
+  // Ping dynamixels and load control table
+  for (Joint& j: joints_) {
+    if (!j.dynamixel.loadControlTable()) {
+      return false;
+    }
+  }
+
+  // Time sync
+  setUpTimeSync();
+
+  // Disable torque for indirect address remapping
+  for (const Joint& joint: joints_) {
+    if (!joint.dynamixel.writeRegister("torque_enable", false)) {
+      return false;
+    }
+  }
+
+  // Initialize sync reads/writes
+  DxlValueMappingList position_mapping;
+  std::vector<double> position_offsets;
+  DxlValueMappingList velocity_mapping;
+  DxlValueMappingList effort_mapping;
+  DxlValueMappingList clock_mapping;
+  DxlValueMappingList status_mapping;
+
+  control_write_manager_ = SyncWriteManager();
+  torque_write_manager_ = SyncWriteManager();
+  read_manager_ = SyncReadManager();
+  status_read_manager_ = SyncReadManager();
+
+  for (Joint& joint: joints_) {
+    double position_offset = joint.offset + joint.mounting_offset;
+    // Register writes
+    torque_write_manager_.addRegister(joint.dynamixel, "torque_enable", joint.goal_state.torque);
+    if (joint.isPositionControlled()) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_position", joint.goal_state.position, position_offset); // TODO read register name from config
+    } else if (joint.isVelocityControlled()) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_velocity", joint.goal_state.velocity);
+    } else if (joint.isEffortControlled()) {
+      control_write_manager_.addRegister(joint.dynamixel, "goal_torque", joint.goal_state.effort);
+    }
+
+    // Register reads
+    read_manager_.addDynamixel(&joint.dynamixel);
+    if (time_sync_available_) {
+      clock_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.realtime_tick_ms_)));
+    }
+    if (read_position_) {
+      position_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.position)));
+      position_offsets.push_back(-position_offset); // Subtract offset on read
+//      read_manager_.addRegister(joint.dynamixel, "present_position", joint.current_state.position);
+    }
+    if (read_velocity_) {
+      velocity_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.velocity)));
+//      read_manager_.addRegister(joint.dynamixel, "present_velocity", joint.current_state.velocity);
+    }
+    if (read_effort_) {
+      effort_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.current_state.effort)));
+//      read_manager_.addRegister(joint.dynamixel, "present_current", joint.current_state.effort);
+    }
+
+    status_read_manager_.addDynamixel(&joint.dynamixel);
+    status_mapping.push_back(std::make_pair<Dynamixel*, DxlValue>(&joint.dynamixel, DxlValue(&joint.dynamixel.shutdown_status_)));
+  }
+
+  read_manager_.addRegister("realtime_tick", clock_mapping);
+  if (time_sync_available_) {
+    read_manager_.addRegister("realtime_tick", clock_mapping);
+  }
+  status_read_manager_.addRegister("shutdown", status_mapping);
+
+  if (read_position_) {
+    read_manager_.addRegister("present_position", position_mapping, position_offsets);
+  }
+  if (read_velocity_) {
+    read_manager_.addRegister("present_velocity", velocity_mapping);
+  }
+  if (read_effort_) {
+    read_manager_.addRegister("present_current", effort_mapping);
+  }
+
+  if (!torque_write_manager_.init(driver_)) {
+    return false;
+  }
+  if (!control_write_manager_.init(driver_)) {
+    return false;
+  }
+  if (!read_manager_.init(driver_)) {
+    return false;
+  }
+  if (!status_read_manager_.init(driver_)) {
+    return false;
+  }
+
+  // Write control mode
+  bool write_control_mode;
+  pnh_.param("write_control_mode", write_control_mode, true);
+  if (write_control_mode) {
+    writeControlMode();
+  }
+
+  // Write initial values
+  ros::NodeHandle dxl_nh(pnh_, "dynamixels");
+  writeInitialValues(dxl_nh);
 
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
     setTorque(true);
   }
 
+  reset_required_ = true;
+
+  connected_ = true;
+  first_cycle_ = true;
   return true;
 }
 
 void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration& period)
 {
-  read_manager_.read();
-  joints_[time_sync_joint_idx_].dynamixel.translateTime(time);
-
-  if (first_cycle_) {
-    first_cycle_ = false;
-    for (Joint& joint: joints_) {
-      joint.goal_state = joint.current_state;
+  last_read_time_ = time;
+  if (!connected_ && last_connect_try_ + ros::Duration(1) < ros::Time::now()) {
+    if (!connect()) {
+      ROS_WARN_STREAM("Failed to connect. Retrying in 1s..");
     }
+  }
+  if (connected_) {
+    if (read_manager_.isOk()) {
+      read_manager_.read();
+      if (time_sync_available_) {
+        joints_[time_sync_joint_idx_].dynamixel.translateTime(time);
+      }
+      if (first_cycle_) {
+        first_cycle_ = false;
+        for (Joint& joint: joints_) {
+          joint.goal_state = joint.current_state;
+        }
+      }
+    } else {
+      ROS_ERROR_STREAM("Read manager lost connection");
+      connected_ = false;
+    }
+
   }
 }
 
 void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duration& period)
 {
-  if (estop_) {
-    for (Joint& joint: joints_) {
-      joint.goal_state.position = joint.estop_position;
-      joint.goal_state.velocity = 0;
-      joint.goal_state.effort = 0;
+  if (connected_) {
+    if (control_write_manager_.isOk()) {
+      if (estop_) {
+        for (Joint& joint: joints_) {
+          joint.goal_state.position = joint.estop_position;
+          joint.goal_state.velocity = 0;
+          joint.goal_state.effort = 0;
+        }
+      }
+      control_write_manager_.write();
+    } else {
+      ROS_ERROR_STREAM("Write manager lost connection");
+      connected_ = false;
     }
   }
-  control_write_manager_.write();
 }
 
 ros::Time DynamixelHardwareInterface::getLastReadTime() const
 {
-  return joints_[time_sync_joint_idx_].dynamixel.getStamp();
+  if (time_sync_available_) {
+    return joints_[time_sync_joint_idx_].dynamixel.getStamp();
+  } else {
+    return last_read_time_;
+  }
 }
 
 bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
@@ -238,67 +285,68 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
     std::string joint_name = static_cast<std::string>(it->first);
     ros::NodeHandle dxl_nh(nh, "device_info/" + joint_name);
 
-    int id_int;
-    if (!loadRequiredParameter(dxl_nh, "id", id_int)) {
-      return false;
-    }
-    uint8_t id;
-    if (id_int >= 0 && id_int < 256) {
-      id = static_cast<uint8_t>(id_int);
-    } else {
-      ROS_ERROR_STREAM("ID " << id_int << " is not in the valid range [0;255]");
-      continue;
-    }
+    Joint joint(joint_name, driver_);
+    joint.initFromNh(dxl_nh);
 
-    int model_number_config;
-    bool model_number_set = dxl_nh.param("model_number", model_number_config, -1);
-
-    // Ping dynamixel to retrieve model number
-    uint16_t model_number_ping;
-    if (!driver_.ping(id, model_number_ping)) {
-      ROS_ERROR_STREAM("Failed to ping motor '" << joint_name << "' with id " << id_int);
-      return false;
-    } else {
-      // Ping successful, add to list
-      if (model_number_set && model_number_config != model_number_ping) {
-        ROS_WARN_STREAM("Model number in config [" << model_number_config
-                        << "] does not match servo model number [" << model_number_ping << "] for joint '"
-                        << joint_name << "', ID: " << id_int);
-      }
-
-      Joint joint(joint_name, id, model_number_ping, driver_);
-      dxl_nh.param("mounting_offset", joint.mounting_offset, 0.0);
-      dxl_nh.param("offset", joint.offset, 0.0);
-      if (!joint.dynamixel.loadControlTable()) {
-        return false;
-      }
-
-      // Local control mode can override default control mode
-      std::string control_mode_str;
-      if (dxl_nh.getParam("control_mode", control_mode_str)) {
-        try {
-          joint.setControlMode(stringToControlMode(control_mode_str));
-        } catch(const std::invalid_argument& e) {
-          ROS_ERROR_STREAM(e.what() << std::endl << "Using default control mode.");
-          joint.setControlMode(default_control_mode);
-        }
-      } else {
+    // Local control mode can override default control mode
+    std::string control_mode_str;
+    if (nh_.getParam("control_mode", control_mode_str)) {
+      try {
+        joint.setControlMode(stringToControlMode(control_mode_str));
+      } catch(const std::invalid_argument& e) {
+        ROS_ERROR_STREAM(e.what() << std::endl << "Using default control mode.");
         joint.setControlMode(default_control_mode);
       }
-
-      std::stringstream ss;
-      ss << "Loaded dynamixel:" << std::endl;
-      ss << "-- name: " << joint.name << std::endl;
-      ss << "-- id: " << static_cast<int>(joint.dynamixel.getId()) << std::endl;
-      ss << "-- model number: " << joint.dynamixel.getModelNumber() << std::endl;
-      ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
-      ss << "-- offset: " << joint.offset << std::endl;
-      ROS_DEBUG_STREAM(ss.str());
-
-      joints_.push_back(std::move(joint));
+    } else {
+      joint.setControlMode(default_control_mode);
     }
+
+    joint.initDxl();
+
+    std::stringstream ss;
+    ss << "Loaded dynamixel:" << std::endl;
+    ss << "-- name: " << joint.name << std::endl;
+    ss << "-- id: " << static_cast<int>(joint.dynamixel.getId()) << std::endl;
+//    ss << "-- model number: " << joint.dynamixel.getModelNumber() << std::endl;
+    ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
+    ss << "-- offset: " << joint.offset << std::endl;
+    ROS_DEBUG_STREAM(ss.str());
+
+    joints_.push_back(std::move(joint));
   }
   return true;
+}
+
+void DynamixelHardwareInterface::setUpTimeSync()
+{
+  time_sync_available_ = true;
+  for (const Joint& j: joints_) {
+    if (!j.dynamixel.registerAvailable("realtime_tick")) {
+      time_sync_available_ = false;
+      return;
+    }
+  }
+  if (time_sync_available_) {
+    std::string time_sync_joint_name;
+    if (pnh_.getParam("time_sync_joint", time_sync_joint_name)) {
+      bool found = false;
+      for (unsigned int i = 0; i < joints_.size(); i++) {
+        if (joints_[i].name == time_sync_joint_name) {
+          time_sync_joint_idx_ = i;
+          found = true;
+          break;
+        }
+      }
+      // If no matching joint is found, the default of '0' is used.
+      if (!found) {
+        ROS_ERROR_STREAM("No joint with the name '" << time_sync_joint_name << "' was found for time synchronization.");
+        time_sync_joint_idx_ = 0;
+      }
+    } else {
+      time_sync_joint_idx_ = 0;
+    }
+    joints_[time_sync_joint_idx_].dynamixel.addTimeTranslator(ros::NodeHandle(pnh_, "time_translator"));
+  }
 }
 
 void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)

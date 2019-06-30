@@ -32,7 +32,10 @@ ControlMode stringToControlMode(const std::string& str);
 
 class Dynamixel {
 public:
-  Dynamixel(uint8_t id, uint16_t model_number, dynamixel_ros_control::DynamixelDriver& driver);
+  Dynamixel(dynamixel_ros_control::DynamixelDriver& driver);
+  Dynamixel(uint8_t id, dynamixel_ros_control::DynamixelDriver& driver);
+
+  bool initFromNh(const ros::NodeHandle& nh);
   bool loadControlTable();
 
   bool ping();
@@ -56,6 +59,7 @@ public:
   int32_t unitToDxlValue(std::string register_name, double unit_value) const;
   int32_t boolToDxlValue(std::string register_name, bool b) const;
 
+  bool registerAvailable(std::string register_name) const;
   const ControlTableItem& getItem(std::string& name) const;
   uint8_t getId() const;
   uint16_t getModelNumber() const;
@@ -74,6 +78,7 @@ public:
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address, uint16_t& indirect_data_address);
 
+  ros::NodeHandle nh_;
   dynamixel_ros_control::DynamixelDriver& driver_;
   ControlTable* control_table_;
 

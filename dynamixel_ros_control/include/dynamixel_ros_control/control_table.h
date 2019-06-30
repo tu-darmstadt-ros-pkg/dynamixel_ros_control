@@ -21,6 +21,7 @@ struct IndirectAddressInfo {
 class ControlTable {
 public:
   bool loadFromYaml(const std::string& path);
+  bool itemAvailable(std::string name) const;
   const ControlTableItem& getItem(std::string& name) const;
   const std::vector<IndirectAddressInfo>& getIndirectAddressInfo();
 private:

@@ -19,10 +19,11 @@ namespace dynamixel_ros_control {
 class DynamixelHardwareInterface : public hardware_interface::RobotHW
 {
 public:
-  DynamixelHardwareInterface(const ros::NodeHandle& nh, const ros::NodeHandle& pnh);
+  DynamixelHardwareInterface();
   ~DynamixelHardwareInterface() override;
 
   bool init(ros::NodeHandle& root_nh, ros::NodeHandle &robot_hw_nh) override;
+  bool connect();
   void read(const ros::Time& time, const ros::Duration& period) override;
   void write(const ros::Time& time, const ros::Duration& period) override;
 
@@ -33,6 +34,7 @@ public:
 
 private:
   bool loadDynamixels(const ros::NodeHandle& nh);
+  void setUpTimeSync();
   void writeInitialValues(const ros::NodeHandle& nh);
   void writeControlMode();
   void setTorque(bool enabled);
@@ -45,7 +47,8 @@ private:
   ros::NodeHandle nh_;
   ros::NodeHandle pnh_;
 
-  bool initialized_;
+  bool connected_;
+  ros::Time last_connect_try_;
   bool first_cycle_;
   bool estop_;
   bool reset_required_;
@@ -74,7 +77,9 @@ private:
   bool read_velocity_;
   bool read_effort_;
 
+  bool time_sync_available_;
   std::vector<Joint>::size_type time_sync_joint_idx_;
+  ros::Time last_read_time_;
 
   std::vector<Joint> joints_;
 

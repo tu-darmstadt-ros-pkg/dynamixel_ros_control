@@ -25,8 +25,8 @@ public:
 
   bool ping(uint8_t id);
   bool ping(uint8_t id, uint16_t& model_number);
-  std::vector<std::pair<uint8_t /*id*/, uint16_t /*model_number*/>> scan();
   bool reboot(uint8_t id);
+  std::vector<std::pair<uint8_t /*id*/, uint16_t /*model_number*/>> scan();
 
   bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value);
   bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out);
@@ -44,6 +44,7 @@ private:
   ControlTable* readControlTable(std::string series);
   bool setPacketHandler(float protocol_version);
   bool setPortHandler(std::string port_name);
+  bool connectPort();
   bool setBaudRate(int baud_rate);
 
   dynamixel::PacketHandler* packet_handler_;
