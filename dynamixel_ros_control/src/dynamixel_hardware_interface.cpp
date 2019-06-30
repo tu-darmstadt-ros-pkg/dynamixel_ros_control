@@ -92,12 +92,16 @@ bool DynamixelHardwareInterface::connect()
 
   // Ping dynamixels and load control table
   for (Joint& j: joints_) {
-    j.dynamixel.loadControlTable();
+    if (!j.dynamixel.loadControlTable()) {
+      return false;
+    }
   }
 
   // Disable torque for indirect address remapping
   for (const Joint& joint: joints_) {
-    joint.dynamixel.writeRegister("torque_enable", false);
+    if (!joint.dynamixel.writeRegister("torque_enable", false)) {
+      return false;
+    }
   }
 
   // Initialize sync reads/writes
