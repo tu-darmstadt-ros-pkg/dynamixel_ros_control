@@ -64,6 +64,20 @@ bool Dynamixel::reboot()
   return driver_.reboot(getId());
 }
 
+bool Dynamixel::readWriteRegister(uint16_t address, uint8_t data_length, int32_t value)
+{
+  int32_t register_value;
+  if (!readRegister(address, data_length, register_value)) {
+    return false;
+  }
+  if (register_value != value) {
+    if (!writeRegister(address, data_length, value)) {
+      return false;
+    }
+  }
+  return true;
+}
+
 bool Dynamixel::writeRegister(std::string register_name, bool value) const
 {
   int32_t dxl_value = boolToDxlValue(register_name, value);
@@ -187,7 +201,7 @@ bool Dynamixel::setIndirectAddress(unsigned int indirect_address_index, std::str
                    "), data_address: " << indirect_data_address);
   bool success = true;
   for (uint16_t i = 0; i < data_length; i++) {
-    success &= writeRegister(indirect_address + (2*i), sizeof(register_address), register_address + i);
+    success &= readWriteRegister(indirect_address + (2*i), sizeof(register_address), register_address + i);
   }
   return success;
 }

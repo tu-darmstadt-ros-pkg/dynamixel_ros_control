@@ -42,6 +42,16 @@ public:
   bool reboot();
 
   // Register access
+  /**
+   * @brief Reads a register first. If the read value matches the desired value,
+   * no write operation is performed. Otherwise, the desired value is written.
+   * @param address Target address
+   * @param data_length Data length to write
+   * @param value Data to write
+   * @return True, if the address contains the desired value
+   */
+  bool readWriteRegister(uint16_t address, uint8_t data_length, int32_t value);
+
   bool writeRegister(std::string register_name, bool value) const;
   bool writeRegister(std::string register_name, double value) const;
   bool writeRegister(std::string register_name, int32_t value) const;
