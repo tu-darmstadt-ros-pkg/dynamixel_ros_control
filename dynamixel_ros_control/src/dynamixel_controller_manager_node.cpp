@@ -59,7 +59,9 @@ int main(int argc, char** argv)
       hw.clearResetRequired();
     }
     hw.write(read_time, read_period);
-    rate.sleep();
+    if (!rate.sleep()) {
+      ROS_WARN_STREAM("Desired rate was not met.");
+    }
     ros::spinOnce();
   }
   return 0;
