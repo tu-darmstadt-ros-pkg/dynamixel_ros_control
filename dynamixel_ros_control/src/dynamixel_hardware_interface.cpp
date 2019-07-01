@@ -376,12 +376,12 @@ void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
       std::string register_name = static_cast<std::string>(it->first);
       if (it->second.getType() == XmlRpc::XmlRpcValue::TypeDouble) {
         double value = static_cast<double>(it->second);
-        joint->dynamixel.writeRegister(register_name, value);
+        joint->dynamixel.readWriteRegister(register_name, value);
         ROS_INFO_STREAM("--- " << register_name << ": " << value);
       } else if (it->second.getType() == XmlRpc::XmlRpcValue::TypeBoolean) {
         bool value = static_cast<bool>(it->second);
-        joint->dynamixel.writeRegister(register_name, value);
-        ROS_INFO_STREAM("--- " << register_name << ": " << value);
+        joint->dynamixel.readWriteRegister(register_name, value);
+        ROS_INFO_STREAM("--- " << register_name << ": " << (value ? "True" : "False"));
       }
     }
   }

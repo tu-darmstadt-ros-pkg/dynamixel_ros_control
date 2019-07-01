@@ -42,6 +42,16 @@ public:
   bool reboot();
 
   // Register access
+  bool writeRegister(std::string register_name, double value) const;
+  bool writeRegister(std::string register_name, bool value) const;
+  bool writeRegister(std::string register_name, int32_t value) const;
+  bool writeRegister(uint16_t address, uint8_t data_length, int32_t value) const;
+
+  bool readRegister(std::string register_name, double& value_out) const;
+  bool readRegister(std::string register_name, bool& value_out) const;
+  bool readRegister(std::string register_name, int32_t& value_out) const;
+  bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const;
+
   /**
    * @brief Reads a register first. If the read value matches the desired value,
    * no write operation is performed. Otherwise, the desired value is written.
@@ -52,14 +62,19 @@ public:
    */
   bool readWriteRegister(uint16_t address, uint8_t data_length, int32_t value);
 
-  bool writeRegister(std::string register_name, bool value) const;
-  bool writeRegister(std::string register_name, double value) const;
-  bool writeRegister(std::string register_name, int32_t value) const;
-  bool writeRegister(uint16_t address, uint8_t data_length, int32_t value) const;
-
-  bool readRegister(std::string register_name, double& value_out) const;
-  bool readRegister(std::string register_name, int32_t& value_out) const;
-  bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const;
+  template<typename T>
+  bool readWriteRegister(std::string register_name, T value) const {
+    T register_value;
+    if (!readRegister(register_name, register_value)) {
+      return false;
+    }
+    if (register_value != value) {
+      if (!writeRegister(register_name, value)) {
+        return false;
+      }
+    }
+    return true;
+  }
 
   bool writeControlMode(ControlMode mode) const;
 

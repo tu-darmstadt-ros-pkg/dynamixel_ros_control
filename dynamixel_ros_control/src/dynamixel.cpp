@@ -116,6 +116,16 @@ bool Dynamixel::readRegister(std::string register_name, double& value_out) const
   return true;
 }
 
+bool Dynamixel::readRegister(std::string register_name, bool& value_out) const
+{
+  int32_t dxl_value;
+  if (!readRegister(register_name, dxl_value)) {
+    return false;
+  }
+  value_out = dxlValueToBool(register_name, dxl_value);
+  return true;
+}
+
 bool Dynamixel::readRegister(std::string register_name, int32_t& value_out) const
 {
   const ControlTableItem* item;
