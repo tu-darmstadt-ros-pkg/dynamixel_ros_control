@@ -103,13 +103,6 @@ bool DynamixelHardwareInterface::connect()
   // Time sync
   setUpTimeSync();
 
-  // Disable torque for indirect address remapping
-  for (const Joint& joint: joints_) {
-    if (!joint.dynamixel.writeRegister("torque_enable", false)) {
-      return false;
-    }
-  }
-
   // Initialize sync reads/writes
   DxlValueMappingList position_mapping;
   std::vector<double> position_offsets;
