@@ -144,7 +144,7 @@ bool Dynamixel::readRegister(uint16_t address, uint8_t data_length, int32_t& val
 
 bool Dynamixel::writeControlMode(ControlMode mode) const
 {
-  return writeRegister("operating_mode", static_cast<int32_t>(mode));
+  return readWriteRegister("operating_mode", static_cast<int32_t>(mode));
 }
 
 double Dynamixel::dxlValueToUnit(std::string register_name, int32_t value) const
