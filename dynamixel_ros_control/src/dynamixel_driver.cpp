@@ -167,6 +167,7 @@ bool DynamixelDriver::readRegister(uint8_t id, uint16_t address, uint8_t data_le
   uint8_t error = 0;
   int comm_result = COMM_RX_FAIL;
 
+  value_out = 0;
   uint32_t* value_ptr = reinterpret_cast<uint32_t*>(&value_out);
 
   if (data_length == 1) {
