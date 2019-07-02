@@ -51,7 +51,13 @@ bool DynamixelDriver::connect()
 bool DynamixelDriver::loadSeriesMapping()
 {
   std::string path = package_path_ + "/devices/model_list.yaml";
-  YAML::Node config = YAML::LoadFile(path); // TODO check if file exists
+  YAML::Node config;
+  try {
+    config = YAML::LoadFile(path);
+  } catch (YAML::BadFile&) {
+    ROS_ERROR_STREAM("Failed to read series mapping at '" << path << "'. Does the file exist?");
+    return false;
+  }
   if (!config.IsMap()) {
     ROS_ERROR_STREAM("model_list.yaml is not a map (wrong format).");
     return false;
