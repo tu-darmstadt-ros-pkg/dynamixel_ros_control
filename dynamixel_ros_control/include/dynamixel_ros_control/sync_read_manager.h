@@ -8,9 +8,9 @@
 namespace dynamixel_ros_control {
 
 struct DxlValue {
-  DxlValue(double* _dvalue)  : dvalue(_dvalue) {}
-  DxlValue(bool* _bvalue)    : bvalue(_bvalue) {}
-  DxlValue(int32_t* _ivalue) : ivalue(_ivalue) {}
+  DxlValue(double* _dvalue)  : dvalue(_dvalue), bvalue(nullptr), ivalue(nullptr) {}
+  DxlValue(bool* _bvalue)    : dvalue(nullptr), bvalue(_bvalue), ivalue(nullptr) {}
+  DxlValue(int32_t* _ivalue) : dvalue(nullptr), bvalue(nullptr), ivalue(_ivalue) {}
   double *dvalue;
   bool *bvalue;
   int32_t *ivalue;
