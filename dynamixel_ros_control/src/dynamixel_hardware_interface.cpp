@@ -80,9 +80,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
   write_register_server_ = pnh_.advertiseService("write_register", &DynamixelHardwareInterface::writeRegisterCb, this);
 
   // Try to connect
-  connect();
-
-  return true;
+  return connect();
 }
 
 bool DynamixelHardwareInterface::connect()
