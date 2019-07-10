@@ -220,7 +220,7 @@ void Dynamixel::addTimeTranslator(const ros::NodeHandle& nh)
 {
   device_time_translator_ = std::unique_ptr<cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator>(
                                new cuckoo_time_translator::DefaultDeviceTimeUnwrapperAndTranslator(
-                                 cuckoo_time_translator::WrappingClockParameters(std::numeric_limits<int16_t>::max(), 1000.0),
+                                 cuckoo_time_translator::WrappingClockParameters(32768, 1000.0),
                                  nh.getNamespace()));
 }
 
