@@ -26,13 +26,13 @@ dynamixels:
     read_velocity: false
     read_effort: false
   control_mode: position
-  device_info: # read/write all devices with one packet
+  device_info:
     joint_0:
       id: 0
     joint_1:
       id: 1
 ```
-The servos are exposed to ROS as _joint_0_ and _joint_1_. As the control mode is position, a position interface is exposed. This can be used to start a _JointPositionController_, which needs to be defined first:
+The joint names in ROS are _joint_0_ and _joint_1_. As the control mode is position, a position interface is exposed. This can be used to start a _JointPositionController_, which needs to be defined first:
 
 _test_controllers.yaml_
 ```
@@ -46,9 +46,9 @@ joint_1_position_controller:
   type: "position_controllers/JointPositionController"
   joint: joint_1
 ```
-The joint state controller publishes joint states on `/joint_states`. Because we are only reading position values, only the position is reported. The joint controllers expose a topic interface to set joint goal positions.
+The _JointStateController_ publishes joint states of all joints on `/joint_states`. Because we are only reading position values from the servos, only the position is reported. The joint controllers offer a topic interface to set joint goal positions.
 
-The following launch file now starts the controller manager and the previously defined controllers:
+The following launch file now starts the controller manager and the previously defined controllers. Make sure to update the package name with the name of your package where the respective configuration files are located.
 ```
 <?xml version="1.0"?>
 <launch>
@@ -68,12 +68,12 @@ The following launch file now starts the controller manager and the previously d
   </group>
 </launch>
 ```
-
 ## Advanced features
 ### Soft E-Stop
+The controller manager subscribes to the topic `~estop` of the type `std_msgs::Bool`. If `true` is send, the soft e-stop will be activated. In case of position control, the current position will be hold. In case of velocity or effort control, zero commands will be sent. The soft e-stop function is deactivated by publishing `false`. All controllers are reset to prevent jerking motions before restoring control.
 
 ### Changing control modes
-The control mode is set with the parameter `~control_mode`. Supported values are:
+The control mode is set with the parameter `~dynamixels/control_mode`. Supported values are:
 
 | Control Mode | Interface |
 |-|-|
@@ -88,6 +88,7 @@ The control mode is automatically set during startup. Changing the control mode 
 
 It is also possible to set individual control modes for each servo. They overwrite the default control mode, e.g.:
 ```
+dynamixels:
   control_mode: velocity # default mode for all servos
   device_info:
     joint_0: # joint_0 is position controlled
@@ -98,12 +99,53 @@ It is also possible to set individual control modes for each servo. They overwri
 ```
 
 ### Automatic conversion to SI units
+All register values are converted from dynamixel counts to SI units automatically. This means, registers can be read and written using SI units without additional conversions required. Some examples are _goal_position_ and _max_position_limit_ in radians, _velocity_limit_ in radians per second or _present_temperature_ in celsius.
 ### Writing registers at startup
+It can be convenient to write certain registers at each startup, especially if the field is non-persistent (RAM). Some use-cases are:
+* Writing joint limits into _max_position_limit_ and _min_position_limit_
+* Setting a maximum current in _current_based_position_ control by writing _goal_torque_
+* Enabling external ports by writing to _external_port_mod_1_
+
+Note: It is not advised to set _torque_enable_ here. Please use the parameter `~torque_on_startup` instead.
+
+The controller manager provides the parameter `~dynamixels/write_registers` for register writes on startup, e.g.:
+```
+dynamixels:
+  write_registers:
+    joint_0:
+      external_port_mod_1: 1
+      max_position_limit: 3.14 # Radians
+      min_position_limit: -3.14 # Radians
+    joint_1:
+      goal_current: 0.05 # Ampere
+```
+Valid register names can be found in the respective control table in the folder `dynamixel_ros_control/devices/models`. 
+
 ### Writing registers during run time
+It is also possible to write registers during run time with a service interface on `~write_register`. It is only possible to write a single value at a time, writing is not synchronized across servos. The service definition is as follows:
+```
+uint8 DOUBLE_VALUE=0 # Write a double value
+uint8 BOOL_VALUE=1   # Write a bool value
+uint8 INT_VALUE=2    # Write a signed integer value
+
+# Set either joint_name or id. If both is set, joint_name is used
+string joint_name # Name of target joint 
+uint8 id # ID of target dynamixel
+string register_name # Register name to be written (see control table)
+
+int32 value_type # 0 double value, 1 bool value, 2 signed integer value
+float64 dvalue # Double value
+bool bvalue   # Bool value
+int32 ivalue  # Signed integer value
+---
+```
+You can either write a double value (SI unit), a bool value or an integer value (raw dynamixel count). Which value is written is decided by `value_type` with 0 for a double, 1 for a bool and 2 for a signed integer.
+Valid register names can be found in the respective control table in the folder `dynamixel_ros_control/devices/models`. 
 ### Rebooting servos in error state
+The dynamixel will protect itself by shutting down in case that a dangerous situation occurs during operation (over-heating, over-load, ...). The error state can only be cleared by power-cycling or rebooting the motor. A reboot of servos in an error state can be initiated by calling the service `~reboot_if_error_state` of type `std_srvs::Empty`. The respective error state will be read from `hardware_error_status` and printed to the console.
 
 ## Parameters and Topics
-
+TODO
 ## Contribution
 Feel free to contribute to this project by opening an issue or a pull request.
 ### Adding support for new models
