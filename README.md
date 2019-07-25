@@ -70,7 +70,7 @@ The following launch file now starts the controller manager and the previously d
 ```
 ## Advanced features
 ### Soft E-Stop
-The controller manager subscribes to the topic `~estop` of the type `std_msgs::Bool`. If `true` is send, the soft e-stop will be activated. In case of position control, the current position will be hold. In case of velocity or effort control, zero commands will be sent. The soft e-stop function is deactivated by publishing `false`. All controllers are reset to prevent jerking motions before restoring control.
+The controller manager subscribes to the topic `~estop` of type `std_msgs::Bool`. If `true` is send, the soft e-stop will be activated. In case of position control, the current position will be hold. In case of velocity or effort control, zero commands will be sent. The soft e-stop function is deactivated by publishing `false`. All controllers are reset to prevent jerking motions before restoring control.
 
 ### Changing control modes
 The control mode is set with the parameter `~dynamixels/control_mode`. Supported values are:
@@ -95,7 +95,7 @@ dynamixels:
       id: 0
       control_mode: position
     joint_1: # joint_1 is velocity controlled
-	  id: 1
+      id: 1
 ```
 
 ### Automatic conversion to SI units
