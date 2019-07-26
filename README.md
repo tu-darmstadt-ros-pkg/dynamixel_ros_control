@@ -70,7 +70,7 @@ The following launch file now starts the controller manager and the previously d
 ```
 ## Advanced features
 ### Soft E-Stop
-The controller manager subscribes to the topic `~estop` of type `std_msgs::Bool`. If `true` is send, the soft e-stop will be activated. In case of position control, the current position will be hold. In case of velocity or effort control, zero commands will be sent. The soft e-stop function is deactivated by publishing `false`. All controllers are reset to prevent jerking motions before restoring control.
+The controller manager subscribes to the topic `~estop` of type `std_msgs::Bool`. If `true` is send, the soft e-stop will be activated. In case of position control, the current position will be hold. In case of velocity or effort control, zero commands will be sent. The soft e-stop function is deactivated by publishing `false`. All controllers are reset to prevent jerking motions before restoring control. If this behavior is not desired, set `~reset_controllers_after_estop` to `false`.
 
 ### Changing control modes
 The control mode is set with the parameter `~dynamixels/control_mode`. Supported values are:
@@ -84,7 +84,7 @@ The control mode is set with the parameter `~dynamixels/control_mode`. Supported
 | current_based_position | Position |
 
 For more details about each control mode, refer to the [dynamixel documentation](http://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#operating-mode). 
-The control mode is automatically set during startup. Changing the control mode requires the servo to be untorqued.
+The control mode is automatically set during startup. If this behavior is not desired, set the parameter `~write_control_mode` to `false`. Changing the control mode requires the servo to be untorqued.
 
 It is also possible to set individual control modes for each servo. They overwrite the default control mode, e.g.:
 ```
@@ -144,8 +144,40 @@ Valid register names can be found in the respective control table in the folder 
 ### Rebooting servos in error state
 The dynamixel will protect itself by shutting down in case that a dangerous situation occurs during operation (over-heating, over-load, ...). The error state can only be cleared by power-cycling or rebooting the motor. A reboot of servos in an error state can be initiated by calling the service `~reboot_if_error_state` of type `std_srvs::Empty`. The respective error state will be read from `hardware_error_status` and printed to the console.
 
-## Parameters and Topics
+### Time synchronization
 TODO
+
+## Parameters, Topics and Services
+### Parameters
+| Parameter | Type | Description | Default |
+|-|-|-|-|
+| ~debug | bool | Enable debug messages | false |
+| ~control_rate | int | Frequency in Hz of the update cycle | 25 |
+| ~torque_on_startup | bool | Enable motor torque on startup | false |
+| ~torque_off_on_shutdown | bool | Disable motor torque on shutdown | false |
+|~reset_controllers_after_estop | bool | If true, running controllers are reset after the soft estop has been released. See chapter "Soft E-Stop". | true |
+| ~write_control_mode | bool | If true, the control mode specified in `~devices/control_mode` will be written to each servo | true |
+| ~dynamixels/port_info/port_name | string | Device path of the serial usb adapter | |
+| ~dynamixels/port_info/baud_rate | int | Baud rate of the connection. Has to match the setting in each Dynamixel |
+| ~dynamixels/read_values/read_position | bool | Read the current position of each motor in every cycle | true
+| ~dynamixels/read_values/read_velocity | bool | Read the current velocity of each motor in every cycle | false
+| ~dynamixels/read_values/read_effort | bool | Read the current effort of each motor in every cycle | false
+| ~dynamixels/control_mode | string | Set the control / operation mode of the chain. See "Changing control modes" chapter | "position" |
+| ~dynamixels/device_info | list | List of joint names and their respective ids. See "Getting started" for examples | |
+| ~dynamixels/write_registers | list | List of joint names and registers to write during startup. See chapter "Writing registers at startup" | |
+
+### Subscriptions
+| Topic | Type | Description |
+|-|-|-|
+| ~estop | std_msgs/Bool | If true is received, the soft estop is triggered and the chain will halt operation. See chapter "Soft E-Stop" |
+| ~set_torque | std_msgs/Bool | Enables / disables motor torque |
+
+### Service servers
+| Service | Type | Descriptions |
+|-|-|-|
+ | ~reboot_if_error_state | std_srvs/Empty | Reboot all Dynamixels in an error state. See chapter "Rebooting servos in error state" |
+ | ~write_register | dynamixel_ros_control_msgs/WriteRegister | Writes one register for one Dynamixel. See chapter "Writing registers during run time". |
+
 ## Contribution
 Feel free to contribute to this project by opening an issue or a pull request.
 ### Adding support for new models
