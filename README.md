@@ -70,7 +70,7 @@ The following launch file now starts the controller manager and the previously d
 ```
 ## Advanced features
 ### Soft E-Stop
-The controller manager subscribes to the topic `~estop` of type `std_msgs::Bool`. If `true` is send, the soft e-stop will be activated. In case of position control, the current position will be hold. In case of velocity or effort control, zero commands will be sent. The soft e-stop function is deactivated by publishing `false`. All controllers are reset to prevent jerking motions before restoring control. If this behavior is not desired, set `~reset_controllers_after_estop` to `false`.
+The controller manager subscribes to the topic `~estop` of type `std_msgs/Bool`. If `true` is send, the soft e-stop will be activated. In case of position control, the current position will be hold. In case of velocity or effort control, zero commands will be sent. The soft e-stop function is deactivated by publishing `false`. All controllers are reset to prevent jerking motions before restoring control. If this behavior is not desired, set `~reset_controllers_after_estop` to `false`.
 
 ### Changing control modes
 The control mode is set with the parameter `~dynamixels/control_mode`. Supported values are:
@@ -142,7 +142,7 @@ int32 ivalue  # Signed integer value
 You can either write a double value (SI unit), a bool value or an integer value (raw dynamixel count). Which value is written is decided by `value_type` with 0 for a double, 1 for a bool and 2 for a signed integer.
 Valid register names can be found in the respective control table in the folder `dynamixel_ros_control/devices/models`. 
 ### Rebooting servos in error state
-The dynamixel will protect itself by shutting down in case that a dangerous situation occurs during operation (over-heating, over-load, ...). The error state can only be cleared by power-cycling or rebooting the motor. A reboot of servos in an error state can be initiated by calling the service `~reboot_if_error_state` of type `std_srvs::Empty`. The respective error state will be read from `hardware_error_status` and printed to the console.
+The dynamixel will protect itself by shutting down in case that a dangerous situation occurs during operation (over-heating, over-load, ...). The error state can only be cleared by power-cycling or rebooting the motor. A reboot of servos in an error state can be initiated by calling the service `~reboot_if_error_state` of type `std_srvs/Empty`. The respective error state will be read from `hardware_error_status` and printed to the console.
 
 ### Time synchronization
 TODO
