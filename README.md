@@ -148,11 +148,13 @@ The dynamixel will protect itself by shutting down in case that a dangerous situ
 By default, servo states (position, velocity, effort) are time-stamped by receive time. As the Dynamixel converter board is typically attached by USB, this can lead to noticeable jitter in the time stamps (for an example, see [here](https://github.com/ethz-asl/cuckoo_time_translator/wiki#usage-examples-ros-sensor-drivers)). 
 To address this issue, this driver implements time translation using [cuckoo_time_translator](https://github.com/ethz-asl/cuckoo_time_translator). The feature can only be used with Dynamixels that provide a realtime clock, e.g. the XM-series. This is indicated by the field `realtime_tick` in the control table.
 Time translation is enabled by setting the parameter `~time_translator/device_time/filter_algo` to one of the following values:
+
 | Value | Algorithm |
 |-|-|
 | 0 | Receive Time only (default) |
 | 1 | Convex Hull |
 | 2 | Kalman Filter |
+
 The parameter `~time_translator/device_time/switch_time` should be set to `150`.
 
 ## Parameters, Topics and Services
