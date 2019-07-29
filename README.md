@@ -144,8 +144,16 @@ Valid register names can be found in the respective control table in the folder 
 ### Rebooting servos in error state
 The dynamixel will protect itself by shutting down in case that a dangerous situation occurs during operation (over-heating, over-load, ...). The error state can only be cleared by power-cycling or rebooting the motor. A reboot of servos in an error state can be initiated by calling the service `~reboot_if_error_state` of type `std_srvs/Empty`. The respective error state will be read from `hardware_error_status` and printed to the console.
 
-### Time synchronization
-TODO
+### Time translation
+By default, servo states (position, velocity, effort) are time-stamped by receive time. As the Dynamixel converter board is typically attached by USB, this can lead to noticeable jitter in the time stamps (for an example, see [here](https://github.com/ethz-asl/cuckoo_time_translator/wiki#usage-examples-ros-sensor-drivers)). 
+To address this issue, this driver implements time translation using [cuckoo_time_translator](https://github.com/ethz-asl/cuckoo_time_translator). The feature can only be used with Dynamixels that provide a realtime clock, e.g. the XM-series. This is indicated by the field `realtime_tick` in the control table.
+Time translation is enabled by setting the parameter `~time_translator/device_time/filter_algo` to one of the following values:
+| Value | Algorithm |
+|-|-|
+| 0 | Receive Time only (default) |
+| 1 | Convex Hull |
+| 2 | Kalman Filter |
+The parameter `~time_translator/device_time/switch_time` should be set to `150`.
 
 ## Parameters, Topics and Services
 ### Parameters
@@ -165,6 +173,8 @@ TODO
 | ~dynamixels/control_mode | string | Set the control / operation mode of the chain. See "Changing control modes" chapter | "position" |
 | ~dynamixels/device_info | list | List of joint names and their respective ids. See "Getting started" for examples | |
 | ~dynamixels/write_registers | list | List of joint names and registers to write during startup. See chapter "Writing registers at startup" | |
+| ~time_translator/device_time/filter_algo | enum | Time translation algorithm. 0: Receive Time, 1: Convex Hull, 2: Kalman Filter| 0
+| ~time_translator/device_time/switch_time| double | Time after which switch to a pending clock filter and at the same time start a new pending filter (use 0 to disable switching). Recommended value: 150 | 36000 |
 
 ### Subscriptions
 | Topic | Type | Description |
