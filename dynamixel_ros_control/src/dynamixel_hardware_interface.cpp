@@ -249,7 +249,7 @@ void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duratio
 
 ros::Time DynamixelHardwareInterface::getLastReadTime() const
 {
-  if (time_sync_available_) {
+  if (time_sync_available_ && connected_) {
     return joints_[time_sync_joint_idx_].dynamixel.getStamp();
   } else {
     return last_read_time_;
