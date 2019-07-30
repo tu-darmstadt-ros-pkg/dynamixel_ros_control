@@ -8,8 +8,19 @@ _dynamixel_ros_control_ is a [ROS](https://www.ros.org/) driver for [Robotis Dyn
 * Provides position, velocity and effort interfaces, even mixed in the same chain
 * Automatic reconnection in case of errors
 
+## Installation
+Install dynamixel_ros_control from source by cloning this repository into your catkin workspace. Most dependencies can be installed using [rosdep](http://wiki.ros.org/rosdep). Go into the dynamixel_ros_control folder and execute
+```
+rosdep install --from-paths . --ignore-src -r -y
+```
+[cuckoo_time_translator](https://github.com/ethz-asl/cuckoo_time_translator) is not available as a binary and has to be built from source. It is available on Github, so just clone it into your catkin workspace:
+```
+git clone https://github.com/ethz-asl/cuckoo_time_translator.git
+```
+
+
+
 ## Getting started
-Install dynamixel_ros_control by cloning the repository into your catkin workspace and build it.
 The servo chain has to be configured using a yaml configuration file. Considering a simple chain with two Dynamixel motors a minimal configuration file could look like this:
 
 _test_config.yaml:_
