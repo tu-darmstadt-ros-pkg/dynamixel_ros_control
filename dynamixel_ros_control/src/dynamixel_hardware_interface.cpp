@@ -365,7 +365,8 @@ void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
     for(XmlRpc::XmlRpcValue::ValueStruct::iterator it = registers.begin(); it != registers.end(); ++it)
     {
       std::string register_name = static_cast<std::string>(it->first);
-      if (it->second.getType() == XmlRpc::XmlRpcValue::TypeDouble) {
+
+      if (it->second.getType() == XmlRpc::XmlRpcValue::TypeDouble || it->second.getType() == XmlRpc::XmlRpcValue::TypeInt) {
         double value = static_cast<double>(it->second);
         joint->dynamixel.readWriteRegister(register_name, value);
         ROS_INFO_STREAM("--- " << register_name << ": " << value);
