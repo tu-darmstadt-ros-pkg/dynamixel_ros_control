@@ -1,12 +1,11 @@
 # PRO extended 
 unit_conversions: # dxl value to unit ratio
   rad: 0.00001251822
-  rad_per_s: 0.000344746
-  Nm: 0.006675773 # TODO
-  rad_per_s2: 1.123489409 # TODO
+  rad_per_s: 0.00020863735
+  rad_per_s2: 1 # TODO
   celsius: 1.0
-  V: 0.1 # TODO
-  ms: 1.0 # TODO
+  V: 0.1
+  ms: 1.0
   A: 0.00269 # TODO
   
 indirect_addresses:
@@ -36,7 +35,7 @@ control_table:
   - 22  | max_voltage_limit        | 2      | RW     | EEPROM | V
   - 24  | min_voltage_limit        | 2      | RW     | EEPROM | V
   - 26  | acceleration_limit       | 4      | RW     | EEPROM | rad_per_s2
-  - 30  | torque_limit             | 2      | RW     | EEPROM | Nm
+  - 30  | torque_limit             | 2      | RW     | EEPROM | A
   - 32  | velocity_limit           | 4      | RW     | EEPROM | rad_per_s
   - 36  | max_position_limit       | 4      | RW     | EEPROM | rad
   - 40  | min_position_limit       | 4      | RW     | EEPROM | rad
@@ -54,7 +53,7 @@ control_table:
   - 594 | position_p_gain          | 2      | RW     | RAM    |
   - 596 | goal_position            | 4      | RW     | RAM    | rad
   - 600 | goal_velocity            | 4      | RW     | RAM    | rad_per_s
-  - 604 | goal_torque              | 2      | RW     | RAM    | Nm
+  - 604 | goal_torque              | 2      | RW     | RAM    | A
   - 606 | goal_acceleration        | 4      | RW     | RAM    | rad_per_s2
   - 610 | moving                   | 1      | R      | RAM    | bool
   - 611 | present_position         | 4      | R      | RAM    | rad
