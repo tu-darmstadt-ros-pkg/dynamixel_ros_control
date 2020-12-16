@@ -19,11 +19,12 @@ bool Joint::initFromNh(const ros::NodeHandle& nh)
   nh_ = nh;
   nh_.param("mounting_offset", mounting_offset, 0.0);
   nh_.param("offset", offset, 0.0);
+  return true;
 }
 
 bool Joint::initDxl()
 {
-  dynamixel.initFromNh(nh_);
+  return dynamixel.initFromNh(nh_);
 }
 
 ControlMode Joint::getControlMode() const
@@ -34,6 +35,7 @@ ControlMode Joint::getControlMode() const
 bool Joint::setControlMode(const ControlMode& value)
 {
   control_mode = value;
+  return true;
 }
 
 bool Joint::isPositionControlled()
