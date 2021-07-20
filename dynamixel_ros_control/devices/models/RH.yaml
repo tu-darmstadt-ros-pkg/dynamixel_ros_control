@@ -5,7 +5,7 @@ unit_conversions: # dxl value to unit ratio
   rad_per_s2: 1.123489409 # TODO
   celsius: 1.0
   V: 0.1
-  A: 0.0.00402
+  A: 0.00402
   
 indirect_addresses:
 # address start | data start  | count
