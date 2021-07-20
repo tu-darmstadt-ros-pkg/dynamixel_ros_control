@@ -1,13 +1,12 @@
 # RH series
 unit_conversions: # dxl value to unit ratio
   rad: 0.00155509054
-  rad_per_s: 0.0119377
-  A: 0.00402 # Ampere
-  rad_per_s2: 1.123489409 # TODO
+  rad_per_s: 0.00104719755
+  rad_per_s2: 0.00174532925
   celsius: 1.0
   V: 0.1
-  A: 0.00269 # TODO
   ms: 1.0
+  A: 0.001
   
 indirect_addresses:
 # address start | data start  | count
