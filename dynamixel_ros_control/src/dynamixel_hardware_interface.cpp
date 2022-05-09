@@ -395,6 +395,7 @@ void DynamixelHardwareInterface::writeControlMode()
 
 void DynamixelHardwareInterface::setTorque(bool enabled)
 {
+  ROS_INFO_STREAM((enabled ? "Enabling" : "Disabling") << " torque.");
   for (Joint& joint: joints_) {
     joint.goal_state.torque = enabled;
   }
