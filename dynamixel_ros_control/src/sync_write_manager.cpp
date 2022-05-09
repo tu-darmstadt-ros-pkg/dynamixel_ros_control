@@ -3,7 +3,7 @@
 namespace dynamixel_ros_control {
 
 SyncWriteManager::SyncWriteManager()
-  : indirect_data_address_(0), data_length_(0), subsequent_error_count_(0) {}
+  : indirect_data_address_(0), data_length_(0), subsequent_error_count_(0), error_threshold_(25) {}
 
 void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, double& value, double offset)
 {
@@ -88,7 +88,12 @@ bool SyncWriteManager::write()
 
 bool SyncWriteManager::isOk() const
 {
-  return subsequent_error_count_ < 25;
+  return subsequent_error_count_ < error_threshold_;
+}
+
+void SyncWriteManager::setErrorThreshold(unsigned int threshold)
+{
+  error_threshold_ = threshold;
 }
 
 std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, std::string register_name)

@@ -27,6 +27,7 @@ public:
   bool write();
 
   bool isOk() const;
+  void setErrorThreshold(unsigned int threshold);
 private:
   std::vector<WriteEntry>::iterator addEntry(Dynamixel& dxl, std::string register_name);
   std::vector<WriteEntry> write_entries_;
@@ -39,6 +40,7 @@ private:
   dynamixel::GroupSyncWrite* sync_write_;
 
   unsigned int subsequent_error_count_;
+  unsigned int error_threshold_;
 };
 
 }
