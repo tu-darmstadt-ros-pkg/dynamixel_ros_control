@@ -3,7 +3,7 @@
 namespace dynamixel_ros_control {
 
 SyncReadManager::SyncReadManager()
-  : subsequent_error_count_(0) {
+  : subsequent_error_count_(0), error_threshold_(25) {
 
 }
 
@@ -188,7 +188,12 @@ bool SyncReadManager::read(ros::Time& packet_receive_time)
 
 bool SyncReadManager::isOk() const
 {
-  return subsequent_error_count_ < 25;
+  return subsequent_error_count_ < error_threshold_;
+}
+
+void SyncReadManager::setErrorThreshold(unsigned int threshold)
+{
+  error_threshold_ = threshold;
 }
 
 }

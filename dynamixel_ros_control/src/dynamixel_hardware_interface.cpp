@@ -188,6 +188,7 @@ bool DynamixelHardwareInterface::connect()
   int error_threshold;
   pnh_.param("error_threshold", error_threshold, 25);
   control_write_manager_.setErrorThreshold(static_cast<unsigned int>(error_threshold));
+  read_manager_.setErrorThreshold(static_cast<unsigned int>(error_threshold));
 
   // Write initial values
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");

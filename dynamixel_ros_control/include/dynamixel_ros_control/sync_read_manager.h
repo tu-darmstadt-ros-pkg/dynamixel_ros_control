@@ -52,6 +52,7 @@ public:
   bool read(ros::Time& packet_receive_time);
 
   bool isOk() const;
+  void setErrorThreshold(unsigned int threshold);
 private:
   dynamixel::GroupSyncRead* sync_read_;
 
@@ -65,6 +66,7 @@ private:
   uint8_t total_data_length_;
 
   unsigned int subsequent_error_count_;
+  unsigned int error_threshold_;
 };
 
 }
