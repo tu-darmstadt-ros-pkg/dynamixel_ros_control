@@ -355,9 +355,9 @@ void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
   }
   ROS_INFO_STREAM("Writing initial values:");
   ROS_ASSERT(joints.getType() == XmlRpc::XmlRpcValue::TypeStruct);
-  for(XmlRpc::XmlRpcValue::ValueStruct::const_iterator it = joints.begin(); it != joints.end(); ++it)
+  for(const auto& joint_node: joints)
   {
-    std::string joint_name = static_cast<std::string>(it->first);
+    std::string joint_name = static_cast<std::string>(joint_node.first);
     Joint* joint = getJointByName(joint_name);
     if (!joint) {
       ROS_ERROR_STREAM("Unknown joint '" << joint_name << "'.");
@@ -368,20 +368,21 @@ void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
     XmlRpc::XmlRpcValue registers;
     nh.getParam("write_registers/" + joint_name, registers);
     ROS_ASSERT(registers.getType() == XmlRpc::XmlRpcValue::TypeStruct);
-    for(XmlRpc::XmlRpcValue::ValueStruct::iterator it = registers.begin(); it != registers.end(); ++it)
+    for(const auto& register_node : registers)
     {
-      std::string register_name = static_cast<std::string>(it->first);
-      if (it->second.getType() == XmlRpc::XmlRpcValue::TypeInt) {
-        int ivalue = static_cast<int>(it->second);
-        double value = static_cast<double>(ivalue);
+      std::string register_name = static_cast<std::string>(register_node.first);
+      if (register_node.second.getType() == XmlRpc::XmlRpcValue::TypeInt) {
+        int ivalue = static_cast<int>(register_node.second);
+        auto value = static_cast<double>(ivalue);
         joint->dynamixel.readWriteRegister(register_name, value);
         ROS_INFO_STREAM("--- " << register_name << ": " << ivalue);
-      } else if (it->second.getType() == XmlRpc::XmlRpcValue::TypeDouble || it->second.getType() == XmlRpc::XmlRpcValue::TypeInt) {
-        double value = static_cast<double>(it->second);
+      } else if (register_node.second.getType() == XmlRpc::XmlRpcValue::TypeDouble ||
+               register_node.second.getType() == XmlRpc::XmlRpcValue::TypeInt) {
+        auto value = static_cast<double>(register_node.second);
         joint->dynamixel.readWriteRegister(register_name, value);
         ROS_INFO_STREAM("--- " << register_name << ": " << value);
-      } else if (it->second.getType() == XmlRpc::XmlRpcValue::TypeBoolean) {
-        bool value = static_cast<bool>(it->second);
+      } else if (register_node.second.getType() == XmlRpc::XmlRpcValue::TypeBoolean) {
+        bool value = static_cast<bool>(register_node.second);
         joint->dynamixel.readWriteRegister(register_name, value);
         ROS_INFO_STREAM("--- " << register_name << ": " << (value ? "True" : "False"));
       }
