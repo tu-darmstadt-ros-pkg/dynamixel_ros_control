@@ -439,6 +439,7 @@ void DynamixelHardwareInterface::setupReadValues(ros::NodeHandle& nh)
       } else {
         register_read.publisher = nh.advertise<std_msgs::Float64>(topic_name, 10);
       }
+      read_registers_.push_back(std::move(register_read));
     }
   }
 }
