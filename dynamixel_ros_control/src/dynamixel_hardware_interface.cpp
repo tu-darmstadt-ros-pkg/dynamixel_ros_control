@@ -1,6 +1,9 @@
 #include <dynamixel_ros_control/dynamixel_hardware_interface.h>
 
 #include <dynamixel_ros_control/common.h>
+#include <std_msgs/Int32.h>
+#include <std_msgs/Bool.h>
+#include <std_msgs/Float64.h>
 
 namespace dynamixel_ros_control {
 
@@ -193,6 +196,7 @@ bool DynamixelHardwareInterface::connect()
   // Write initial values
   ros::NodeHandle dxl_nh(pnh_, "dynamixels");
   writeInitialValues(dxl_nh);
+  setupReadValues(dxl_nh);
 
   if (torque_on_startup_) {
     ROS_INFO_STREAM("Enabling torque on startup");
@@ -220,6 +224,7 @@ void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration
       if (time_sync_available_) {
         joints_[time_sync_joint_idx_].dynamixel.translateTime(time);
       }
+      readRegisterValues();
       if (first_cycle_) {
         first_cycle_ = false;
         for (Joint& joint: joints_) {
@@ -390,6 +395,54 @@ void DynamixelHardwareInterface::writeInitialValues(const ros::NodeHandle& nh)
   }
 }
 
+void DynamixelHardwareInterface::setupReadValues(ros::NodeHandle& nh)
+{
+  XmlRpc::XmlRpcValue joints;
+  if (!nh.getParam("read_registers", joints)) {
+    return;
+  }
+  ROS_INFO_STREAM("Setting up reading registers:");
+  ROS_ASSERT(joints.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+  for(const auto& joint_node: joints)
+  {
+    std::string joint_name = static_cast<std::string>(joint_node.first);
+    Joint* joint = getJointByName(joint_name);
+    if (!joint) {
+      ROS_ERROR_STREAM("Unknown joint '" << joint_name << "'.");
+      continue;
+    }
+    ROS_INFO_STREAM(joint_name << ":");
+
+    XmlRpc::XmlRpcValue registers;
+    nh.getParam("read_registers/" + joint_name, registers);
+    ROS_ASSERT(registers.getType() == XmlRpc::XmlRpcValue::TypeStruct);
+    for(const auto& register_node : registers)
+    {
+      std::string register_name = static_cast<std::string>(register_node.first);
+      std::string topic_name = static_cast<std::string>(register_node.second);
+      ROS_INFO_STREAM("--- " << register_name << ": " << topic_name);
+
+      if (!joint->dynamixel.registerAvailable(register_name)) {
+        ROS_ERROR_STREAM("Could not find register '" << register_name << "'");
+        continue;
+      }
+
+      RegisterRead register_read;
+      register_read.joint = joint;
+      register_read.register_name = register_name;
+      std::string unit = joint->dynamixel.getItem(register_name).unit();
+
+      if (unit.empty()) {
+        register_read.publisher = nh.advertise<std_msgs::Int32>(topic_name, 10);
+      } else if (unit == "bool") {
+        register_read.publisher = nh.advertise<std_msgs::Bool>(topic_name, 10);
+      } else {
+        register_read.publisher = nh.advertise<std_msgs::Float64>(topic_name, 10);
+      }
+    }
+  }
+}
+
 void DynamixelHardwareInterface::writeControlMode()
 {
   for (const Joint& joint: joints_) {
@@ -518,6 +571,31 @@ bool DynamixelHardwareInterface::resetRequired() const
 void DynamixelHardwareInterface::clearResetRequired()
 {
   reset_required_ = false;
+}
+void DynamixelHardwareInterface::readRegisterValues()
+{
+  for (auto& read_register: read_registers_) {
+    std::string unit = read_register.joint->dynamixel.getItem(read_register.register_name).unit();
+
+    if (unit.empty()) {
+      std_msgs::Int32 int_msg;
+      if (read_register.joint->dynamixel.readRegister(read_register.register_name, int_msg.data)) {
+        read_register.publisher.publish(int_msg);
+      }
+    } else if (unit == "bool") {
+      bool data;
+      if (read_register.joint->dynamixel.readRegister(read_register.register_name, data)) {
+        std_msgs::Bool bool_msg;
+        bool_msg.data = data;
+        read_register.publisher.publish(bool_msg);
+      }
+    } else {
+      std_msgs::Float64 float_msg;
+      if (read_register.joint->dynamixel.readRegister(read_register.register_name, float_msg.data)) {
+        read_register.publisher.publish(float_msg);
+      }
+    }
+  }
 }
 
 }
