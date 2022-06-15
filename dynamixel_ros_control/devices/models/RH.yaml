@@ -6,6 +6,7 @@ unit_conversions: # dxl value to unit ratio
   celsius: 1.0
   V: 0.1
   A: 0.00402
+  12bit_ADC_V: 1240.909090909
   
 indirect_addresses:
 # address start | data start  | count
@@ -60,8 +61,8 @@ control_table:
   - 621 | present_current          | 2      | R      | RAM    | A
   - 623 | present_input_voltage    | 2      | R      | RAM    | V
   - 625 | present_temperature      | 1      | R      | RAM    | celsius
-  - 626 | external_port_data_1     | 2      | RW     | RAM    |
-  - 628 | external_port_data_2     | 2      | RW     | RAM    |
+  - 626 | external_port_data_1     | 2      | RW     | RAM    | 12bit_ADC_V
+  - 628 | external_port_data_2     | 2      | RW     | RAM    | 12bit_ADC_V
   - 630 | external_port_data_3     | 2      | RW     | RAM    |
   - 632 | external_port_data_4     | 2      | RW     | RAM    |
   - 890 | registered_instruction   | 1      | R      | RAM    |
