@@ -17,6 +17,12 @@
 
 namespace dynamixel_ros_control {
 
+struct RegisterRead {
+  Joint* joint;
+  std::string register_name;
+  ros::Publisher publisher;
+};
+
 class DynamixelHardwareInterface : public hardware_interface::RobotHW
 {
 public:
@@ -37,6 +43,8 @@ private:
   bool loadDynamixels(const ros::NodeHandle& nh);
   void setUpTimeSync();
   void writeInitialValues(const ros::NodeHandle& nh);
+  void setupReadValues(ros::NodeHandle& nh);
+  void readRegisterValues();
   void writeControlMode();
   void setTorque(bool enabled);
   void setTorque(const std_msgs::BoolConstPtr& enabled);
@@ -86,6 +94,8 @@ private:
   ros::Time last_read_time_;
 
   std::vector<Joint> joints_;
+
+  std::vector<RegisterRead> read_registers_;
 
   // Subscribers
   ros::Subscriber estop_sub_;
