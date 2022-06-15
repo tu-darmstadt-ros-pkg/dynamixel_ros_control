@@ -6,7 +6,7 @@ unit_conversions: # dxl value to unit ratio
   celsius: 1.0
   V: 0.1
   A: 0.00402
-  12bit_ADC_V: 1240.909090909
+  12bit_ADC_V: 0.000805861
   
 indirect_addresses:
 # address start | data start  | count
