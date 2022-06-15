@@ -19,6 +19,16 @@ bool Joint::initFromNh(const ros::NodeHandle& nh)
   nh_ = nh;
   nh_.param("mounting_offset", mounting_offset, 0.0);
   nh_.param("offset", offset, 0.0);
+
+  // Local control mode can override default control mode
+  std::string control_mode_str;
+  if (nh.getParam("control_mode", control_mode_str)) {
+    try {
+      setControlMode(stringToControlMode(control_mode_str));
+    } catch(const std::invalid_argument& e) {
+      ROS_ERROR_STREAM(e.what() << std::endl << "Using default control mode.");
+    }
+  }
   return true;
 }
 

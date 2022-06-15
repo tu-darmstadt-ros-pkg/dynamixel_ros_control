@@ -284,21 +284,8 @@ bool DynamixelHardwareInterface::loadDynamixels(const ros::NodeHandle& nh)
     ros::NodeHandle dxl_nh(nh, "device_info/" + joint_name);
 
     Joint joint(joint_name, driver_);
+    joint.setControlMode(default_control_mode);
     joint.initFromNh(dxl_nh);
-
-    // Local control mode can override default control mode
-    std::string control_mode_str;
-    if (nh_.getParam("control_mode", control_mode_str)) {
-      try {
-        joint.setControlMode(stringToControlMode(control_mode_str));
-      } catch(const std::invalid_argument& e) {
-        ROS_ERROR_STREAM(e.what() << std::endl << "Using default control mode.");
-        joint.setControlMode(default_control_mode);
-      }
-    } else {
-      joint.setControlMode(default_control_mode);
-    }
-
     joint.initDxl();
 
     std::stringstream ss;
