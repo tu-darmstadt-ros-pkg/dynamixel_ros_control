@@ -73,7 +73,22 @@ bool SyncWriteManager::write()
       dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);
       ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] Value: " << dxl_value << ", Converted: " << *entry.b_value);
     }
-    unsigned char* value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
+    unsigned char* value_ptr;
+    int16_t value_16bit;
+    int8_t value_8bit;
+    if (data_length_ == 4) {
+      value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
+    } else if (data_length_ == 2) {
+      value_16bit = static_cast<int16_t>(dxl_value);
+      value_ptr = reinterpret_cast<unsigned char*>(&value_16bit);
+    } else if (data_length_ == 1) {
+      value_8bit = static_cast<int8_t>(dxl_value);
+      value_ptr = reinterpret_cast<unsigned char*>(&value_8bit);
+    } else {
+      ROS_ERROR_STREAM("Unsupported data length: " << data_length_);
+      value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
+    }
+
     sync_write_->changeParam(entry.dxl->getId(), value_ptr);
   }
   int result = sync_write_->txPacket();
