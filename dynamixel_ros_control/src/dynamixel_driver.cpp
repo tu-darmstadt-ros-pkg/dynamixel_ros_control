@@ -174,18 +174,21 @@ bool DynamixelDriver::readRegister(uint8_t id, uint16_t address, uint8_t data_le
   int comm_result = COMM_RX_FAIL;
 
   value_out = 0;
-  uint32_t* value_ptr = reinterpret_cast<uint32_t*>(&value_out);
 
   if (data_length == 1) {
-    comm_result = packet_handler_->read1ByteTxRx(port_handler_, id, address, reinterpret_cast<uint8_t*>(value_ptr), &error);
+    uint8_t data;
+    comm_result = packet_handler_->read1ByteTxRx(port_handler_, id, address, &data, &error);
+    value_out = static_cast<int8_t>(data);
   }
   else if (data_length == 2)
   {
-    comm_result = packet_handler_->read2ByteTxRx(port_handler_, id, address, reinterpret_cast<uint16_t*>(value_ptr), &error);
+    uint16_t data;
+    comm_result = packet_handler_->read2ByteTxRx(port_handler_, id, address, &data, &error);
+    value_out = static_cast<uint16_t>(data);
   }
   else if (data_length == 4)
   {
-    comm_result = packet_handler_->read4ByteTxRx(port_handler_, id, address, value_ptr, &error);
+    comm_result = packet_handler_->read4ByteTxRx(port_handler_, id, address, reinterpret_cast<uint32_t*>(&value_out), &error);
   }
   ROS_DEBUG_STREAM("[Register Read] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: " << static_cast<unsigned int>(data_length)
                    << ", value: " << value_out);
