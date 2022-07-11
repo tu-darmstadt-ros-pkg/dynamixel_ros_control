@@ -68,10 +68,10 @@ bool SyncWriteManager::write()
     if (entry.d_value != nullptr) {
       double unit_value = *entry.d_value + entry.offset;
       dxl_value = entry.dxl->unitToDxlValue(entry.register_name, unit_value);
-      ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] Value: " << dxl_value << ", Converted: " << *entry.d_value);
+      ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value: " << dxl_value << ", converted: " << *entry.d_value);
     } else if (entry.b_value != nullptr) {
       dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);
-      ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] Value: " << dxl_value << ", Converted: " << *entry.b_value);
+      ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value: " << dxl_value << ", converted: " << *entry.b_value);
     }
     unsigned char* value_ptr;
     int16_t value_16bit;
@@ -88,9 +88,9 @@ bool SyncWriteManager::write()
       ROS_ERROR_STREAM("Unsupported data length: " << data_length_);
       value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
     }
-
     sync_write_->changeParam(entry.dxl->getId(), value_ptr);
   }
+  
   int result = sync_write_->txPacket();
   if (result != COMM_SUCCESS) {
     ROS_ERROR_STREAM("Sync Write failed with error: " << driver_->communicationErrorToString(result));
