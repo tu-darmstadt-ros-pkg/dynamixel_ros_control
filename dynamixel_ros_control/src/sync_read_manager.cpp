@@ -164,19 +164,28 @@ bool SyncReadManager::read(ros::Time& packet_receive_time)
       double offset = read_kv.second.offsets[i];
       Dynamixel* dxl = dxl_value_pair.first;
       if (sync_read_->isAvailable(dxl->getId(), register_data_address, register_data_length)) {
-        int32_t dxl_value = static_cast<int32_t>(sync_read_->getData(dxl->getId(), register_data_address, register_data_length));
+        uint32_t data = sync_read_->getData(dxl->getId(), register_data_address, register_data_length);
+        int32_t dxl_value;
+        if (register_data_length == 4) {
+          dxl_value = static_cast<int32_t>(data);
+        } else if (register_data_length == 2) {
+          dxl_value = *reinterpret_cast<int16_t*>(&data);
+        } else if (register_data_length == 1) {
+          dxl_value = *reinterpret_cast<int8_t*>(&data);
+        } else {
+          ROS_ERROR_STREAM("Unsupported data length: " << register_data_length);
+          dxl_value = static_cast<int32_t>(data);
+        }
         if (dxl_value_pair.second.dvalue) {
-          double unit_value = dxl->dxlValueToUnit(register_name, dxl_value) + offset;
-          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << dxl_value << ", Converted: " << unit_value);
-          *dxl_value_pair.second.dvalue = unit_value;
+          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " << dxl_value << ", converted: " << unit_value);
+          *dxl_value_pair.second.dvalue = dxl->dxlValueToUnit(register_name, dxl_value) + offset;;
         }
         if (dxl_value_pair.second.bvalue) {
-          bool bool_value = dxl->dxlValueToBool(register_name, dxl_value);
-          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << dxl_value << ", Converted: " << (bool_value ? "True" : "False"));
-          *dxl_value_pair.second.bvalue = bool_value;
+          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " << dxl_value << ", converted: " << (bool_value ? "true" : "false"));
+          *dxl_value_pair.second.bvalue = dxl->dxlValueToBool(register_name, dxl_value);
         }
         if (dxl_value_pair.second.ivalue) {
-          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] Value: " << dxl_value);
+          ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " << dxl_value);
           *dxl_value_pair.second.ivalue = dxl_value;
         }
       }
