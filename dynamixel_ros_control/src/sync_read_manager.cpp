@@ -177,12 +177,14 @@ bool SyncReadManager::read(ros::Time& packet_receive_time)
           dxl_value = static_cast<int32_t>(data);
         }
         if (dxl_value_pair.second.dvalue) {
+          double unit_value = dxl->dxlValueToUnit(register_name, dxl_value) + offset;
           ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " << dxl_value << ", converted: " << unit_value);
-          *dxl_value_pair.second.dvalue = dxl->dxlValueToUnit(register_name, dxl_value) + offset;;
+          *dxl_value_pair.second.dvalue = unit_value;
         }
         if (dxl_value_pair.second.bvalue) {
+          bool bool_value = dxl->dxlValueToBool(register_name, dxl_value);
           ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " << dxl_value << ", converted: " << (bool_value ? "true" : "false"));
-          *dxl_value_pair.second.bvalue = dxl->dxlValueToBool(register_name, dxl_value);
+          *dxl_value_pair.second.bvalue = bool_value;
         }
         if (dxl_value_pair.second.ivalue) {
           ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " << dxl_value);
