@@ -147,13 +147,15 @@ bool DynamixelDriver::writeRegister(uint8_t id, uint16_t address, uint8_t data_l
   int comm_result = COMM_TX_FAIL;
 
   if (data_length == 1) {
-    comm_result = packet_handler_->write1ByteTxRx(port_handler_, id, address, static_cast<uint8_t>(value), &error);
+    auto value_8bit = static_cast<int8_t>(value);
+    comm_result = packet_handler_->write1ByteTxRx(port_handler_, id, address, *reinterpret_cast<uint8_t*>(&value_8bit), &error);
   }
   else if (data_length == 2) {
-    comm_result = packet_handler_->write2ByteTxRx(port_handler_, id, address, static_cast<uint16_t>(value), &error);
+    auto value_16bit = static_cast<int16_t>(value);
+    comm_result = packet_handler_->write2ByteTxRx(port_handler_, id, address, *reinterpret_cast<uint16_t*>(&value_16bit), &error);
   }
   else if (data_length == 4) {
-    comm_result = packet_handler_->write4ByteTxRx(port_handler_, id, address, static_cast<uint32_t>(value), &error);
+    comm_result = packet_handler_->write4ByteTxRx(port_handler_, id, address, *reinterpret_cast<uint32_t*>(&value), &error);
   }
 
   if (comm_result == COMM_SUCCESS) {
@@ -180,15 +182,16 @@ bool DynamixelDriver::readRegister(uint8_t id, uint16_t address, uint8_t data_le
     comm_result = packet_handler_->read1ByteTxRx(port_handler_, id, address, &data, &error);
     value_out = static_cast<int8_t>(data);
   }
-  else if (data_length == 2)
-  {
+  else if (data_length == 2) {
     uint16_t data;
     comm_result = packet_handler_->read2ByteTxRx(port_handler_, id, address, &data, &error);
     value_out = static_cast<uint16_t>(data);
   }
-  else if (data_length == 4)
-  {
+  else if (data_length == 4) {
     comm_result = packet_handler_->read4ByteTxRx(port_handler_, id, address, reinterpret_cast<uint32_t*>(&value_out), &error);
+  } else {
+    ROS_ERROR_STREAM("Unsupported data length: " << data_length);
+    return false;
   }
   ROS_DEBUG_STREAM("[Register Read] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: " << static_cast<unsigned int>(data_length)
                    << ", value: " << value_out);
