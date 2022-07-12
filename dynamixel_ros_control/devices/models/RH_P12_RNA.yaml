@@ -6,7 +6,7 @@ unit_conversions: # dxl value to unit ratio
   celsius: 1.0
   V: 0.1
   ms: 1.0
-  A: 0.001
+  A: 0.00402
   
 indirect_addresses:
 # address start | data start  | count
