@@ -34,6 +34,7 @@ bool Dynamixel::loadControlTable()
       return false;
     }
   }
+  ROS_DEBUG_STREAM("ID: " << getId() << ": Loaded control table for model " << getModelNumber());
 
   return true;
 }
