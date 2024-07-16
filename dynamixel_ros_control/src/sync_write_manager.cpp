@@ -7,7 +7,7 @@ SyncWriteManager::SyncWriteManager()
 
 void SyncWriteManager::addRegister(Dynamixel& dxl, std::string register_name, double& value, double offset)
 {
-  std::vector<WriteEntry>::iterator it = addEntry(dxl, register_name);
+  auto it = addEntry(dxl, register_name);
   if (it != write_entries_.end()) {
     it->d_value = &value;
     it->offset = offset;

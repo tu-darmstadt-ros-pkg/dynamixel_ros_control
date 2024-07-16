@@ -38,9 +38,9 @@ public:
   ControlMode getControlMode() const;
   bool setControlMode(const ControlMode& value);
 
-  bool isPositionControlled();
-  bool isVelocityControlled();
-  bool isEffortControlled();
+  bool isPositionControlled() const;
+  bool isVelocityControlled() const;
+  bool isEffortControlled() const;
 
 private:
   ros::NodeHandle nh_;

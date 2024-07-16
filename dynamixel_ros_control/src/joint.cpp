@@ -1,13 +1,15 @@
 #include <dynamixel_ros_control/joint.h>
 
+#include <utility>
+
 namespace dynamixel_ros_control {
 
 Joint::Joint(std::string joint_name, dynamixel_ros_control::DynamixelDriver& driver)
-  : name(joint_name), dynamixel(driver)
+  : name(std::move(joint_name)), dynamixel(driver)
 {}
 
 Joint::Joint(std::string _name, uint8_t id, DynamixelDriver& driver)
-  : name(_name),
+  : name(std::move(_name)),
     dynamixel(id, driver),
     mounting_offset(0.0),
     offset(0.0),
@@ -48,17 +50,17 @@ bool Joint::setControlMode(const ControlMode& value)
   return true;
 }
 
-bool Joint::isPositionControlled()
+bool Joint::isPositionControlled() const
 {
   return getControlMode() == POSITION || getControlMode() == EXTENDED_POSITION || getControlMode() == CURRENT_BASED_POSITION;
 }
 
-bool Joint::isVelocityControlled()
+bool Joint::isVelocityControlled() const
 {
   return getControlMode() == VELOCITY;
 }
 
-bool Joint::isEffortControlled()
+bool Joint::isEffortControlled() const
 {
   return getControlMode() == CURRENT;
 }
