@@ -61,7 +61,7 @@ private:
 
   bool connected_;
   ros::Time last_connect_try_;
-  bool first_cycle_;
+  bool first_read_;
   bool estop_;
   bool reset_required_;
 
