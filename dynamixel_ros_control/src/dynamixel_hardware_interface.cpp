@@ -8,7 +8,7 @@
 namespace dynamixel_ros_control {
 
 DynamixelHardwareInterface::DynamixelHardwareInterface()
-  : connected_(false), first_cycle_(true), estop_(false), reset_required_(false), time_sync_joint_idx_(0)
+  : connected_(false), first_read_(true), estop_(false), reset_required_(false), time_sync_joint_idx_(0)
 {}
 
 DynamixelHardwareInterface::~DynamixelHardwareInterface()
@@ -24,7 +24,7 @@ bool DynamixelHardwareInterface::init(ros::NodeHandle& root_nh, ros::NodeHandle 
 {
   nh_ = root_nh;
   pnh_ = robot_hw_nh;
-  first_cycle_ = true;
+  first_read_ = true;
 
   // Load Parameters
   pnh_.param<bool>("debug", debug_, false);
@@ -206,7 +206,7 @@ bool DynamixelHardwareInterface::connect()
   reset_required_ = true;
 
   connected_ = true;
-  first_cycle_ = true;
+  first_read_ = true;
   return true;
 }
 
@@ -216,46 +216,55 @@ void DynamixelHardwareInterface::read(const ros::Time& time, const ros::Duration
   if (!connected_ && last_connect_try_ + ros::Duration(1) < ros::Time::now()) {
     if (!connect()) {
       ROS_WARN_STREAM("Failed to connect. Retrying in 1s..");
+      return;
     }
   }
-  if (connected_) {
-    if (read_manager_.isOk()) {
-      read_manager_.read();
-      if (time_sync_available_) {
-        joints_[time_sync_joint_idx_].dynamixel.translateTime(time);
-      }
-      readRegisterValues();
-      if (first_cycle_) {
-        first_cycle_ = false;
-        for (Joint& joint: joints_) {
-          joint.goal_state.position = joint.current_state.position;
-        }
-      }
-    } else {
-      ROS_ERROR_STREAM("Read manager lost connection");
-      connected_ = false;
-    }
 
+  if (!connected_) {
+    return;
+  }
+
+  if (!read_manager_.isOk()) {
+    ROS_ERROR_STREAM("Read manager lost connection");
+    connected_ = false;
+    return;
+  }
+
+  if (!read_manager_.read()) {
+    return;
+  }
+
+  if (time_sync_available_) {
+    joints_[time_sync_joint_idx_].dynamixel.translateTime(time);
+  }
+  readRegisterValues();
+  if (first_read_) {
+    first_read_ = false;
+    for (Joint& joint: joints_) {
+      joint.goal_state.position = joint.current_state.position;
+    }
   }
 }
 
 void DynamixelHardwareInterface::write(const ros::Time& time, const ros::Duration& period)
 {
-  if (connected_) {
-    if (control_write_manager_.isOk()) {
-      if (estop_) {
-        for (Joint& joint: joints_) {
-          joint.goal_state.position = joint.estop_position;
-          joint.goal_state.velocity = 0;
-          joint.goal_state.effort = 0;
-        }
-      }
-      control_write_manager_.write();
-    } else {
-      ROS_ERROR_STREAM("Write manager lost connection");
-      connected_ = false;
+  if (!connected_ || first_read_) {
+    return;
+  }
+  if (!control_write_manager_.isOk()) {
+    ROS_ERROR_STREAM("Write manager lost connection");
+    connected_ = false;
+    return;
+  }
+
+  if (estop_) {
+    for (Joint& joint: joints_) {
+      joint.goal_state.position = joint.estop_position;
+      joint.goal_state.velocity = 0;
+      joint.goal_state.effort = 0;
     }
   }
+  control_write_manager_.write();
 }
 
 ros::Time DynamixelHardwareInterface::getLastReadTime() const
@@ -508,6 +517,7 @@ bool DynamixelHardwareInterface::rebootCb(std_srvs::EmptyRequest& request, std_s
   }
   // reset controllers
   reset_required_ = true;
+  first_read_ = true;
   return true;
 }
 
@@ -553,7 +563,7 @@ void DynamixelHardwareInterface::estopCb(const std_msgs::BoolConstPtr& bool_ptr)
 
 bool DynamixelHardwareInterface::resetRequired() const
 {
-  return reset_required_;
+  return reset_required_ && !first_read_;
 }
 
 void DynamixelHardwareInterface::clearResetRequired()

@@ -56,7 +56,9 @@ int main(int argc, char** argv)
       first_update = false;
     } else {
       cm.update(read_time, read_period, hw.resetRequired());
-      hw.clearResetRequired();
+      if (hw.resetRequired()) {
+        hw.clearResetRequired();
+      }
     }
     hw.write(read_time, read_period);
     if (!rate.sleep()) {
