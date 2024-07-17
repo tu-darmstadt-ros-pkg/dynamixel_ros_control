@@ -517,6 +517,7 @@ bool DynamixelHardwareInterface::rebootCb(std_srvs::EmptyRequest& request, std_s
   }
   // reset controllers
   reset_required_ = true;
+  first_read_ = true;
   return true;
 }
 
