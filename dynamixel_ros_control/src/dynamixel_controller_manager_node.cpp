@@ -1,4 +1,4 @@
-#include <dynamixel_ros_control/dynamixel_hardware_interface.h>
+#include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
 #include <ros/callback_queue.h>
 #include <controller_manager/controller_manager.h>
 

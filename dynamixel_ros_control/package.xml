@@ -1,30 +1,33 @@
 <?xml version="1.0"?>
-<package format="2">
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
   <name>dynamixel_ros_control</name>
   <version>0.0.0</version>
   <description>Provides a hardware interface for dynamixel motors.</description>
 
   <maintainer email="oehler@sim.tu-darmstadt.de">Martin Oehler</maintainer>
-
-
-  <!-- One license tag required, multiple allowed, one license per tag -->
-  <!-- Commonly used license strings: -->
-  <!--   BSD, MIT, Boost Software License, GPLv2, GPLv3, LGPLv2.1, LGPLv3 -->
-  <license>TODO</license>
-
-
   <author email="oehler@sim.tu-darmstadt.de">Martin Oehler</author>
 
-  <buildtool_depend>catkin</buildtool_depend>
-  <depend>controller_manager</depend>
-  <depend>cuckoo_time_translator</depend>
-  <depend>dynamixel_sdk</depend>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>rclcpp_lifecycle</depend>
+  <depend>lifecycle_msgs</depend>
   <depend>hardware_interface</depend>
-  <depend>yaml-cpp</depend>
-  <depend>dynamixel_ros_control_msgs</depend>
+  <depend>pluginlib</depend>
+  <depend>dynamixel_sdk</depend>
+  <depend>yaml_cpp_vendor</depend>
+<!--   <depend>dynamixel_ros_control_msgs</depend> -->
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
+  <depend>ament_index_cpp</depend>
+
+  <test_depend>ament_lint_auto</test_depend>
+  <test_depend>ament_lint_common</test_depend>
 
   <export>
+    <build_type>ament_cmake</build_type>
   </export>
 </package>

@@ -1,0 +1,9 @@
+<library path="dynamixel_ros_control">
+    <class name="dynamixel_ros_control/DynamixelHardwareInterface"
+           type="dynamixel_ros_control::DynamixelHardwareInterface"
+           base_class_type="hardware_interface::SystemInterface">
+        <description>
+            ros2 system interface for dynamixel servo motors.
+        </description>
+    </class>
+</library>

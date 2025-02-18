@@ -1,4 +1,4 @@
-#include <dynamixel_ros_control/joint.h>
+#include <dynamixel_ros_control/joint.hpp>
 
 #include <utility>
 

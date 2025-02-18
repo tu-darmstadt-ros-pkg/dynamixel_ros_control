@@ -1,73 +1,40 @@
-cmake_minimum_required(VERSION 3.0.2)
+cmake_minimum_required(VERSION 3.8)
 project(dynamixel_ros_control)
 
-## Compile as C++11, supported in ROS Kinetic and newer
-add_compile_options(-std=c++11)
+# Default to C++17
+if (NOT CMAKE_CXX_STANDARD)
+  set(CMAKE_CXX_STANDARD 17)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif ()
 
-## Find catkin macros and libraries
-find_package(catkin REQUIRED COMPONENTS
-  controller_manager
-  cuckoo_time_translator
-  dynamixel_sdk
-  hardware_interface
-  dynamixel_ros_control_msgs
-  std_msgs
-  std_srvs
-)
+if (CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+  add_compile_options(-Wall -Wextra -Wpedantic)
+endif ()
 
-find_package(yaml-cpp)
-
-################################################
-## Declare ROS dynamic reconfigure parameters ##
-################################################
-
-## To declare and build dynamic reconfigure parameters within this
-## package, follow these steps:
-## * In the file package.xml:
-##   * add a build_depend and a exec_depend tag for "dynamic_reconfigure"
-## * In this file (CMakeLists.txt):
-##   * add "dynamic_reconfigure" to
-##     find_package(catkin REQUIRED COMPONENTS ...)
-##   * uncomment the "generate_dynamic_reconfigure_options" section below
-##     and list every .cfg file to be processed
-
-## Generate dynamic reconfigure parameters in the 'cfg' folder
-# generate_dynamic_reconfigure_options(
-#   cfg/DynReconf1.cfg
-#   cfg/DynReconf2.cfg
-# )
-
-###################################
-## catkin specific configuration ##
-###################################
-catkin_package(
-  INCLUDE_DIRS include
-  LIBRARIES dynamixel_ros_control
-  CATKIN_DEPENDS controller_manager cuckoo_time_translator dynamixel_sdk hardware_interface dynamixel_ros_control_msgs std_msgs
-#  DEPENDS system_lib
-)
-
-###########
-## Build ##
-###########
-
-## Specify additional locations of header files
-include_directories(
-  include
-  ${catkin_INCLUDE_DIRS}
-  ${YAML_CPP_INCLUDE_DIRS}
-)
+# Find dependencies
+find_package(ament_cmake REQUIRED)
+find_package(rclcpp REQUIRED)
+find_package(rclcpp_lifecycle REQUIRED)
+find_package(lifecycle_msgs REQUIRED)
+find_package(hardware_interface REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(dynamixel_sdk REQUIRED)
+find_package(yaml-cpp REQUIRED)
+#find_package(dynamixel_ros_control_msgs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 set(HEADERS
-  include/${PROJECT_NAME}/common.h
-  include/${PROJECT_NAME}/joint.h
-  include/${PROJECT_NAME}/dynamixel.h
-  include/${PROJECT_NAME}/control_table.h
-  include/${PROJECT_NAME}/control_table_item.h
-  include/${PROJECT_NAME}/dynamixel_driver.h
-  include/${PROJECT_NAME}/dynamixel_hardware_interface.h
-  include/${PROJECT_NAME}/sync_read_manager.h
-  include/${PROJECT_NAME}/sync_write_manager.h
+  include/${PROJECT_NAME}/common.hpp
+  include/${PROJECT_NAME}/joint.hpp
+  include/${PROJECT_NAME}/dynamixel.hpp
+  include/${PROJECT_NAME}/control_table.hpp
+  include/${PROJECT_NAME}/control_table_item.hpp
+  include/${PROJECT_NAME}/dynamixel_driver.hpp
+  include/${PROJECT_NAME}/dynamixel_hardware_interface.hpp
+  include/${PROJECT_NAME}/sync_read_manager.hpp
+  include/${PROJECT_NAME}/sync_write_manager.hpp
 )
 
 set(SOURCES
@@ -81,40 +48,23 @@ set(SOURCES
   src/sync_read_manager.cpp
   src/sync_write_manager.cpp
 )
+include_directories(include)
 
-## Declare a C++ library
-add_library(${PROJECT_NAME} ${HEADERS} ${SOURCES})
-add_dependencies(${PROJECT_NAME} ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${YAML_CPP_LIBRARIES})
+add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
+target_link_libraries(${PROJECT_NAME} PUBLIC yaml-cpp)
+ament_target_dependencies(${PROJECT_NAME} PUBLIC rclcpp rclcpp_lifecycle lifecycle_msgs hardware_interface pluginlib
+    dynamixel_sdk yaml-cpp std_msgs std_srvs ament_index_cpp)
 
-## Declare a C++ executable
-add_executable(dynamixel_controller_manager_node src/dynamixel_controller_manager_node.cpp)
-add_dependencies(dynamixel_controller_manager_node ${${PROJECT_NAME}_EXPORTED_TARGETS} ${catkin_EXPORTED_TARGETS})
-target_link_libraries(dynamixel_controller_manager_node ${PROJECT_NAME})
+pluginlib_export_plugin_description_file(hardware_interface dynamixel_ros_control.xml)
 
-#############
-## Install ##
-#############
+# Install library and include folder
+install(TARGETS ${PROJECT_NAME} EXPORT ${PROJECT_NAME}-targets LIBRARY DESTINATION lib)
+install(DIRECTORY include/ DESTINATION include)
 
-# all install targets should use catkin DESTINATION variables
-# See http://ros.org/doc/api/catkin/html/adv_user_guide/variables.html
-
-
-## Mark executables and/or libraries for installation
-install(TARGETS ${PROJECT_NAME} dynamixel_controller_manager_node
-  ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-  RUNTIME DESTINATION ${CATKIN_PACKAGE_BIN_DESTINATION}
+# Install directories
+install(DIRECTORY launch config devices
+  DESTINATION share/${PROJECT_NAME}
 )
 
-## Mark cpp header files for installation
-install(DIRECTORY include/${PROJECT_NAME}/
-  DESTINATION ${CATKIN_PACKAGE_INCLUDE_DESTINATION}
-  FILES_MATCHING PATTERN "*.h"
-  PATTERN ".svn" EXCLUDE
-)
-
-install(DIRECTORY devices launch
-  DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-)
+ament_package()
 

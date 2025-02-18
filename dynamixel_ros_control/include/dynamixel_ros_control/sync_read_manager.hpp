@@ -1,8 +1,8 @@
 #ifndef DYNAMIXEL_ROS_CONTROL_SYNC_READ_MANAGER_H
 #define DYNAMIXEL_ROS_CONTROL_SYNC_READ_MANAGER_H
 
-#include <dynamixel_ros_control/dynamixel_driver.h>
-#include <dynamixel_ros_control/dynamixel.h>
+#include <dynamixel_ros_control/dynamixel_driver.hpp>
+#include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_sdk/group_sync_read.h>
 
 namespace dynamixel_ros_control {

@@ -1,9 +1,8 @@
 #ifndef DYNAMIXEL_ROS_CONTROL_JOINT_H
 #define DYNAMIXEL_ROS_CONTROL_JOINT_H
 
-#include <dynamixel_ros_control/dynamixel.h>
-
-#include <dynamixel_ros_control/dynamixel_driver.h>
+#include <dynamixel_ros_control/dynamixel.hpp>
+#include <dynamixel_ros_control/dynamixel_driver.hpp>
 
 namespace dynamixel_ros_control {
 

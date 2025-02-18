@@ -1,4 +1,4 @@
-#include <dynamixel_ros_control/sync_write_manager.h>
+#include <dynamixel_ros_control/sync_write_manager.hpp>
 
 namespace dynamixel_ros_control {
 

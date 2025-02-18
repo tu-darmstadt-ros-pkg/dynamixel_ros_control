@@ -1,7 +1,7 @@
-#include <dynamixel_ros_control/control_table_item.h>
+#include <dynamixel_ros_control/control_table_item.hpp>
 
 #include <boost/algorithm/string.hpp>
-#include <dynamixel_ros_control/common.h>
+#include <dynamixel_ros_control/common.hpp>
 
 namespace dynamixel_ros_control {
 
