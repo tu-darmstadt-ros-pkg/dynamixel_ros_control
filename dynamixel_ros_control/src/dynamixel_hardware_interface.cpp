@@ -1,3 +1,5 @@
+#include "dynamixel_ros_control/common.hpp"
+
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
 
 namespace dynamixel_ros_control {
@@ -6,19 +8,19 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hardware_info)
 {
   // Load hardware configuration
-  auto result = SystemInterface::on_init(hardware_info);
+  const auto result = SystemInterface::on_init(hardware_info);
   if (result != CallbackReturn::SUCCESS) {
     return result;
   }
 
   // Load parameters
   std::string port_name;
-  if (!getParameter<std::string>("port_name", port_name)) {
+  if (!getParameter<std::string>(info_.hardware_parameters, "port_name", port_name)) {
     return hardware_interface::CallbackReturn::ERROR;
   }
 
   int baud_rate;
-  if (!getParameter<int>("baud_rate", baud_rate)) {
+  if (!getParameter<int>(info_.hardware_parameters, "baud_rate", baud_rate)) {
     return hardware_interface::CallbackReturn::ERROR;
   }
 
@@ -29,9 +31,15 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   }
 
   // Load joints
-
-  // Connect
-
+  joints_.reserve(info_.joints.size());
+  for (const auto& joint_info: info_.joints) {
+    Joint joint;
+    if (!joint.init(driver_, joint_info)) {
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+    joints_.emplace_back(std::move(joint));
+  }
+  
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -89,60 +97,6 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
                                                                   const rclcpp::Duration& period)
 {
   return hardware_interface::return_type::OK;
-}
-
-bool DynamixelHardwareInterface::getParameterAsString(const std::string& param_name, std::string& value) const
-{
-  try {
-    value = info_.hardware_parameters.at(param_name);
-  }
-  catch (const std::out_of_range& e) {
-    RCLCPP_ERROR_STREAM(get_logger(), "Parameter '" << param_name << "' does not exist");
-    return false;
-  }
-  return true;
-}
-
-template <>
-bool DynamixelHardwareInterface::getParameter<double>(const std::string& param_name, double& value)
-{
-  std::string parameter_string;
-  if (!getParameterAsString(param_name, parameter_string)) {
-    return false;
-  }
-
-  try {
-    value = std::stod(parameter_string);
-  }
-  catch (const std::exception& e) {
-    RCLCPP_ERROR_STREAM(get_logger(), "Parameter '" << param_name << "' is not a double.");
-    return false;
-  }
-  return true;
-}
-
-template <>
-bool DynamixelHardwareInterface::getParameter<int>(const std::string& param_name, int& value)
-{
-  std::string parameter_string;
-  if (!getParameterAsString(param_name, parameter_string)) {
-    return false;
-  }
-
-  try {
-    value = std::stoi(parameter_string);
-  }
-  catch (const std::exception& e) {
-    RCLCPP_ERROR_STREAM(get_logger(), "Parameter '" << param_name << "' is not an integer.");
-    return false;
-  }
-  return true;
-}
-
-template <>
-bool DynamixelHardwareInterface::getParameter<std::string>(const std::string& param_name, std::string& value)
-{
-  return getParameterAsString(param_name, value);
 }
 
 }  // namespace dynamixel_ros_control

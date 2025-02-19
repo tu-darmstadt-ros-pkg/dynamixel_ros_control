@@ -1,42 +1,21 @@
-#include <dynamixel_ros_control/joint.hpp>
+#include "dynamixel_ros_control/common.hpp"
 
-#include <utility>
+#include <dynamixel_ros_control/joint.hpp>
 
 namespace dynamixel_ros_control {
 
-Joint::Joint(std::string joint_name, dynamixel_ros_control::DynamixelDriver& driver)
-  : name(std::move(joint_name)), dynamixel(driver)
-{}
-
-Joint::Joint(std::string _name, uint8_t id, DynamixelDriver& driver)
-  : name(std::move(_name)),
-    dynamixel(id, driver),
-    mounting_offset(0.0),
-    offset(0.0),
-    control_mode(POSITION)
-{}
-
-bool Joint::initFromNh(const ros::NodeHandle& nh)
+bool Joint::init(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info)
 {
-  nh_ = nh;
-  nh_.param("mounting_offset", mounting_offset, 0.0);
-  nh_.param("offset", offset, 0.0);
-
-  // Local control mode can override default control mode
-  std::string control_mode_str;
-  if (nh.getParam("control_mode", control_mode_str)) {
-    try {
-      setControlMode(stringToControlMode(control_mode_str));
-    } catch(const std::invalid_argument& e) {
-      ROS_ERROR_STREAM(e.what() << std::endl << "Using default control mode.");
-    }
+  name = info.name;
+  getParameter(info.parameters, "mounting_offset", mounting_offset, 0.0);
+  getParameter(info.parameters, "offset", offset, 0.0);
+  uint8_t id;
+  if (!getParameter(info.parameters, "id", id)) {
+    return false;
   }
-  return true;
-}
+  dynamixel = std::make_shared<Dynamixel>(id, driver);
 
-bool Joint::initDxl()
-{
-  return dynamixel.initFromNh(nh_);
+  return true;
 }
 
 ControlMode Joint::getControlMode() const
@@ -52,7 +31,8 @@ bool Joint::setControlMode(const ControlMode& value)
 
 bool Joint::isPositionControlled() const
 {
-  return getControlMode() == POSITION || getControlMode() == EXTENDED_POSITION || getControlMode() == CURRENT_BASED_POSITION;
+  return getControlMode() == POSITION || getControlMode() == EXTENDED_POSITION ||
+         getControlMode() == CURRENT_BASED_POSITION;
 }
 
 bool Joint::isVelocityControlled() const
@@ -65,4 +45,4 @@ bool Joint::isEffortControlled() const
   return getControlMode() == CURRENT;
 }
 
-}
+}  // namespace dynamixel_ros_control

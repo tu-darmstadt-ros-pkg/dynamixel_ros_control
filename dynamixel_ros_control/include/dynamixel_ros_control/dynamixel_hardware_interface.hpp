@@ -59,10 +59,6 @@ private:
   bool setControlMode();
   void setTorque();
 
-  template <typename T>
-  bool getParameter(const std::string& param_name, T& value);
-  bool getParameterAsString(const std::string& param_name, std::string& value) const;
-
   std::vector<Joint> joints_;
   DynamixelDriver driver_;
 

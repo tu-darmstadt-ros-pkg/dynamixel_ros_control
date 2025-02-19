@@ -3,36 +3,38 @@
 
 #include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
+#include <hardware_interface/hardware_info.hpp>
 
 namespace dynamixel_ros_control {
 
 struct State
 {
-  State() : position(0), velocity(0), effort(0), torque(false) {}
+  State()
+      : position(0), velocity(0), effort(0), torque(false)
+  {}
   double position;
   double velocity;
   double effort;
   bool torque;
 };
 
-class Joint {
+class Joint
+{
 public:
-  Joint(std::string joint_name, dynamixel_ros_control::DynamixelDriver& driver);
-  Joint(std::string _name, uint8_t id, dynamixel_ros_control::DynamixelDriver& driver);
+  Joint() = default;
 
-  bool initFromNh(const ros::NodeHandle& nh);
-  bool initDxl();
+  bool init(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info);
 
   std::string name;
-  Dynamixel dynamixel;
+  std::shared_ptr<Dynamixel> dynamixel;
 
   State current_state;
   State goal_state;
 
-  double mounting_offset;
-  double offset;
+  double mounting_offset{0.0};
+  double offset{0.0};
 
-  double estop_position;
+  double estop_position{0.0};
 
   ControlMode getControlMode() const;
   bool setControlMode(const ControlMode& value);
@@ -42,11 +44,9 @@ public:
   bool isEffortControlled() const;
 
 private:
-  ros::NodeHandle nh_;
   ControlMode control_mode;
-
 };
 
-}
+}  // namespace dynamixel_ros_control
 
 #endif
