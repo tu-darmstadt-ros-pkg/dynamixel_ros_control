@@ -37,9 +37,16 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     if (!joint.init(driver_, joint_info)) {
       return hardware_interface::CallbackReturn::ERROR;
     }
+    std::stringstream ss;
+    ss << "Loaded dynamixel:" << std::endl;
+    ss << "-- name: " << joint.name << std::endl;
+    ss << "-- id: " << static_cast<int>(joint.dynamixel->getId()) << std::endl;
+    ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
+    ss << "-- offset: " << joint.offset << std::endl;
+    RCLCPP_DEBUG_STREAM(get_logger(), ss.str());
     joints_.emplace_back(std::move(joint));
   }
-  
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 

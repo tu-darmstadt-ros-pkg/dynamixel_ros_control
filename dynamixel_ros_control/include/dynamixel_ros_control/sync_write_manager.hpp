@@ -4,43 +4,42 @@
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_sdk/group_sync_write.h>
+#include <rclcpp/rclcpp.hpp>
 
 namespace dynamixel_ros_control {
 
 struct WriteEntry {
-  WriteEntry()
-    : dxl(nullptr), register_name(""), d_value(nullptr), b_value(nullptr), offset(0.0){}
-  Dynamixel* dxl;
+  Dynamixel* dxl{nullptr};
   std::string register_name;
-  double* d_value;
-  bool* b_value;
-  double offset;
+  double* d_value{nullptr};
+  bool* b_value{nullptr};
+  double offset{0.0};
 };
 
 class SyncWriteManager {
 public:
-  SyncWriteManager();
-  void addRegister(Dynamixel& dxl, std::string register_name, double& value, double offset = 0.0);
-  void addRegister(Dynamixel& dxl, std::string register_name, bool& value);
+  SyncWriteManager() = default;
+  void addRegister(Dynamixel& dxl, const std::string& register_name, double& value, double offset = 0.0);
+  void addRegister(Dynamixel& dxl, const std::string& register_name, bool& value);
 
   bool init(DynamixelDriver& driver);
   bool write();
 
-  bool isOk() const;
+  [[nodiscard]] bool isOk() const;
   void setErrorThreshold(unsigned int threshold);
 private:
-  std::vector<WriteEntry>::iterator addEntry(Dynamixel& dxl, std::string register_name);
+  std::vector<WriteEntry>::iterator addEntry(Dynamixel& dxl, const std::string& register_name);
   std::vector<WriteEntry> write_entries_;
 
-  unsigned int indirect_address_index_;
-  uint16_t indirect_data_address_;
-  uint8_t data_length_;
+  unsigned int indirect_address_index_{0};
+  uint16_t indirect_data_address_{0};
+  uint8_t data_length_{0};
 
-  DynamixelDriver* driver_;
-  dynamixel::GroupSyncWrite* sync_write_;
+  DynamixelDriver* driver_{nullptr};
+  dynamixel::GroupSyncWrite* sync_write_{nullptr};
 
-  unsigned int subsequent_error_count_;
-  unsigned int error_threshold_;
+  unsigned int subsequent_error_count_{0};
+  unsigned int error_threshold_{25};
 };
 
 }

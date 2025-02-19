@@ -1,8 +1,8 @@
 #ifndef DYNAMIXEL_ROS_CONTROL_CONTROL_TABLE_ITEM_H
 #define DYNAMIXEL_ROS_CONTROL_CONTROL_TABLE_ITEM_H
 
+#include <cstdint>
 #include <string>
-#include <ros/ros.h>
 
 namespace dynamixel_ros_control {
 
@@ -16,6 +16,9 @@ enum MemoryType {
   RAM
 };
 
+bool stringToAccessType(const std::string& str, AccessType& access_type);
+bool stringToMemoryType(const std::string& str, MemoryType& memory_type);
+
 class ControlTableItem {
 public:
   ControlTableItem(std::string name, uint16_t address, uint8_t data_length,
@@ -23,19 +26,18 @@ public:
   ControlTableItem();
   bool loadFromString(std::string control_table_string);
 
-  std::string name() const;
-  uint16_t address() const;
-  uint8_t data_length() const;
-  AccessType access_type() const;
-  MemoryType memory_type() const;
-  std::string unit() const;
-  double dxlValueToUnitRatio() const;
+  [[nodiscard]] std::string name() const;
+  [[nodiscard]] uint16_t address() const;
+  [[nodiscard]] uint8_t data_length() const;
+  [[nodiscard]] AccessType access_type() const;
+  [[nodiscard]] MemoryType memory_type() const;
+  [[nodiscard]] std::string unit() const;
+  [[nodiscard]] double dxlValueToUnitRatio() const;
 
   void setDxlValueToUnitRatio(double dxl_value_to_unit_ratio);
 
 private:
-  bool stringToAccessType(const std::string& str, AccessType& access_type);
-  bool stringToMemoryType(const std::string& str, MemoryType& memory_type);
+
 
   std::string name_;
   uint16_t address_;

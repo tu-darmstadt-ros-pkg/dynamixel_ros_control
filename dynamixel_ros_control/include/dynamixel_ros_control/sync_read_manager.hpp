@@ -4,6 +4,7 @@
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_sdk/group_sync_read.h>
+#include <rclcpp/rclcpp.hpp>
 
 namespace dynamixel_ros_control {
 
@@ -31,7 +32,7 @@ struct ReadEntry {
 
 class SyncReadManager {
 public:
-  SyncReadManager();
+  SyncReadManager() = default;
   // TODO make template?
 
   /**
@@ -39,7 +40,6 @@ public:
    * @param dxl Pointer to dynamixel
    */
   void addDynamixel(Dynamixel* dxl);
-//  void addRegister(Dynamixel& dxl, std::string register_name, uint32_t* value);
   bool addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs, std::vector<double> offsets = {});
 
   /**
@@ -49,24 +49,24 @@ public:
    */
   bool init(DynamixelDriver& driver);
   bool read();
-  bool read(ros::Time& packet_receive_time);
+  bool read(rclcpp::Time& packet_receive_time);
 
-  bool isOk() const;
+  [[nodiscard]] bool isOk() const;
   void setErrorThreshold(unsigned int threshold);
 private:
-  dynamixel::GroupSyncRead* sync_read_;
+  dynamixel::GroupSyncRead* sync_read_{nullptr}; //TODO get right of raw pointers
 
-  DynamixelDriver* driver_;
+  DynamixelDriver* driver_{nullptr};
   std::set<Dynamixel*> dynamixels_;
 
   std::map<std::string, ReadEntry> read_entries_;
 
-  unsigned int indirect_address_index_;
-  uint16_t indirect_data_address_;
-  uint8_t total_data_length_;
+  unsigned int indirect_address_index_{0};
+  uint16_t indirect_data_address_{0};
+  uint8_t total_data_length_{0};
 
-  unsigned int subsequent_error_count_;
-  unsigned int error_threshold_;
+  unsigned int subsequent_error_count_{0};
+  unsigned int error_threshold_{25};
 };
 
 }
