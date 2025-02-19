@@ -15,15 +15,37 @@ namespace dynamixel_ros_control {
 class DynamixelHardwareInterface : public hardware_interface::SystemInterface
 {
 public:
+  /**
+   * Load all parameters from hardware info
+   * @param hardware_info
+   * @return
+   */
   CallbackReturn on_init(const hardware_interface::HardwareInfo& hardware_info) override;
-  CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
-  CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
+  /**
+   * Connect to hardware
+   * @param previous_state
+   * @return
+   */
+  CallbackReturn on_configure(const rclcpp_lifecycle::State& previous_state) override;
+
+  /**
+   * Do opposite of on_configure
+   * @param previous_state
+   * @return
+   */
+  CallbackReturn on_cleanup(const rclcpp_lifecycle::State& previous_state) override;
 
   std::vector<hardware_interface::StateInterface::ConstSharedPtr> on_export_state_interfaces() override;
   std::vector<hardware_interface::CommandInterface::SharedPtr> on_export_command_interfaces() override;
 
   hardware_interface::return_type perform_command_mode_switch(const std::vector<std::string>&,
-                                                              const std::vector<std::string>&) override;
+                                                            const std::vector<std::string>&) override;
+
+  CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
+  CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
+
+
+  CallbackReturn on_error(const rclcpp_lifecycle::State& previous_state) override;
 
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
@@ -36,6 +58,10 @@ private:
   bool loadDynamixels();
   bool setControlMode();
   void setTorque();
+
+  template <typename T>
+  bool getParameter(const std::string& param_name, T& value);
+  bool getParameterAsString(const std::string& param_name, std::string& value) const;
 
   std::vector<Joint> joints_;
   DynamixelDriver driver_;
