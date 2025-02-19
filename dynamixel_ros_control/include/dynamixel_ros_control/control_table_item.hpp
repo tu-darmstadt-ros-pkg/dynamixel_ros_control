@@ -6,12 +6,14 @@
 
 namespace dynamixel_ros_control {
 
-enum AccessType {
+enum AccessType
+{
   READ,
   READ_WRITE
 };
 
-enum MemoryType {
+enum MemoryType
+{
   EEPROM,
   RAM
 };
@@ -19,10 +21,11 @@ enum MemoryType {
 bool stringToAccessType(const std::string& str, AccessType& access_type);
 bool stringToMemoryType(const std::string& str, MemoryType& memory_type);
 
-class ControlTableItem {
+class ControlTableItem
+{
 public:
-  ControlTableItem(std::string name, uint16_t address, uint8_t data_length,
-                   AccessType access_type, MemoryType memory_type);
+  ControlTableItem(std::string name, uint16_t address, uint8_t data_length, AccessType access_type,
+                   MemoryType memory_type);
   ControlTableItem();
   bool loadFromString(std::string control_table_string);
 
@@ -37,8 +40,6 @@ public:
   void setDxlValueToUnitRatio(double dxl_value_to_unit_ratio);
 
 private:
-
-
   std::string name_;
   uint16_t address_;
   uint8_t data_length_;
@@ -48,6 +49,6 @@ private:
   double dxl_value_to_unit_ratio_;
 };
 
-}
+}  // namespace dynamixel_ros_control
 
 #endif

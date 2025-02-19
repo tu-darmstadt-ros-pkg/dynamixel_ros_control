@@ -39,11 +39,10 @@ public:
   std::vector<hardware_interface::CommandInterface::SharedPtr> on_export_command_interfaces() override;
 
   hardware_interface::return_type perform_command_mode_switch(const std::vector<std::string>&,
-                                                            const std::vector<std::string>&) override;
+                                                              const std::vector<std::string>&) override;
 
   CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;
-
 
   CallbackReturn on_error(const rclcpp_lifecycle::State& previous_state) override;
 
@@ -79,7 +78,6 @@ private:
 
   // ROS interface
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;
-
 };
 
 }  // namespace dynamixel_ros_control

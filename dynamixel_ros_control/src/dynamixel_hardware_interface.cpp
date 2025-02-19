@@ -32,7 +32,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // Load joints
   joints_.reserve(info_.joints.size());
-  for (const auto& joint_info: info_.joints) {
+  for (const auto& joint_info : info_.joints) {
     Joint joint;
     if (!joint.init(driver_, joint_info)) {
       return hardware_interface::CallbackReturn::ERROR;

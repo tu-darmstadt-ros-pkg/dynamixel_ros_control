@@ -12,7 +12,8 @@
 
 namespace dynamixel_ros_control {
 
-class DynamixelDriver {
+class DynamixelDriver
+{
 public:
   DynamixelDriver();
 
@@ -38,6 +39,7 @@ public:
 
   [[nodiscard]] std::string communicationErrorToString(int comm_result) const;
   [[nodiscard]] std::string packetErrorToString(uint8_t error) const;
+
 private:
   bool loadSeriesMapping();
   ControlTable* readControlTable(std::string series);
@@ -60,6 +62,6 @@ private:
   int baud_rate_;
 };
 
-}
+}  // namespace dynamixel_ros_control
 
 #endif

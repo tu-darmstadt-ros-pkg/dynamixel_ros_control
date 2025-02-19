@@ -8,7 +8,8 @@
 
 namespace dynamixel_ros_control {
 
-struct WriteEntry {
+struct WriteEntry
+{
   Dynamixel* dxl{nullptr};
   std::string register_name;
   double* d_value{nullptr};
@@ -16,7 +17,8 @@ struct WriteEntry {
   double offset{0.0};
 };
 
-class SyncWriteManager {
+class SyncWriteManager
+{
 public:
   SyncWriteManager() = default;
   void addRegister(Dynamixel& dxl, const std::string& register_name, double& value, double offset = 0.0);
@@ -27,6 +29,7 @@ public:
 
   [[nodiscard]] bool isOk() const;
   void setErrorThreshold(unsigned int threshold);
+
 private:
   std::vector<WriteEntry>::iterator addEntry(Dynamixel& dxl, const std::string& register_name);
   std::vector<WriteEntry> write_entries_;
@@ -42,6 +45,6 @@ private:
   unsigned int error_threshold_{25};
 };
 
-}
+}  // namespace dynamixel_ros_control
 
 #endif

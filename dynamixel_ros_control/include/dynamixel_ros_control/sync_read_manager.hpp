@@ -8,18 +8,26 @@
 
 namespace dynamixel_ros_control {
 
-struct DxlValue {
-  explicit DxlValue(double* _dvalue)  : dvalue(_dvalue), bvalue(nullptr), ivalue(nullptr) {}
-  explicit DxlValue(bool* _bvalue)    : dvalue(nullptr), bvalue(_bvalue), ivalue(nullptr) {}
-  explicit DxlValue(int32_t* _ivalue) : dvalue(nullptr), bvalue(nullptr), ivalue(_ivalue) {}
-  double *dvalue;
-  bool *bvalue;
-  int32_t *ivalue;
+struct DxlValue
+{
+  explicit DxlValue(double* _dvalue)
+      : dvalue(_dvalue), bvalue(nullptr), ivalue(nullptr)
+  {}
+  explicit DxlValue(bool* _bvalue)
+      : dvalue(nullptr), bvalue(_bvalue), ivalue(nullptr)
+  {}
+  explicit DxlValue(int32_t* _ivalue)
+      : dvalue(nullptr), bvalue(nullptr), ivalue(_ivalue)
+  {}
+  double* dvalue;
+  bool* bvalue;
+  int32_t* ivalue;
 };
 
 using DxlValueMappingList = std::vector<std::pair<Dynamixel*, DxlValue>>;
 
-struct ReadEntry {
+struct ReadEntry
+{
   std::string register_name;
 
   unsigned int indirect_index;
@@ -30,7 +38,8 @@ struct ReadEntry {
   std::vector<double> offsets;
 };
 
-class SyncReadManager {
+class SyncReadManager
+{
 public:
   SyncReadManager() = default;
   // TODO make template?
@@ -40,7 +49,8 @@ public:
    * @param dxl Pointer to dynamixel
    */
   void addDynamixel(Dynamixel* dxl);
-  bool addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs, std::vector<double> offsets = {});
+  bool addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs,
+                   std::vector<double> offsets = {});
 
   /**
    * @brief init To be called by dynamixel driver.
@@ -53,8 +63,9 @@ public:
 
   [[nodiscard]] bool isOk() const;
   void setErrorThreshold(unsigned int threshold);
+
 private:
-  dynamixel::GroupSyncRead* sync_read_{nullptr}; //TODO get right of raw pointers
+  dynamixel::GroupSyncRead* sync_read_{nullptr};  // TODO get right of raw pointers
 
   DynamixelDriver* driver_{nullptr};
   std::set<Dynamixel*> dynamixels_;
@@ -69,6 +80,6 @@ private:
   unsigned int error_threshold_{25};
 };
 
-}
+}  // namespace dynamixel_ros_control
 
 #endif

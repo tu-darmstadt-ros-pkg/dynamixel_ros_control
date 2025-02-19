@@ -29,13 +29,13 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   }
 
   bool first = true;
-  for (std::vector<WriteEntry>::value_type& entry: write_entries_) {
+  for (std::vector<WriteEntry>::value_type& entry : write_entries_) {
     uint16_t indirect_data_address;
     if (!entry.dxl->setIndirectAddress(indirect_address_index_, entry.register_name, indirect_data_address)) {
       // ROS_ERROR_STREAM("Failed to set indirect address mapping");
       return false;
     }
-    if (first) { // Save address of first dynamixel, should be the same for every one
+    if (first) {  // Save address of first dynamixel, should be the same for every one
       indirect_data_address_ = indirect_data_address;
       first = false;
     }
@@ -48,9 +48,8 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
     return false;
   }
 
-  std::vector<unsigned char> tmp(data_length_, 0); // Will not be used
-  for (std::vector<WriteEntry>::value_type& entry: write_entries_)
-  {
+  std::vector<unsigned char> tmp(data_length_, 0);  // Will not be used
+  for (std::vector<WriteEntry>::value_type& entry : write_entries_) {
     if (!sync_write_->addParam(entry.dxl->getId(), &tmp[0]))
       return false;
   }
@@ -60,15 +59,17 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
 bool SyncWriteManager::write()
 {
   // Convert values and update params
-  for (const std::vector<WriteEntry>::value_type& entry: write_entries_) {
+  for (const std::vector<WriteEntry>::value_type& entry : write_entries_) {
     int32_t dxl_value;
     if (entry.d_value != nullptr) {
       const double unit_value = *entry.d_value + entry.offset;
       dxl_value = entry.dxl->unitToDxlValue(entry.register_name, unit_value);
-      // ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value: " << dxl_value << ", converted: " << *entry.d_value);
+      // ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value:
+      // " << dxl_value << ", converted: " << *entry.d_value);
     } else if (entry.b_value != nullptr) {
       dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);
-      // ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value: " << dxl_value << ", converted: " << *entry.b_value);
+      // ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value:
+      // " << dxl_value << ", converted: " << *entry.b_value);
     }
     unsigned char* value_ptr;
     int16_t value_16bit;
@@ -111,7 +112,7 @@ void SyncWriteManager::setErrorThreshold(unsigned int threshold)
 std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, const std::string& register_name)
 {
   // Check if entry for dynamixel exists already
-  for (const std::vector<WriteEntry>::value_type& entry: write_entries_) {
+  for (const std::vector<WriteEntry>::value_type& entry : write_entries_) {
     if (dxl.getId() == entry.dxl->getId()) {
       // ROS_ERROR_STREAM("A write entry for dynamixel ID " << static_cast<int>(dxl.getId()) << " exists already.");
       return write_entries_.end();
@@ -122,7 +123,8 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, con
   uint8_t register_data_length;
   try {
     register_data_length = dxl.getItem(register_name).data_length();
-  } catch(const std::out_of_range&) {
+  }
+  catch (const std::out_of_range&) {
     // ROS_ERROR_STREAM("Failed to add write entry");
     return write_entries_.end();
   }
@@ -143,4 +145,4 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, con
   return std::prev(write_entries_.end());
 }
 
-}
+}  // namespace dynamixel_ros_control

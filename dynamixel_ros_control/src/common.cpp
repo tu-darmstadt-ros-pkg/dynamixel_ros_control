@@ -70,5 +70,4 @@ bool getParameter<std::string>(const ParameterMap& map, const std::string& param
   return true;
 }
 
-
-}
+}  // namespace dynamixel_ros_control

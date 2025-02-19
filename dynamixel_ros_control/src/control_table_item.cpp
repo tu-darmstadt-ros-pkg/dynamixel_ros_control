@@ -8,15 +8,17 @@ namespace dynamixel_ros_control {
 
 ControlTableItem::ControlTableItem(std::string name, const uint16_t address, const uint8_t data_length,
                                    const AccessType access_type, const MemoryType memory_type)
-  : name_(std::move(name)),
-    address_(address),
-    data_length_(data_length),
-    access_type_(access_type),
-    memory_type_(memory_type),
-    dxl_value_to_unit_ratio_(1.0) {}
+    : name_(std::move(name)),
+      address_(address),
+      data_length_(data_length),
+      access_type_(access_type),
+      memory_type_(memory_type),
+      dxl_value_to_unit_ratio_(1.0)
+{}
 
 ControlTableItem::ControlTableItem()
-  : ControlTableItem("unset", 0, 0, READ, RAM) {}
+    : ControlTableItem("unset", 0, 0, READ, RAM)
+{}
 
 bool ControlTableItem::loadFromString(std::string control_table_string)
 {
@@ -31,14 +33,16 @@ bool ControlTableItem::loadFromString(std::string control_table_string)
   // load data
   try {
     address_ = static_cast<uint16_t>(std::stoi(parts[0]));
-  } catch (const std::invalid_argument&) {
+  }
+  catch (const std::invalid_argument&) {
     // ROS_ERROR_STREAM("Failed to read address '" << parts[0] << "'.");
     return false;
   }
   name_ = parts[1];
   try {
     data_length_ = static_cast<uint8_t>(std::stoi(parts[2]));
-  } catch (const std::invalid_argument&) {
+  }
+  catch (const std::invalid_argument&) {
     // ROS_ERROR_STREAM("Failed to read data length '" << parts[2] << "'.");
     return false;
   }
@@ -84,7 +88,7 @@ double ControlTableItem::dxlValueToUnitRatio() const
 
 std::string ControlTableItem::unit() const
 {
-    return unit_;
+  return unit_;
 }
 
 uint8_t ControlTableItem::data_length() const
@@ -120,4 +124,4 @@ bool stringToMemoryType(const std::string& str, MemoryType& memory_type)
   return false;
 }
 
-}
+}  // namespace dynamixel_ros_control
