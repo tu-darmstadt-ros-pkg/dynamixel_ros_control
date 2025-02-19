@@ -13,7 +13,7 @@ DynamixelDriver::DynamixelDriver()
 bool DynamixelDriver::init(const std::string& port_name, const int baud_rate)
 {
   // Get package path
-  std::string package_share_directory = ament_index_cpp::get_package_share_directory(PACKAGE_NAME);
+  std::string package_share_directory = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
   if (package_path_.empty()) {
     // ROS_FATAL_STREAM("Could not find own package path.");
     return false;
@@ -71,7 +71,7 @@ ControlTable* DynamixelDriver::readControlTable(std::string series)
   ControlTable table;
   auto [entry, success] = series_to_control_table_.emplace(series, table);
   ControlTable* table_ptr = &entry->second;  // TODO avoid raw pointer!
-  std::string path = package_path_ + "/devices/models/" + series + ".yaml";
+  const std::string path = package_path_ + "/devices/models/" + series + ".yaml";
   if (!entry->second.loadFromYaml(path)) {
     // ROS_ERROR_STREAM("Failed to read control table for '" << series << "'");
     return nullptr;

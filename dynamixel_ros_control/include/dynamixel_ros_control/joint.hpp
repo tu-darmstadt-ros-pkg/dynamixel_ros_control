@@ -9,13 +9,10 @@ namespace dynamixel_ros_control {
 
 struct State
 {
-  State()
-      : position(0), velocity(0), effort(0), torque(false)
-  {}
-  double position;
-  double velocity;
-  double effort;
-  bool torque;
+  double position{0};
+  double velocity{0};
+  double effort{0};
+  bool torque{false};
 };
 
 class Joint

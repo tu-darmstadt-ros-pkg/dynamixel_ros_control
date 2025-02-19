@@ -6,7 +6,7 @@ Dynamixel::Dynamixel(const uint8_t id, DynamixelDriver& driver)
     : driver_(driver), id_(id)
 {}
 
-bool Dynamixel::loadControlTable()
+bool Dynamixel::connect()
 {
   if (!driver_.ping(id_, model_number_)) {
     // ROS_ERROR_STREAM("Failed to ping ID " << static_cast<int>(getId()));

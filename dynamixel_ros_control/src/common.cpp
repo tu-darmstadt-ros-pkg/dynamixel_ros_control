@@ -42,6 +42,28 @@ bool getParameter<int>(const ParameterMap& map, const std::string& param_name, i
 }
 
 template <>
+bool getParameter<bool>(const ParameterMap& map, const std::string& param_name, bool& value)
+{
+  std::string parameter_string;
+  if (!getParameter<std::string>(map, param_name, parameter_string)) {
+    return false;
+  }
+  std::transform(parameter_string.begin(), parameter_string.end(), parameter_string.begin(),
+      [](const unsigned char c){ return std::tolower(c); });
+
+  if (parameter_string == "true" || parameter_string == "1") {
+    value = true;
+    return true;
+  }
+  if (parameter_string == "false" || parameter_string == "0") {
+    value = false;
+    return true;
+  }
+  // RCLCPP_ERROR_STREAM(get_logger(), "Failed to convert parameter '" << param_name << "' to a bool.");
+  return false;
+}
+
+template <>
 bool getParameter<uint8_t>(const ParameterMap& map, const std::string& param_name, uint8_t& value)
 {
   int param_int;

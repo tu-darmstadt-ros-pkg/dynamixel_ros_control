@@ -24,6 +24,10 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     return hardware_interface::CallbackReturn::ERROR;
   }
 
+  getParameter(info_.hardware_parameters, "debug", debug_, false);
+  getParameter(info_.hardware_parameters, "torque_on_startup", torque_on_startup_, false);
+  getParameter(info_.hardware_parameters, "torque_off_on_shutdown", torque_off_on_shutdown_, false);
+
   // Initialize driver
   if (!driver_.init(port_name, baud_rate)) {
     RCLCPP_ERROR(get_logger(), "Failed to initialize driver");
@@ -53,6 +57,18 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous_state)
 {
+  if (!driver_.connect()) {
+    return hardware_interface::CallbackReturn::FAILURE;
+  }
+
+  for (Joint& j: joints_) {
+    if (!j.dynamixel->connect()) {
+      return hardware_interface::CallbackReturn::FAILURE;
+    }
+  }
+
+  // Set up read manager (depends on requested interfaces)
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -63,12 +79,15 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const 
 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
+  first_read_successful_ = false;
+  // turn on torque here?
   return SystemInterface::on_activate(previous_state);
 }
 
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
+  // disable torque here?
   return SystemInterface::on_deactivate(previous_state);
 }
 
@@ -86,6 +105,9 @@ hardware_interface::return_type
 DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::string>& basic_strings,
                                                         const std::vector<std::string>& vector)
 {
+  // Set up write manager
+
+  // write control mode
   return SystemInterface::perform_command_mode_switch(basic_strings, vector);
 }
 

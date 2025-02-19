@@ -54,7 +54,6 @@ private:
    * Load dynamixels from the configuration
    * @return success
    */
-  bool loadDynamixels();
   bool setControlMode();
   void setTorque();
 

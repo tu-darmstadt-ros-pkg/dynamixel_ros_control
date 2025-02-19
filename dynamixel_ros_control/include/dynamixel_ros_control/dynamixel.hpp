@@ -35,7 +35,11 @@ class Dynamixel
 public:
   Dynamixel(uint8_t id, DynamixelDriver& driver);
 
-  bool loadControlTable();
+  /**
+   * Ping motor and load control table
+   * @return
+   */
+  bool connect();
 
   [[nodiscard]] bool ping() const;
   bool reboot() const;
