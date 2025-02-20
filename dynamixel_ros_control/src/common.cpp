@@ -6,6 +6,19 @@
 namespace dynamixel_ros_control {
 
 template <>
+bool getParameter<std::string>(const ParameterMap& map, const std::string& param_name, std::string& value)
+{
+  try {
+    value = map.at(param_name);
+  }
+  catch (const std::out_of_range& e) {
+    // RCLCPP_ERROR_STREAM(get_logger(), "Parameter '" << param_name << "' does not exist");
+    return false;
+  }
+  return true;
+}
+
+template <>
 bool getParameter<double>(const ParameterMap& map, const std::string& param_name, double& value)
 {
   std::string parameter_string;
@@ -76,19 +89,6 @@ bool getParameter<uint8_t>(const ParameterMap& map, const std::string& param_nam
     return false;
   }
   value = param_int;
-  return true;
-}
-
-template <>
-bool getParameter<std::string>(const ParameterMap& map, const std::string& param_name, std::string& value)
-{
-  try {
-    value = map.at(param_name);
-  }
-  catch (const std::out_of_range& e) {
-    // RCLCPP_ERROR_STREAM(get_logger(), "Parameter '" << param_name << "' does not exist");
-    return false;
-  }
   return true;
 }
 
