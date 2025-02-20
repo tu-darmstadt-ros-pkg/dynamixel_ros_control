@@ -1,4 +1,5 @@
 #include "dynamixel_ros_control/common.hpp"
+#include "dynamixel_ros_control/log.hpp"
 
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
 
@@ -30,7 +31,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // Initialize driver
   if (!driver_.init(port_name, baud_rate)) {
-    RCLCPP_ERROR(get_logger(), "Failed to initialize driver");
+    DXL_LOG_ERROR("Failed to initialize driver");
     return hardware_interface::CallbackReturn::ERROR;
   }
 
@@ -38,7 +39,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   joints_.reserve(info_.joints.size());
   for (const auto& joint_info : info_.joints) {
     Joint joint;
-    if (!joint.init(driver_, joint_info)) {
+    if (!joint.loadConfiguration(driver_, joint_info)) {
       return hardware_interface::CallbackReturn::ERROR;
     }
     std::stringstream ss;
@@ -47,7 +48,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     ss << "-- id: " << static_cast<int>(joint.dynamixel->getId()) << std::endl;
     ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
     ss << "-- offset: " << joint.offset << std::endl;
-    RCLCPP_DEBUG_STREAM(get_logger(), ss.str());
+    DXL_LOG_DEBUG(ss.str());
     joints_.emplace_back(std::move(joint));
   }
 
@@ -88,12 +89,20 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
   // disable torque here?
+  // if (torque_off_on_shutdown_)
+  // {
+  //   std::cout << "Disabling torque on shutdown!" << std::endl;
+  //   if (connected_) setTorque(false);
+  // }
   return SystemInterface::on_deactivate(previous_state);
 }
 
 std::vector<hardware_interface::StateInterface::ConstSharedPtr> DynamixelHardwareInterface::on_export_state_interfaces()
 {
-  return SystemInterface::on_export_state_interfaces();
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_export_state_interfaces");
+  std::vector<hardware_interface::StateInterface::ConstSharedPtr> state_interfaces;
+
+  return state_interfaces;
 }
 
 std::vector<hardware_interface::CommandInterface::SharedPtr> DynamixelHardwareInterface::on_export_command_interfaces()

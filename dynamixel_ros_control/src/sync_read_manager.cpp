@@ -1,3 +1,5 @@
+#include "dynamixel_ros_control/log.hpp"
+
 #include <dynamixel_ros_control/sync_read_manager.hpp>
 
 namespace dynamixel_ros_control {
@@ -6,7 +8,7 @@ void SyncReadManager::addDynamixel(Dynamixel* dxl)
 {
   std::pair<std::set<Dynamixel*>::iterator, bool> result = dynamixels_.emplace(dxl);
   if (!result.second) {
-    // ROS_WARN_STREAM("Already contained dynamixel with id " << dxl->getId());
+    DXL_LOG_WARN("Already contained dynamixel with id " << dxl->getId());
   }
 }
 
@@ -14,7 +16,7 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
                                   std::vector<double> offsets)
 {
   if (read_entries_.find(register_name) != read_entries_.end()) {
-    // ROS_ERROR_STREAM("Register '" << register_name << "' has already been added.");
+    DXL_LOG_ERROR("Register '" << register_name << "' has already been added.");
     return false;
   }
 
@@ -23,15 +25,17 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
     offsets.resize(dynamixels_.size(), 0.0);
   } else {
     if (dxl_value_pairs.size() != offsets.size()) {
-      // ROS_ERROR("Size of offsets (%lu) does not match number of Dynamixel-Value pairs (%lu)", dxl_value_pairs.size(), offsets.size());
+      DXL_LOG_ERROR("Size of offsets (" << dxl_value_pairs.size()
+                                        << ") does not match number of Dynamixel-Value pairs (" << offsets.size()
+                                        << ")");
       return false;
     }
   }
 
   if (dxl_value_pairs.size() != dynamixels_.size()) {
-    // ROS_ERROR("Number of Dynamixel-Value pairs (%lu) does not match number of dynamixels (%lu). "
-    //           "Make sure to add all dynamixels before adding registers to the SyncReadManager.",
-    //           dxl_value_pairs.size(), dynamixels_.size());
+    DXL_LOG_ERROR("Number of Dynamixel-Value pairs ("
+                  << dxl_value_pairs.size() << ") does not match number of dynamixels (" << dynamixels_.size()
+                  << "). Make sure to add all dynamixels before adding registers to the SyncReadManager.");
     return false;
   }
 
@@ -41,7 +45,7 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
 
   for (const auto& [dynamixel, value] : dxl_value_pairs) {
     if (dynamixels_.find(dynamixel) == dynamixels_.end()) {
-      // ROS_ERROR_STREAM("Dynamixel with id " << dxl_value_pair.first->getId() << " is unknown to the SyncReadManager.");
+      DXL_LOG_ERROR("Dynamixel with id " << dynamixel->getId() << " is unknown to the SyncReadManager.");
       return false;
     }
   }
@@ -56,8 +60,8 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
       register_data_length = length;
     } else {
       if (register_data_length != length) {
-        // ROS_ERROR_STREAM("Length mismatch for register '" << register_name << "'. "
-        //                  "ID " << dxl->getId() << " wants size " << length << ", current is " << register_data_length << ".");
+        DXL_LOG_ERROR("Length mismatch for register '" << register_name << "'. ID " << dxl->getId() << " wants size "
+                                                       << length << ", current is " << register_data_length << ".");
         subsequent_error_count_++;
         return false;
       }
@@ -80,7 +84,7 @@ bool SyncReadManager::init(DynamixelDriver& driver)
 
   // Request indirect address space from dynamixel_driver
   if (!driver.requestIndirectAddresses(total_data_length_, indirect_address_index_)) {
-    // ROS_ERROR_STREAM("Failed to aquire indirect addresses for register with data length of " << total_data_length_ << ".");
+    DXL_LOG_ERROR("Failed to aquire indirect addresses for register with data length of " << total_data_length_ << ".");
     return false;
   }
 
@@ -95,7 +99,7 @@ bool SyncReadManager::init(DynamixelDriver& driver)
     for (auto& [dxl, value] : read_kv.second.dxl_value_pairs) {
       uint16_t indirect_data_address;
       if (!dxl->setIndirectAddress(current_indirect_address_index, register_name, indirect_data_address)) {
-        // ROS_ERROR_STREAM("Failed to set indirect address mapping");
+        DXL_LOG_ERROR("Failed to set indirect address mapping");
         return false;
       }
       if (first_register) {
@@ -113,7 +117,7 @@ bool SyncReadManager::init(DynamixelDriver& driver)
   // Create sync read group
   sync_read_ = driver.setSyncRead(indirect_data_address_, total_data_length_);
   if (!sync_read_) {
-    // ROS_ERROR_STREAM("Failed to initialize GroupSyncRead.");
+    DXL_LOG_ERROR("Failed to initialize GroupSyncRead.");
     return false;
   }
 
@@ -136,7 +140,7 @@ bool SyncReadManager::read(rclcpp::Time& packet_receive_time)
   packet_receive_time = rclcpp::Clock().now();  // We do not care about simulated time
 
   if (dxl_comm_result != COMM_SUCCESS) {
-    // ROS_ERROR_STREAM("Sync Read failed with error code: " << driver_->communicationErrorToString(dxl_comm_result));
+    DXL_LOG_ERROR("Sync Read failed with error code: " << driver_->communicationErrorToString(dxl_comm_result));
     subsequent_error_count_++;
     return false;
   }
@@ -158,7 +162,7 @@ bool SyncReadManager::read(rclcpp::Time& packet_receive_time)
         } else if (register_data_length == 1) {
           dxl_value = *reinterpret_cast<int8_t*>(&data);
         } else {
-          // ROS_ERROR_STREAM("Unsupported data length: " << register_data_length);
+          DXL_LOG_ERROR("Unsupported data length: " << register_data_length);
           dxl_value = static_cast<int32_t>(data);
         }
         if (value.dvalue) {

@@ -1,3 +1,5 @@
+#include "dynamixel_ros_control/log.hpp"
+
 #include <dynamixel_ros_control/sync_write_manager.hpp>
 
 namespace dynamixel_ros_control {
@@ -24,7 +26,7 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   driver_ = &driver;
   // Request indirect address space from dynamixel_driver
   if (!driver.requestIndirectAddresses(data_length_, indirect_address_index_)) {
-    // ROS_ERROR_STREAM("Failed to aquire indirect addresses for register with data length of " << data_length_ << ".");
+    DXL_LOG_ERROR("Failed to aquire indirect addresses for register with data length of " << data_length_ << ".");
     return false;
   }
 
@@ -32,7 +34,7 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   for (std::vector<WriteEntry>::value_type& entry : write_entries_) {
     uint16_t indirect_data_address;
     if (!entry.dxl->setIndirectAddress(indirect_address_index_, entry.register_name, indirect_data_address)) {
-      // ROS_ERROR_STREAM("Failed to set indirect address mapping");
+      DXL_LOG_ERROR("Failed to set indirect address mapping");
       return false;
     }
     if (first) {  // Save address of first dynamixel, should be the same for every one
@@ -44,7 +46,7 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   // Create sync write group
   sync_write_ = driver.setSyncWrite(indirect_data_address_, data_length_);
   if (!sync_write_) {
-    // ROS_ERROR_STREAM("Failed to initialize GroupSyncWrite.");
+    DXL_LOG_ERROR("Failed to initialize GroupSyncWrite.");
     return false;
   }
 
@@ -83,7 +85,7 @@ bool SyncWriteManager::write()
       value_8bit = static_cast<int8_t>(dxl_value);
       value_ptr = reinterpret_cast<unsigned char*>(&value_8bit);
     } else {
-      // ROS_ERROR_STREAM("Unsupported data length: " << data_length_);
+      DXL_LOG_ERROR("Unsupported data length: " << data_length_);
       value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
     }
     sync_write_->changeParam(entry.dxl->getId(), value_ptr);
@@ -91,7 +93,7 @@ bool SyncWriteManager::write()
 
   int result = sync_write_->txPacket();
   if (result != COMM_SUCCESS) {
-    // ROS_ERROR_STREAM("Sync Write failed with error: " << driver_->communicationErrorToString(result));
+    DXL_LOG_ERROR("Sync Write failed with error: " << driver_->communicationErrorToString(result));
     subsequent_error_count_++;
     return false;
   }
@@ -114,7 +116,7 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, con
   // Check if entry for dynamixel exists already
   for (const std::vector<WriteEntry>::value_type& entry : write_entries_) {
     if (dxl.getId() == entry.dxl->getId()) {
-      // ROS_ERROR_STREAM("A write entry for dynamixel ID " << static_cast<int>(dxl.getId()) << " exists already.");
+      DXL_LOG_ERROR("A write entry for dynamixel ID " << static_cast<int>(dxl.getId()) << " exists already.");
       return write_entries_.end();
     }
   }
@@ -125,7 +127,7 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, con
     register_data_length = dxl.getItem(register_name).data_length();
   }
   catch (const std::out_of_range&) {
-    // ROS_ERROR_STREAM("Failed to add write entry");
+    DXL_LOG_ERROR("Failed to add write entry");
     return write_entries_.end();
   }
 
@@ -133,7 +135,7 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, con
     data_length_ = register_data_length;
   } else {
     if (data_length_ != register_data_length) {
-      // ROS_ERROR_STREAM("Data length of register '" << register_name << "' does not match the data length of previous write entries.");
+      DXL_LOG_ERROR("Data length of register '" << register_name << "' does not match the data length of previous write entries.");
       return write_entries_.end();
     }
   }

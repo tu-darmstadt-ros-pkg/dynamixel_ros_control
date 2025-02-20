@@ -1,3 +1,5 @@
+#include "dynamixel_ros_control/log.hpp"
+
 #include <dynamixel_ros_control/dynamixel.hpp>
 
 namespace dynamixel_ros_control {
@@ -9,7 +11,7 @@ Dynamixel::Dynamixel(const uint8_t id, DynamixelDriver& driver)
 bool Dynamixel::connect()
 {
   if (!driver_.ping(id_, model_number_)) {
-    // ROS_ERROR_STREAM("Failed to ping ID " << static_cast<int>(getId()));
+    DXL_LOG_ERROR("Failed to ping ID " << static_cast<int>(getId()));
     return false;
   }
 
@@ -18,8 +20,7 @@ bool Dynamixel::connect()
   if (!control_table_) {
     return false;
   }
-
-  // ROS_DEBUG_STREAM("ID: " << getId() << ": Loaded control table for model " << getModelNumber());
+  DXL_LOG_DEBUG("ID: " << getId() << ": Loaded control table for model " << getModelNumber());
   return true;
 }
 
@@ -127,7 +128,7 @@ bool Dynamixel::dxlValueToBool(const std::string& register_name, const int32_t v
 {
   std::string unit = getItem(register_name).unit();
   if (unit != "bool") {
-    // ROS_ERROR_STREAM("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
+    DXL_LOG_ERROR("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
     return false;
   }
   return value > 0;
@@ -142,7 +143,7 @@ int32_t Dynamixel::boolToDxlValue(const std::string& register_name, const bool b
 {
   std::string unit = getItem(register_name).unit();
   if (unit != "bool") {
-    // ROS_ERROR_STREAM("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
+    DXL_LOG_ERROR("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
     return false;
   }
   return b;
@@ -178,9 +179,9 @@ bool Dynamixel::setIndirectAddress(const unsigned int indirect_address_index, co
   uint16_t register_address = item->address();
   uint8_t data_length = item->data_length();
 
-  // ROS_DEBUG_STREAM("[INDIRECT ADDRESS] Setting indirect address " << indirect_address << " to " << register_address
-  // << " (" << register_name <<
-  //                  "), data_address: " << indirect_data_address);
+  DXL_LOG_DEBUG("[INDIRECT ADDRESS] Setting indirect address " << indirect_address << " to " << register_address << " ("
+                                                               << register_name
+                                                               << "), data_address: " << indirect_data_address);
   bool success = true;
   for (uint16_t i = 0; i < data_length; i++) {
     success &= readWriteRegister(indirect_address + (2 * i), sizeof(register_address), register_address + i);

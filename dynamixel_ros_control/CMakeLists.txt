@@ -35,6 +35,7 @@ set(HEADERS
   include/${PROJECT_NAME}/dynamixel_hardware_interface.hpp
   include/${PROJECT_NAME}/sync_read_manager.hpp
   include/${PROJECT_NAME}/sync_write_manager.hpp
+  include/${PROJECT_NAME}/log.hpp
 )
 
 set(SOURCES

@@ -1,3 +1,5 @@
+#include "dynamixel_ros_control/log.hpp"
+
 #include <dynamixel_ros_control/control_table_item.hpp>
 
 #include <boost/algorithm/string.hpp>
@@ -26,7 +28,7 @@ bool ControlTableItem::loadFromString(std::string control_table_string)
   std::vector<std::string> parts;
   boost::split(parts, control_table_string, boost::is_any_of("|"));
   if (parts.size() != 6) {
-    // ROS_ERROR("Control table item has invalid size (%lu), expected (6)", parts.size());
+    DXL_LOG_ERROR("Control table item has invalid size (" << parts.size() << "), expected (6).");
     return false;
   }
 
@@ -35,7 +37,7 @@ bool ControlTableItem::loadFromString(std::string control_table_string)
     address_ = static_cast<uint16_t>(std::stoi(parts[0]));
   }
   catch (const std::invalid_argument&) {
-    // ROS_ERROR_STREAM("Failed to read address '" << parts[0] << "'.");
+    DXL_LOG_ERROR("Failed to read address '" << parts[0] << "'.");
     return false;
   }
   name_ = parts[1];
@@ -43,7 +45,7 @@ bool ControlTableItem::loadFromString(std::string control_table_string)
     data_length_ = static_cast<uint8_t>(std::stoi(parts[2]));
   }
   catch (const std::invalid_argument&) {
-    // ROS_ERROR_STREAM("Failed to read data length '" << parts[2] << "'.");
+    DXL_LOG_ERROR("Failed to read data length '" << parts[2] << "'.");
     return false;
   }
   if (!stringToAccessType(parts[3], access_type_)) {
@@ -106,7 +108,7 @@ bool stringToAccessType(const std::string& str, AccessType& access_type)
     access_type = READ_WRITE;
     return true;
   }
-  // ROS_ERROR_STREAM("Unknown access type '" << str << "'.");
+  DXL_LOG_ERROR("Unknown access type '" << str << "'.");
   return false;
 }
 
@@ -120,7 +122,7 @@ bool stringToMemoryType(const std::string& str, MemoryType& memory_type)
     memory_type = EEPROM;
     return true;
   }
-  // ROS_ERROR_STREAM("Unknown memory type '" << str << "'.");
+  DXL_LOG_ERROR("Unknown memory type '" << str << "'.");
   return false;
 }
 

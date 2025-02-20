@@ -12,6 +12,18 @@
 
 namespace dynamixel_ros_control {
 
+constexpr char DXL_REGISTER_CMD_TORQUE[] = "torque_enable";
+constexpr char DXL_REGISTER_CMD_POSITION[] = "goal_position";
+constexpr char DXL_REGISTER_CMD_VELOCITY[] = "goal_velocity";
+constexpr char DXL_REGISTER_CMD_EFFORT[] = "goal_torque";
+
+constexpr char DXL_REGISTER_POSITION[] = "present_position";
+constexpr char DXL_REGISTER_VELOCITY[] = "present_velocity";
+constexpr char DXL_REGISTER_EFFORT[] = "present_current";
+constexpr char DXL_REGISTER_HARDWARE_ERROR[] = "hardware_error_status";
+
+std::string interfaceNameToRegister(const std::string& interface_name);
+
 class DynamixelDriver
 {
 public:

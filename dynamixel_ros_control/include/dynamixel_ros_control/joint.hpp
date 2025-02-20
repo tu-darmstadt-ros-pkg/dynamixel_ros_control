@@ -20,7 +20,7 @@ class Joint
 public:
   Joint() = default;
 
-  bool init(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info);
+  bool loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info);
 
   std::string name;
   std::shared_ptr<Dynamixel> dynamixel;
@@ -39,9 +39,11 @@ public:
   bool isPositionControlled() const;
   bool isVelocityControlled() const;
   bool isEffortControlled() const;
+  const std::vector<std::string>& getStateInterfaces() const;
 
 private:
   ControlMode control_mode;
+  std::vector<std::string> state_interfaces;
 };
 
 }  // namespace dynamixel_ros_control
