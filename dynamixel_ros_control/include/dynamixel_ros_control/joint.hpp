@@ -7,14 +7,6 @@
 
 namespace dynamixel_ros_control {
 
-struct State
-{
-  double position{0};
-  double velocity{0};
-  double effort{0};
-  bool torque{false};
-};
-
 class Joint
 {
 public:
@@ -25,25 +17,29 @@ public:
   std::string name;
   std::shared_ptr<Dynamixel> dynamixel;
 
-  State current_state;
-  State goal_state;
+  bool torque{false};
+  std::unordered_map<std::string, double> current_state;
+  std::unordered_map<std::string, double> goal_state;
 
   double mounting_offset{0.0};
   double offset{0.0};
 
   double estop_position{0.0};
 
-  ControlMode getControlMode() const;
+  [[nodiscard]] ControlMode getControlMode() const;
   bool setControlMode(const ControlMode& value);
 
-  bool isPositionControlled() const;
-  bool isVelocityControlled() const;
-  bool isEffortControlled() const;
-  const std::vector<std::string>& getStateInterfaces() const;
+  [[nodiscard]] bool isPositionControlled() const;
+  [[nodiscard]] bool isVelocityControlled() const;
+  [[nodiscard]] bool isEffortControlled() const;
+  [[nodiscard]] const std::vector<std::string>& getStateInterfaces() const;
+  [[nodiscard]] const std::vector<std::string>& getCommandInterfaces() const;
 
 private:
-  ControlMode control_mode;
-  std::vector<std::string> state_interfaces;
+  ControlMode control_mode_;
+  ControlMode position_control_mode_;
+  std::vector<std::string> state_interfaces_;
+  std::vector<std::string> command_interfaces_;
 };
 
 }  // namespace dynamixel_ros_control

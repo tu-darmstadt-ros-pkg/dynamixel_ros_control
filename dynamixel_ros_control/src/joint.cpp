@@ -17,15 +17,14 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
   }
   dynamixel = std::make_shared<Dynamixel>(id, driver);
 
-  // Requested state interface
+  // Requested state interfaces
   for (const auto& state_interface : info.state_interfaces) {
-    if (state_interface.name != hardware_interface::HW_IF_POSITION &&
-        state_interface.name != hardware_interface::HW_IF_VELOCITY &&
-        state_interface.name != hardware_interface::HW_IF_EFFORT) {
-      DXL_LOG_ERROR("Unknown state interface: " << state_interface.name);
-      return false;
-    }
-    state_interfaces.emplace_back(state_interface.name);
+    state_interfaces_.emplace_back(state_interface.name);
+  }
+
+  // Requested command interfaces
+  for (const auto& command_interface : info.command_interfaces) {
+    command_interfaces_.emplace_back(command_interface.name);
   }
 
   return true;
@@ -33,12 +32,12 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
 
 ControlMode Joint::getControlMode() const
 {
-  return control_mode;
+  return control_mode_;
 }
 
 bool Joint::setControlMode(const ControlMode& value)
 {
-  control_mode = value;
+  control_mode_ = value;
   return true;
 }
 
@@ -56,6 +55,14 @@ bool Joint::isVelocityControlled() const
 bool Joint::isEffortControlled() const
 {
   return getControlMode() == CURRENT;
+}
+const std::vector<std::string>& Joint::getStateInterfaces() const
+{
+  return state_interfaces_;
+}
+const std::vector<std::string>& Joint::getCommandInterfaces() const
+{
+  return command_interfaces_;
 }
 
 }  // namespace dynamixel_ros_control

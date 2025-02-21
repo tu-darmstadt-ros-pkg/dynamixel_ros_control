@@ -3,6 +3,8 @@
 #include <string>
 #include <unordered_map>
 #include <algorithm>
+#include <sstream>
+#include <vector>
 
 namespace dynamixel_ros_control {
 
@@ -19,6 +21,18 @@ bool getParameter(const ParameterMap& map, const std::string& param_name, T& val
     value = default_value;
   }
   return success;
+}
+
+template <typename T>
+std::string vectorToString(const std::vector<T>& vec)
+{
+  std::stringstream ss;
+  ss << "[";
+  for (const T& element : vec) {
+    ss << element << ", ";
+  }
+  ss << "]";
+  return ss.str();
 }
 
 inline std::string& removeWhitespace(std::string& s)

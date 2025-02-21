@@ -1,0 +1,15 @@
+state_interfaces:
+  - interface_name: "position"  # hardware_interface::HW_IF_POSITION
+    register_name: "present_position"
+  - interface_name: "velocity"  # hardware_interface::HW_IF_VELOCITY
+    register_name: "present_velocity"
+  - interface_name: "effort"  # hardware_interface::HW_IF_EFFORT
+    register_name: "present_current"
+
+command_interfaces:
+  - interface_name: "position"
+    register_name: "goal_position"
+  - interface_name: "velocity"
+    register_name: "goal_velocity"
+  - interface_name: "effort"
+    register_name: "goal_torque"
