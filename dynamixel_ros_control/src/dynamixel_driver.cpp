@@ -30,7 +30,7 @@ DynamixelDriver::DynamixelDriver()
 bool DynamixelDriver::init(const std::string& port_name, const int baud_rate)
 {
   // Get package path
-  std::string package_share_directory = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
+  package_path_ = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
   if (package_path_.empty()) {
     DXL_LOG_FATAL("Could not find own package path.");
     return false;
