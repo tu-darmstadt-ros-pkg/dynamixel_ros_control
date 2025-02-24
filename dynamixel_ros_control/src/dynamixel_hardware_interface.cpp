@@ -8,6 +8,7 @@ namespace dynamixel_ros_control {
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hardware_info)
 {
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_init");
   // Load hardware configuration
   const auto result = SystemInterface::on_init(hardware_info);
   if (result != CallbackReturn::SUCCESS) {
@@ -26,6 +27,9 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   }
 
   getParameter(info_.hardware_parameters, "debug", debug_, false);
+  if (debug_) {
+    rclcpp::get_logger(DXL_LOGGER_NAME).set_level(rclcpp::Logger::Level::Debug);
+  }
   getParameter(info_.hardware_parameters, "torque_on_startup", torque_on_startup_, false);
   getParameter(info_.hardware_parameters, "torque_off_on_shutdown", torque_off_on_shutdown_, false);
 
@@ -58,15 +62,17 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous_state)
 {
-  if (!driver_.connect()) {
-    return hardware_interface::CallbackReturn::FAILURE;
-  }
-
-  for (Joint& j : joints_) {
-    if (!j.dynamixel->connect()) {
-      return hardware_interface::CallbackReturn::FAILURE;
-    }
-  }
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_configure from " << previous_state.label());
+  // TODO temporarily disabled for testing without dynamixel
+  // if (!driver_.connect()) {
+  //   return hardware_interface::CallbackReturn::FAILURE;
+  // }
+  //
+  // for (Joint& j : joints_) {
+  //   if (!j.dynamixel->connect()) {
+  //     return hardware_interface::CallbackReturn::FAILURE;
+  //   }
+  // }
 
   // Set up read manager (depends on requested interfaces)
 
@@ -75,11 +81,13 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 {
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_cleanup from " << previous_state.label());
   return CallbackReturn::SUCCESS;
 }
 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_activate from " << previous_state.label());
   first_read_successful_ = false;
   // turn on torque here?
   return SystemInterface::on_activate(previous_state);
@@ -88,6 +96,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
   // disable torque here?
   // if (torque_off_on_shutdown_)
   // {
@@ -141,22 +150,26 @@ std::vector<hardware_interface::CommandInterface::SharedPtr> DynamixelHardwareIn
       command_interfaces.emplace_back(command_interface);
     }
   }
-  DXL_LOG_DEBUG("command interfaces: " << vectorToString(command_interfaces));
+  DXL_LOG_DEBUG("Command interfaces: " << vectorToString(command_interfaces));
   return command_interfaces;
 }
 
 hardware_interface::return_type
-DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::string>& basic_strings,
-                                                        const std::vector<std::string>& vector)
+DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::string>& start_interfaces,
+                                                        const std::vector<std::string>& stop_interfaces)
 {
   // Set up write manager
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::perform_command_mode_switch");
+  DXL_LOG_DEBUG("start_interfaces: " << vectorToString(start_interfaces));
+  DXL_LOG_DEBUG("stop_interfaces: " << vectorToString(stop_interfaces));
 
   // write control mode
-  return SystemInterface::perform_command_mode_switch(basic_strings, vector);
+  return SystemInterface::perform_command_mode_switch(start_interfaces, stop_interfaces);
 }
 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rclcpp_lifecycle::State& previous_state)
 {
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_error from " << previous_state.label());
   return CallbackReturn::SUCCESS;
 }
 

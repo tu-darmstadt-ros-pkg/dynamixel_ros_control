@@ -1,0 +1,12 @@
+launch:
+- include:
+    file: "$(find-pkg-share athena_description)/launch/load_description.launch.py"
+
+
+- node:
+    pkg: "controller_manager"
+    exec: "ros2_control_node"
+    name: "controller_manager"
+    param:
+        - from: "$(find-pkg-share athena_description)/config/athena_controllers.yaml"
+          allow_substs: true

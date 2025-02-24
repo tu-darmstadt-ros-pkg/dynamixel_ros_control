@@ -38,8 +38,8 @@ public:
   std::vector<hardware_interface::StateInterface::ConstSharedPtr> on_export_state_interfaces() override;
   std::vector<hardware_interface::CommandInterface::SharedPtr> on_export_command_interfaces() override;
 
-  hardware_interface::return_type perform_command_mode_switch(const std::vector<std::string>&,
-                                                              const std::vector<std::string>&) override;
+  hardware_interface::return_type perform_command_mode_switch(const std::vector<std::string>& start_interfaces,
+                                                              const std::vector<std::string>& stop_interfaces) override;
 
   CallbackReturn on_activate(const rclcpp_lifecycle::State& previous_state) override;
   CallbackReturn on_deactivate(const rclcpp_lifecycle::State& previous_state) override;

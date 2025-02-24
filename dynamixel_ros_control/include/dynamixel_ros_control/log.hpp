@@ -3,7 +3,8 @@
 
 #include <rclcpp/logging.hpp>
 
-#define DXL_LOG(level, msg) RCLCPP_##level##_STREAM(rclcpp::get_logger("dynamixel_ros_control"), msg)
+constexpr char DXL_LOGGER_NAME[] = "dynamixel_ros_control";
+#define DXL_LOG(level, msg) RCLCPP_##level##_STREAM(rclcpp::get_logger(DXL_LOGGER_NAME), msg)
 
 #define DXL_LOG_DEBUG(msg) DXL_LOG(DEBUG, msg)
 #define DXL_LOG_INFO(msg) DXL_LOG(INFO, msg)
