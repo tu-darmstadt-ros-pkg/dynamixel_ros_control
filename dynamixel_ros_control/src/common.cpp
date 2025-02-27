@@ -92,4 +92,14 @@ bool getParameter<uint8_t>(const ParameterMap& map, const std::string& param_nam
   return true;
 }
 
+bool splitFullInterfaceName(const std::string& full_name, std::string& joint_name, std::string& interface_name)
+{
+  const auto it = std::find(full_name.begin(), full_name.end(), '/');
+  if (it == full_name.end()) {
+    return false;
+  }
+  joint_name = full_name.substr(0, it - full_name.begin());
+  interface_name = full_name.substr(it - full_name.begin() + 1, full_name.end() - it);
+  return true;
+}
 }  // namespace dynamixel_ros_control

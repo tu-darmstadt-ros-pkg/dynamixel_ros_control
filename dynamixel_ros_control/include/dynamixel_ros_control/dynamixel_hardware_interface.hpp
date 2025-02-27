@@ -57,7 +57,7 @@ private:
   bool setControlMode();
   void setTorque();
 
-  std::vector<Joint> joints_;
+  std::unordered_map<std::string, Joint> joints_;
   DynamixelDriver driver_;
 
   // Read

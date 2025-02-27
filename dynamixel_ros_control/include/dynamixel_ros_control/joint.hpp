@@ -27,17 +27,26 @@ public:
   double estop_position{0.0};
 
   [[nodiscard]] ControlMode getControlMode() const;
-  bool setControlMode(const ControlMode& value);
 
   [[nodiscard]] bool isPositionControlled() const;
   [[nodiscard]] bool isVelocityControlled() const;
   [[nodiscard]] bool isEffortControlled() const;
-  [[nodiscard]] const std::vector<std::string>& getStateInterfaces() const;
-  [[nodiscard]] const std::vector<std::string>& getCommandInterfaces() const;
+  [[nodiscard]] const std::vector<std::string>& getAvailableStateInterfaces() const;
+  [[nodiscard]] const std::vector<std::string>& getAvailableCommandInterfaces() const;
+
+  bool addActiveCommandInterface(const std::string& interface_name);
+  bool removeActiveCommandInterface(const std::string& interface_name);
+  bool updateControlMode() const;
+  [[nodiscard]] const std::vector<std::string>& getActiveCommandInterfaces() const;
 
 private:
+  ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;
+
   ControlMode control_mode_;
-  ControlMode position_control_mode_;
+  std::vector<std::string> active_command_interfaces_;
+
+  // Parameters
+  ControlMode preferred_position_control_mode_;
   std::vector<std::string> state_interfaces_;
   std::vector<std::string> command_interfaces_;
 };

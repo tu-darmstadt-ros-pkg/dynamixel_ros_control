@@ -9,20 +9,6 @@
 
 namespace dynamixel_ros_control {
 
-std::string interfaceNameToRegister(const std::string& interface_name)
-{
-  if (interface_name == hardware_interface::HW_IF_POSITION) {
-    return DXL_REGISTER_POSITION;
-  }
-  if (interface_name == hardware_interface::HW_IF_VELOCITY) {
-    return DXL_REGISTER_VELOCITY;
-  }
-  if (interface_name == hardware_interface::HW_IF_EFFORT) {
-    return DXL_REGISTER_EFFORT;
-  }
-  return "";
-}
-
 DynamixelDriver::DynamixelDriver()
     : next_indirect_address_(0)
 {}

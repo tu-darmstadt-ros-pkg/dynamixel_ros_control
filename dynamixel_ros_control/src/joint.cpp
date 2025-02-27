@@ -19,12 +19,22 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
 
   // Requested state interfaces
   for (const auto& state_interface : info.state_interfaces) {
+    DXL_LOG_INFO("Registering state interface: " << state_interface.name);
     state_interfaces_.emplace_back(state_interface.name);
   }
 
   // Requested command interfaces
   for (const auto& command_interface : info.command_interfaces) {
+    DXL_LOG_INFO("Registering command interface: " << command_interface.name);
     command_interfaces_.emplace_back(command_interface.name);
+  }
+
+  // Preferred position command mode
+  std::string control_mode_str;
+  if (getParameter(info.parameters, "position_control_mode", control_mode_str)) {
+    preferred_position_control_mode_ = stringToControlMode(control_mode_str);
+  } else {
+    preferred_position_control_mode_ = POSITION;
   }
 
   return true;
@@ -33,12 +43,6 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
 ControlMode Joint::getControlMode() const
 {
   return control_mode_;
-}
-
-bool Joint::setControlMode(const ControlMode& value)
-{
-  control_mode_ = value;
-  return true;
 }
 
 bool Joint::isPositionControlled() const
@@ -56,13 +60,78 @@ bool Joint::isEffortControlled() const
 {
   return getControlMode() == CURRENT;
 }
-const std::vector<std::string>& Joint::getStateInterfaces() const
+
+const std::vector<std::string>& Joint::getAvailableStateInterfaces() const
 {
   return state_interfaces_;
 }
-const std::vector<std::string>& Joint::getCommandInterfaces() const
+
+const std::vector<std::string>& Joint::getAvailableCommandInterfaces() const
 {
   return command_interfaces_;
+}
+
+bool Joint::addActiveCommandInterface(const std::string& interface_name)
+{
+  const auto it = std::find(command_interfaces_.begin(), command_interfaces_.end(), interface_name);
+  if (it == command_interfaces_.end()) {
+    DXL_LOG_ERROR("No available command interface '" << interface_name << "' for joint '" << name << "'.");
+    return false;
+  }
+  active_command_interfaces_.emplace_back(interface_name);
+  return true;
+}
+
+bool Joint::removeActiveCommandInterface(const std::string& interface_name)
+{
+  const auto it = std::find(active_command_interfaces_.begin(), active_command_interfaces_.end(), interface_name);
+  if (it == active_command_interfaces_.end()) {
+    DXL_LOG_ERROR("Could not remove interface '" << interface_name << "' because it is not active for joint '" << name
+                                                 << "'.");
+    return false;
+  }
+  active_command_interfaces_.erase(it);
+  return true;
+}
+
+bool Joint::updateControlMode() const
+{
+  // determine required control mode
+  const ControlMode new_control_mode = getControlModeFromInterfaces(active_command_interfaces_);
+  if (new_control_mode == control_mode_) {
+    return true;
+  }
+
+  // write control mode
+  return dynamixel->writeControlMode(control_mode_, true);
+}
+
+const std::vector<std::string>& Joint::getActiveCommandInterfaces() const
+{
+  return active_command_interfaces_;
+}
+
+ControlMode Joint::getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const
+{
+  const auto position_it = std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_POSITION);
+  if (position_it != interfaces.end()) {
+    return preferred_position_control_mode_;
+  }
+
+  const auto velocity_it = std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_VELOCITY);
+  if (velocity_it != interfaces.end()) {
+    return VELOCITY;
+  }
+
+  const auto effort_it = std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_EFFORT);
+  if (effort_it != interfaces.end()) {
+    return CURRENT;
+  }
+  DXL_LOG_WARN("None out of the command interfaces "
+               << hardware_interface::HW_IF_POSITION << ", " << hardware_interface::HW_IF_VELOCITY << ", "
+               << hardware_interface::HW_IF_EFFORT << " have been requested. Defaulting to "
+               << hardware_interface::HW_IF_POSITION);
+  return POSITION;
 }
 
 }  // namespace dynamixel_ros_control

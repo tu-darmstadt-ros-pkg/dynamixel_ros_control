@@ -23,14 +23,23 @@ bool getParameter(const ParameterMap& map, const std::string& param_name, T& val
   return success;
 }
 
-template <typename T>
-std::string vectorToString(const std::vector<T>& vec)
+template <typename Iterable>
+std::string iterableToString(const Iterable& container)
 {
   std::stringstream ss;
   ss << "[";
-  for (const T& element : vec) {
-    ss << element << ", ";
+
+  auto it = container.begin();
+  if (it != container.end()) {
+    ss << *it; // First element (avoid trailing comma)
+    ++it;
   }
+
+  while (it != container.end()) {
+    ss << ", " << *it;
+    ++it;
+  }
+
   ss << "]";
   return ss.str();
 }
@@ -41,6 +50,8 @@ inline std::string& removeWhitespace(std::string& s)
   s.erase(end_pos, s.end());
   return s;
 }
+
+bool splitFullInterfaceName(const std::string& full_name, std::string& joint_name, std::string& interface_name);
 
 // template<typename T>
 // void split(const std::string &s, char delim, T result) {

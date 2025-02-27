@@ -1,6 +1,8 @@
 #include "dynamixel_ros_control/common.hpp"
 #include "dynamixel_ros_control/log.hpp"
 
+#include <boost/algorithm/string/classification.hpp>
+#include <boost/algorithm/string/split.hpp>
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
 
 namespace dynamixel_ros_control {
@@ -8,7 +10,6 @@ namespace dynamixel_ros_control {
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hardware_info)
 {
-  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_init");
   // Load hardware configuration
   const auto result = SystemInterface::on_init(hardware_info);
   if (result != CallbackReturn::SUCCESS) {
@@ -30,6 +31,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   if (debug_) {
     rclcpp::get_logger(DXL_LOGGER_NAME).set_level(rclcpp::Logger::Level::Debug);
   }
+  DXL_LOG_DEBUG("DynamixelHardwareInterface::on_init");
   getParameter(info_.hardware_parameters, "torque_on_startup", torque_on_startup_, false);
   getParameter(info_.hardware_parameters, "torque_off_on_shutdown", torque_off_on_shutdown_, false);
 
@@ -53,7 +55,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
     ss << "-- offset: " << joint.offset << std::endl;
     DXL_LOG_DEBUG(ss.str());
-    joints_.emplace_back(std::move(joint));
+    joints_.emplace(joint.name, std::move(joint));
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -113,11 +115,12 @@ std::vector<hardware_interface::StateInterface::ConstSharedPtr> DynamixelHardwar
 
   // Read all requested fields from all motors
   std::set<std::string> requested_state_interface_names;
-  for (const auto& joint : joints_) {
-    requested_state_interface_names.insert(joint.getStateInterfaces().begin(), joint.getStateInterfaces().end());
+  for (const auto& [name, joint] : joints_) {
+    requested_state_interface_names.insert(joint.getAvailableStateInterfaces().begin(),
+                                           joint.getAvailableStateInterfaces().end());
   }
   // Create the state interfaces
-  for (auto& joint : joints_) {
+  for (auto& [name, joint] : joints_) {
     joint.current_state.reserve(requested_state_interface_names.size());
     for (const auto& interface_name : requested_state_interface_names) {
       joint.current_state[interface_name] = 0.0;
@@ -126,7 +129,7 @@ std::vector<hardware_interface::StateInterface::ConstSharedPtr> DynamixelHardwar
       state_interfaces.emplace_back(state_interface);
     }
   }
-  DXL_LOG_DEBUG("State interfaces: " << vectorToString(state_interfaces));
+  DXL_LOG_DEBUG("State interfaces: " << iterableToString(requested_state_interface_names));
   return state_interfaces;
 }
 
@@ -137,11 +140,12 @@ std::vector<hardware_interface::CommandInterface::SharedPtr> DynamixelHardwareIn
 
   // Read all requested fields from all motors
   std::set<std::string> requested_command_interface_names;
-  for (const auto& joint : joints_) {
-    requested_command_interface_names.insert(joint.getCommandInterfaces().begin(), joint.getCommandInterfaces().end());
+  for (const auto& [name, joint] : joints_) {
+    requested_command_interface_names.insert(joint.getAvailableCommandInterfaces().begin(),
+                                             joint.getAvailableCommandInterfaces().end());
   }
   // Create the state interfaces
-  for (auto& joint : joints_) {
+  for (auto& [name, joint] : joints_) {
     joint.goal_state.reserve(requested_command_interface_names.size());
     for (const auto& interface_name : requested_command_interface_names) {
       joint.goal_state[interface_name] = 0.0;
@@ -150,7 +154,7 @@ std::vector<hardware_interface::CommandInterface::SharedPtr> DynamixelHardwareIn
       command_interfaces.emplace_back(command_interface);
     }
   }
-  DXL_LOG_DEBUG("Command interfaces: " << vectorToString(command_interfaces));
+  DXL_LOG_DEBUG("Command interfaces: " << iterableToString(requested_command_interface_names));
   return command_interfaces;
 }
 
@@ -160,8 +164,29 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
 {
   // Set up write manager
   DXL_LOG_DEBUG("DynamixelHardwareInterface::perform_command_mode_switch");
-  DXL_LOG_DEBUG("start_interfaces: " << vectorToString(start_interfaces));
-  DXL_LOG_DEBUG("stop_interfaces: " << vectorToString(stop_interfaces));
+  DXL_LOG_DEBUG("start_interfaces: " << iterableToString(start_interfaces));
+  DXL_LOG_DEBUG("stop_interfaces: " << iterableToString(stop_interfaces));
+
+  // Start interfaces
+  for (const auto& full_interface_name : start_interfaces) {
+    std::vector<std::string> parts;
+    boost::split(parts, full_interface_name, boost::is_any_of("/"));
+    if (parts.size() != 2) {
+      DXL_LOG_ERROR("Invalid interface name: " << full_interface_name);
+      return hardware_interface::return_type::ERROR;
+    }
+    const std::string joint_name = parts[0];
+    const std::string interface_name = parts[1];
+    try {
+      if (joints_.at(joint_name).addActiveCommandInterface(interface_name)) {
+        return hardware_interface::return_type::ERROR;
+      }
+    }
+    catch (std::out_of_range& e) {
+      DXL_LOG_ERROR("Unknown joint name: " << joint_name);
+      return hardware_interface::return_type::ERROR;
+    }
+  }
 
   // write control mode
   return SystemInterface::perform_command_mode_switch(start_interfaces, stop_interfaces);

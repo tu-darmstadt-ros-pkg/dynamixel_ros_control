@@ -28,6 +28,17 @@ enum HardwareErrorStatus
   OVERLOAD_ERROR = 32,          // 2^5
 };
 
+constexpr char DXL_REGISTER_CMD_TORQUE[] = "torque_enable";
+constexpr char DXL_REGISTER_CMD_POSITION[] = "goal_position";
+constexpr char DXL_REGISTER_CMD_VELOCITY[] = "goal_velocity";
+constexpr char DXL_REGISTER_CMD_EFFORT[] = "goal_torque";
+constexpr char DXL_REGISTER_CONTROL_MODE[] = "operating_mode";
+
+constexpr char DXL_REGISTER_POSITION[] = "present_position";
+constexpr char DXL_REGISTER_VELOCITY[] = "present_velocity";
+constexpr char DXL_REGISTER_EFFORT[] = "present_current";
+constexpr char DXL_REGISTER_HARDWARE_ERROR[] = "hardware_error_status";
+
 ControlMode stringToControlMode(const std::string& str);
 
 class Dynamixel
@@ -80,7 +91,7 @@ public:
     return true;
   }
 
-  bool writeControlMode(ControlMode mode) const;
+  bool writeControlMode(ControlMode mode, bool disable_torque_if_required=false) const;
 
   // Value conversion functions
   [[nodiscard]] double dxlValueToUnit(const std::string& register_name, int32_t value) const;
