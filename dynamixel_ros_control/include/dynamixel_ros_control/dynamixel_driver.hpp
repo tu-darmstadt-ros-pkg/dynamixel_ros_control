@@ -34,14 +34,12 @@ public:
   bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out) const;
 
   [[nodiscard]] dynamixel::GroupSyncWrite* setSyncWrite(uint16_t address, uint8_t data_length) const;
-
   [[nodiscard]] dynamixel::GroupSyncRead* setSyncRead(uint16_t address, uint8_t data_length) const;
 
   bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start);
 
   [[nodiscard]] std::string communicationErrorToString(int comm_result) const;
   [[nodiscard]] std::string packetErrorToString(uint8_t error) const;
-
 private:
   bool loadSeriesMapping();
   ControlTable* readControlTable(std::string series);

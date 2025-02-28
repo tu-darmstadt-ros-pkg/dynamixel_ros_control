@@ -60,6 +60,10 @@ private:
   bool setUpTorqueWriteManager();
   bool setUpControlWriteManager();
 
+  bool loadInterfaceRegisterNameTranslation();
+  std::string stateInterfaceToRegisterName(const std::string& interface_name) const;
+  std::string commandInterfaceToRegisterName(const std::string& interface_name) const;
+
   bool setTorque(bool enabled);
 
   std::unordered_map<std::string, Joint> joints_;
@@ -79,6 +83,9 @@ private:
   bool debug_{false};
   bool torque_on_startup_{false};
   bool torque_off_on_shutdown_{false};
+
+  std::unordered_map<std::string, std::string> command_interface_to_register_;
+  std::unordered_map<std::string, std::string> state_interface_to_register_;
 
   // ROS interface
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;

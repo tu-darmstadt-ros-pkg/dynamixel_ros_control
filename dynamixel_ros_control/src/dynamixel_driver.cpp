@@ -231,7 +231,7 @@ bool DynamixelDriver::requestIndirectAddresses(const unsigned int data_length, u
   return true;
 }
 
-std::string DynamixelDriver::communicationErrorToString(int comm_result) const
+std::string DynamixelDriver::communicationErrorToString(const int comm_result) const
 {
   const char* error_cstr = packet_handler_->getTxRxResult(comm_result);
   return {error_cstr};
