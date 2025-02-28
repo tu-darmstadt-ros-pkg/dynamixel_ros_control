@@ -207,12 +207,37 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rc
 hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::Time& time,
                                                                  const rclcpp::Duration& period)
 {
+  if (!read_manager_.read() && !first_read_successful_) {
+    // First read has to be successful
+    return hardware_interface::return_type::ERROR;
+  }
+
+  if (!read_manager_.isOk()) {
+    DXL_LOG_ERROR("Read manager lost connection");
+    return hardware_interface::return_type::ERROR;
+  }
+
+  // TODO do we have to initialize goal fields after first read?
+
+  first_read_successful_ = true;
+  last_successful_read_time_ = time;
   return hardware_interface::return_type::OK;
 }
 
 hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& time,
                                                                   const rclcpp::Duration& period)
 {
+  if (!first_read_successful_) {
+    DXL_LOG_ERROR("Write called without successful read. This should not happen.");
+    return hardware_interface::return_type::ERROR;
+  }
+
+  control_write_manager_.write();
+
+  if (!control_write_manager_.isOk()) {
+    DXL_LOG_ERROR("Write manager lost connection");
+    return hardware_interface::return_type::ERROR;
+  }
   return hardware_interface::return_type::OK;
 }
 
