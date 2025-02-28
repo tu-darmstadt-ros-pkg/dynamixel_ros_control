@@ -54,8 +54,13 @@ private:
    * Load dynamixels from the configuration
    * @return success
    */
-  bool setControlMode();
-  void setTorque();
+  bool processCommandInterfaceUpdates(const std::vector<std::string>& interface_updates, bool stopping);
+  bool setUpStateReadManager();
+  bool setUpStatusReadManager();
+  bool setUpTorqueWriteManager();
+  bool setUpControlWriteManager();
+
+  bool setTorque(bool enabled);
 
   std::unordered_map<std::string, Joint> joints_;
   DynamixelDriver driver_;

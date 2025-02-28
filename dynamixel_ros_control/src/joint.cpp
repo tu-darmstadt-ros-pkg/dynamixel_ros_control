@@ -28,6 +28,9 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
     DXL_LOG_INFO("Registering command interface: " << command_interface.name);
     command_interfaces_.emplace_back(command_interface.name);
   }
+  if (!command_interfaces_.empty()) {
+    control_mode_ = getControlModeFromInterfaces(std::vector{command_interfaces_.front()});
+  }
 
   // Preferred position command mode
   std::string control_mode_str;

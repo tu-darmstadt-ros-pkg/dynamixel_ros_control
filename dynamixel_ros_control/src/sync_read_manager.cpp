@@ -78,8 +78,8 @@ bool SyncReadManager::init(DynamixelDriver& driver)
   driver_ = &driver;
   // Compute total data length by going through all read entries
   total_data_length_ = 0;
-  for (const std::map<std::string, ReadEntry>::value_type& read_kv : read_entries_) {
-    total_data_length_ += read_kv.second.data_length;
+  for (const auto& [register_name, read_entry] : read_entries_) {
+    total_data_length_ += read_entry.data_length;
   }
 
   // Request indirect address space from dynamixel_driver
@@ -91,12 +91,11 @@ bool SyncReadManager::init(DynamixelDriver& driver)
   // Write register addresses to indirect addresses
   unsigned int current_indirect_address_index = indirect_address_index_;
   bool first_register = true;
-  for (std::map<std::string, ReadEntry>::value_type& read_kv : read_entries_) {
-    std::string register_name = read_kv.first;
-    read_kv.second.indirect_index = current_indirect_address_index;
+  for (auto& [register_name, read_entry] : read_entries_) {
+    read_entry.indirect_index = current_indirect_address_index;
 
     bool first_dxl = true;
-    for (auto& [dxl, value] : read_kv.second.dxl_value_pairs) {
+    for (auto& [dxl, value] : read_entry.dxl_value_pairs) {
       uint16_t indirect_data_address;
       if (!dxl->setIndirectAddress(current_indirect_address_index, register_name, indirect_data_address)) {
         DXL_LOG_ERROR("Failed to set indirect address mapping");
@@ -107,11 +106,11 @@ bool SyncReadManager::init(DynamixelDriver& driver)
         first_register = false;
       }
       if (first_dxl) {
-        read_kv.second.indirect_data_address = indirect_data_address;
+        read_entry.indirect_data_address = indirect_data_address;
         first_dxl = false;
       }
     }
-    current_indirect_address_index += read_kv.second.data_length;
+    current_indirect_address_index += read_entry.data_length;
   }
 
   // Create sync read group
@@ -151,7 +150,7 @@ bool SyncReadManager::read(rclcpp::Time& packet_receive_time)
     const uint8_t register_data_length = entry.data_length;
     for (unsigned int i = 0; i < entry.dxl_value_pairs.size(); i++) {
       auto& [dxl, value] = entry.dxl_value_pairs[i];
-      double offset = entry.offsets[i];
+      const double offset = entry.offsets[i];
       if (sync_read_->isAvailable(dxl->getId(), register_data_address, register_data_length)) {
         uint32_t data = sync_read_->getData(dxl->getId(), register_data_address, register_data_length);
         int32_t dxl_value;

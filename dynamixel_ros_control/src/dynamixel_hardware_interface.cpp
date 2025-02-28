@@ -65,18 +65,23 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_configure from " << previous_state.label());
-  // TODO temporarily disabled for testing without dynamixel
-  // if (!driver_.connect()) {
-  //   return hardware_interface::CallbackReturn::FAILURE;
-  // }
-  //
-  // for (Joint& j : joints_) {
-  //   if (!j.dynamixel->connect()) {
-  //     return hardware_interface::CallbackReturn::FAILURE;
-  //   }
-  // }
+  if (!driver_.connect()) {
+    return hardware_interface::CallbackReturn::FAILURE;
+  }
 
-  // Set up read manager (depends on requested interfaces)
+  for (auto& [name, joint] : joints_) {
+    if (!joint.dynamixel->connect()) {
+      return hardware_interface::CallbackReturn::FAILURE;
+    }
+    if (!joint.dynamixel->writeControlMode(joint.getControlMode())) {
+      return hardware_interface::CallbackReturn::FAILURE;
+    }
+  }
+
+  // Set up read & torque manager
+  if (!setUpStatusReadManager() || !setUpStateReadManager() || !setUpTorqueWriteManager()) {
+    return hardware_interface::CallbackReturn::FAILURE;
+  }
 
   return CallbackReturn::SUCCESS;
 }
@@ -91,21 +96,24 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_activate from " << previous_state.label());
   first_read_successful_ = false;
-  // turn on torque here?
-  return SystemInterface::on_activate(previous_state);
+  if (torque_on_startup_) {
+    if (!setTorque(true)) {
+      return CallbackReturn::FAILURE;
+    }
+  }
+  return CallbackReturn::SUCCESS;
 }
 
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
-  // disable torque here?
-  // if (torque_off_on_shutdown_)
-  // {
-  //   std::cout << "Disabling torque on shutdown!" << std::endl;
-  //   if (connected_) setTorque(false);
-  // }
-  return SystemInterface::on_deactivate(previous_state);
+  if (torque_off_on_shutdown_) {
+    if (!setTorque(false)) {
+      return CallbackReturn::FAILURE;
+    }
+  }
+  return CallbackReturn::SUCCESS;
 }
 
 std::vector<hardware_interface::StateInterface::ConstSharedPtr> DynamixelHardwareInterface::on_export_state_interfaces()
@@ -168,28 +176,26 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
   DXL_LOG_DEBUG("stop_interfaces: " << iterableToString(stop_interfaces));
 
   // Start interfaces
-  for (const auto& full_interface_name : start_interfaces) {
-    std::vector<std::string> parts;
-    boost::split(parts, full_interface_name, boost::is_any_of("/"));
-    if (parts.size() != 2) {
-      DXL_LOG_ERROR("Invalid interface name: " << full_interface_name);
-      return hardware_interface::return_type::ERROR;
-    }
-    const std::string joint_name = parts[0];
-    const std::string interface_name = parts[1];
-    try {
-      if (joints_.at(joint_name).addActiveCommandInterface(interface_name)) {
-        return hardware_interface::return_type::ERROR;
-      }
-    }
-    catch (std::out_of_range& e) {
-      DXL_LOG_ERROR("Unknown joint name: " << joint_name);
+  if (!processCommandInterfaceUpdates(start_interfaces, false)) {
+    return hardware_interface::return_type::ERROR;
+  }
+  if (!processCommandInterfaceUpdates(stop_interfaces, true)) {
+    return hardware_interface::return_type::ERROR;
+  }
+
+  // write control mode
+  for (auto& [name, joint] : joints_) {
+    if (!joint.updateControlMode()) {
       return hardware_interface::return_type::ERROR;
     }
   }
 
-  // write control mode
-  return SystemInterface::perform_command_mode_switch(start_interfaces, stop_interfaces);
+  // set up control write manager
+  if (!setUpControlWriteManager()) {
+    return hardware_interface::return_type::ERROR;
+  }
+
+  return hardware_interface::return_type::OK;
 }
 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rclcpp_lifecycle::State& previous_state)
@@ -208,6 +214,110 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
                                                                   const rclcpp::Duration& period)
 {
   return hardware_interface::return_type::OK;
+}
+
+bool DynamixelHardwareInterface::processCommandInterfaceUpdates(const std::vector<std::string>& interface_updates,
+                                                                bool stopping)
+{
+  for (const auto& full_interface_name : interface_updates) {
+    std::string joint_name;
+    std::string interface_name;
+    if (!splitFullInterfaceName(full_interface_name, joint_name, interface_name)) {
+      DXL_LOG_ERROR("Invalid interface name: " << full_interface_name);
+      return false;
+    }
+
+    try {
+      Joint& joint = joints_.at(joint_name);
+      if (!stopping) {
+        if (!joint.addActiveCommandInterface(interface_name)) {
+          return false;
+        }
+      } else {
+        if (!joint.removeActiveCommandInterface(interface_name)) {
+          return false;
+        }
+      }
+    }
+    catch (std::out_of_range&) {
+      DXL_LOG_ERROR("Unknown joint name: " << joint_name);
+      return false;
+    }
+  }
+  return true;
+}
+
+bool DynamixelHardwareInterface::setUpStateReadManager()
+{
+  read_manager_ = SyncReadManager();
+  std::unordered_map<std::string, DxlValueMappingList> register_dynamixel_mappings;
+  for (auto& [name, joint] : joints_) {
+    read_manager_.addDynamixel(joint.dynamixel.get());
+    for (auto& [interface_name, interface_value] : joint.current_state) {
+      std::string register_name = interface_name;  // TODO properly translate interface to register name
+      register_dynamixel_mappings[register_name].push_back(
+          std::make_pair<Dynamixel*, DxlValue>(joint.dynamixel.get(), DxlValue(&interface_value)));
+    }
+  }
+
+  for (const auto& [register_name, dynamixel_mapping] : register_dynamixel_mappings) {
+    read_manager_.addRegister(register_name, dynamixel_mapping);
+  }
+
+  return read_manager_.init(driver_);
+}
+
+bool DynamixelHardwareInterface::setUpStatusReadManager()
+{
+  status_read_manager_ = SyncReadManager();
+  DxlValueMappingList status_mapping;
+  for (auto& [name, joint] : joints_) {
+    status_read_manager_.addDynamixel(joint.dynamixel.get());
+    status_mapping.push_back(
+        std::make_pair<Dynamixel*, DxlValue>(joint.dynamixel.get(), DxlValue(&joint.dynamixel->hardware_error_status)));
+  }
+
+  status_read_manager_.addRegister(DXL_REGISTER_HARDWARE_ERROR, status_mapping);
+  return status_read_manager_.init(driver_);
+}
+bool DynamixelHardwareInterface::setUpTorqueWriteManager()
+{
+  torque_write_manager_ = SyncWriteManager();
+  for (auto& [name, joint] : joints_) {
+    torque_write_manager_.addRegister(*joint.dynamixel, DXL_REGISTER_CMD_TORQUE, joint.torque);
+  }
+
+  return torque_write_manager_.init(driver_);
+}
+
+bool DynamixelHardwareInterface::setUpControlWriteManager()
+{
+  control_write_manager_ = SyncWriteManager();
+  for (auto& [name, joint] : joints_) {
+    if (joint.getActiveCommandInterfaces().size() != 1) {
+      DXL_LOG_ERROR("No or more than one command interface claimed for joint '" << joint.name
+                                                                                << ". For now, only one is supported.");
+      return false;
+    }
+
+    const std::string register_name =
+        joint.getActiveCommandInterfaces().front();  // TODO properly translate interface to register name
+    control_write_manager_.addRegister(*joint.dynamixel, register_name, joint.goal_state[register_name]);
+  }
+
+  return control_write_manager_.init(driver_);
+}
+
+bool DynamixelHardwareInterface::setTorque(const bool enabled)
+{
+  for (auto& [name, joint] : joints_) {
+    joint.torque = enabled;
+  }
+  if (!torque_write_manager_.write()) {
+    DXL_LOG_ERROR("Setting torque failed!");
+    return false;
+  }
+  return true;
 }
 
 }  // namespace dynamixel_ros_control
