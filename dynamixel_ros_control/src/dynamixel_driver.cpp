@@ -267,11 +267,11 @@ bool DynamixelDriver::setPortHandler(const std::string& port_name)
 bool DynamixelDriver::connectPort()
 {
   if (!port_handler_->openPort()) {
-    DXL_LOG_ERROR("Failed to open port " << port_handler_->getPortName());
+    DXL_LOG_ERROR("Failed to open port '" << port_handler_->getPortName() << "'.");
     return false;
   }
 
-  DXL_LOG_INFO("Succeeded to open port " << port_handler_->getPortName());
+  DXL_LOG_INFO("Succeeded to open port '" << port_handler_->getPortName() << "'.");
   next_indirect_address_ = 0;
   return true;
 }

@@ -26,9 +26,6 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
   for (const auto& command_interface : info.command_interfaces) {
     command_interfaces_.emplace_back(command_interface.name);
   }
-  if (!command_interfaces_.empty()) {
-    control_mode_ = getControlModeFromInterfaces(std::vector{command_interfaces_.front()});
-  }
 
   // Preferred position command mode
   std::string control_mode_str;
@@ -36,6 +33,11 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
     preferred_position_control_mode_ = stringToControlMode(control_mode_str);
   } else {
     preferred_position_control_mode_ = POSITION;
+  }
+
+  // Set initial mode
+  if (!command_interfaces_.empty()) {
+    control_mode_ = getControlModeFromInterfaces(std::vector{command_interfaces_.front()});
   }
 
   return true;
