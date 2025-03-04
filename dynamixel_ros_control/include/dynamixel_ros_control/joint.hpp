@@ -36,7 +36,7 @@ public:
 
   bool addActiveCommandInterface(const std::string& interface_name);
   bool removeActiveCommandInterface(const std::string& interface_name);
-  bool updateControlMode() const;
+  bool updateControlMode();
   [[nodiscard]] const std::vector<std::string>& getActiveCommandInterfaces() const;
 
 private:

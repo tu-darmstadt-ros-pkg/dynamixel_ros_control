@@ -60,6 +60,9 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
 
 bool SyncWriteManager::write()
 {
+  if (write_entries_.empty()) {
+    return true;
+  }
   // Convert values and update params
   for (const std::vector<WriteEntry>::value_type& entry : write_entries_) {
     int32_t dxl_value;
@@ -91,7 +94,7 @@ bool SyncWriteManager::write()
     sync_write_->changeParam(entry.dxl->getId(), value_ptr);
   }
 
-  int result = sync_write_->txPacket();
+  const int result = sync_write_->txPacket();
   if (result != COMM_SUCCESS) {
     DXL_LOG_ERROR("Sync Write failed with error: " << driver_->communicationErrorToString(result));
     subsequent_error_count_++;
@@ -106,7 +109,7 @@ bool SyncWriteManager::isOk() const
   return subsequent_error_count_ < error_threshold_;
 }
 
-void SyncWriteManager::setErrorThreshold(unsigned int threshold)
+void SyncWriteManager::setErrorThreshold(const unsigned int threshold)
 {
   error_threshold_ = threshold;
 }

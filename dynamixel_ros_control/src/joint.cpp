@@ -19,13 +19,11 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
 
   // Requested state interfaces
   for (const auto& state_interface : info.state_interfaces) {
-    DXL_LOG_INFO("Registering state interface: " << state_interface.name);
     state_interfaces_.emplace_back(state_interface.name);
   }
 
   // Requested command interfaces
   for (const auto& command_interface : info.command_interfaces) {
-    DXL_LOG_INFO("Registering command interface: " << command_interface.name);
     command_interfaces_.emplace_back(command_interface.name);
   }
   if (!command_interfaces_.empty()) {
@@ -97,13 +95,15 @@ bool Joint::removeActiveCommandInterface(const std::string& interface_name)
   return true;
 }
 
-bool Joint::updateControlMode() const
+bool Joint::updateControlMode()
 {
   // determine required control mode
   const ControlMode new_control_mode = getControlModeFromInterfaces(active_command_interfaces_);
   if (new_control_mode == control_mode_) {
     return true;
   }
+  DXL_LOG_DEBUG("Changing control mode of joint '" << name << "' from '" << control_mode_ << " to '" << new_control_mode << "'.");
+  control_mode_ = new_control_mode;
 
   // write control mode
   return dynamixel->writeControlMode(control_mode_, true);

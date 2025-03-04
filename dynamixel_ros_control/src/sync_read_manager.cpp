@@ -135,6 +135,10 @@ bool SyncReadManager::read()
 
 bool SyncReadManager::read(rclcpp::Time& packet_receive_time)
 {
+  if (read_entries_.empty()) {
+    packet_receive_time = rclcpp::Clock().now();
+    return true;
+  }
   const int dxl_comm_result = sync_read_->txRxPacket();
   packet_receive_time = rclcpp::Clock().now();  // We do not care about simulated time
 

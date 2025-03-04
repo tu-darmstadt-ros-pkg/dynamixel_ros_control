@@ -92,6 +92,8 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     ss << "Loaded dynamixel:" << std::endl;
     ss << "-- name: " << joint.name << std::endl;
     ss << "-- id: " << static_cast<int>(joint.dynamixel->getId()) << std::endl;
+    ss << "-- command interfaces: " << iterableToString(joint.getAvailableCommandInterfaces()) << std::endl;
+    ss << "-- state interfaces: " << iterableToString(joint.getAvailableStateInterfaces()) << std::endl;
     ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
     ss << "-- offset: " << joint.offset << std::endl;
     DXL_LOG_DEBUG(ss.str());
@@ -105,6 +107,7 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_configure from " << previous_state.label());
+  first_read_successful_ = false;
   if (!driver_.connect()) {
     return hardware_interface::CallbackReturn::FAILURE;
   }
@@ -135,10 +138,9 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_activate from " << previous_state.label());
-  first_read_successful_ = false;
   if (torque_on_startup_) {
     if (!setTorque(true)) {
-      return CallbackReturn::FAILURE;
+      return CallbackReturn::ERROR;
     }
   }
   return CallbackReturn::SUCCESS;
@@ -150,7 +152,7 @@ DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previou
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
   if (torque_off_on_shutdown_) {
     if (!setTorque(false)) {
-      return CallbackReturn::FAILURE;
+      return CallbackReturn::ERROR;
     }
   }
   return CallbackReturn::SUCCESS;
@@ -241,6 +243,7 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_error from " << previous_state.label());
+  get_clock()->sleep_for(rclcpp::Duration(1, 0));
   return CallbackReturn::SUCCESS;
 }
 
@@ -256,8 +259,6 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     DXL_LOG_ERROR("Read manager lost connection");
     return hardware_interface::return_type::ERROR;
   }
-
-  // TODO do we have to initialize goal fields after first read?
 
   first_read_successful_ = true;
   last_successful_read_time_ = time;
