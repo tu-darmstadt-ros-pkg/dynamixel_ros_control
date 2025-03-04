@@ -222,6 +222,15 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     return hardware_interface::return_type::ERROR;
   }
 
+  // initialize goal fields
+  if (!first_read_successful_) {
+    DXL_LOG_ERROR("No successful read() before a controller is loaded.");
+    return hardware_interface::return_type::ERROR;
+  }
+  for (auto& [name, joint] : joints_) {
+    joint.resetGoalState();
+  }
+
   bool torque = !joints_.empty() && joints_.begin()->second.torque;
   if (torque) {
     setTorque(false);

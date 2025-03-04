@@ -37,6 +37,7 @@ public:
   bool addActiveCommandInterface(const std::string& interface_name);
   bool removeActiveCommandInterface(const std::string& interface_name);
   bool updateControlMode();
+  void resetGoalState();
   [[nodiscard]] const std::vector<std::string>& getActiveCommandInterfaces() const;
 
 private:

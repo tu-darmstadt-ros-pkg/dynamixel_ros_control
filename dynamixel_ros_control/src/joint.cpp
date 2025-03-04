@@ -103,11 +103,35 @@ bool Joint::updateControlMode()
   if (new_control_mode == control_mode_) {
     return true;
   }
-  DXL_LOG_DEBUG("Changing control mode of joint '" << name << "' from '" << control_mode_ << " to '" << new_control_mode << "'.");
+  DXL_LOG_DEBUG("Changing control mode of joint '" << name << "' from '" << control_mode_ << " to '" << new_control_mode
+                                                   << "'.");
   control_mode_ = new_control_mode;
 
   // write control mode
   return dynamixel->writeControlMode(control_mode_, false);
+}
+
+void Joint::resetGoalState()
+{
+  for (auto& interface_name : getActiveCommandInterfaces()) {
+    double& value = goal_state.at(interface_name);  // This should exist
+    // Special handling for position
+    if (interface_name == hardware_interface::HW_IF_POSITION) {
+      try {
+        value = current_state.at(hardware_interface::HW_IF_POSITION);
+      }
+      catch (const std::out_of_range& e) {
+        DXL_LOG_WARN("Joint '"
+                     << name
+                     << "' is controlled in position mode but the current position is not read out. Cannot initialize "
+                        "goal field. Add a position state interface to this joint to resolve this problem.");
+        value = 0.0;
+      }
+      continue;
+    }
+    // Default value
+    value = 0.0;
+  }
 }
 
 const std::vector<std::string>& Joint::getActiveCommandInterfaces() const
