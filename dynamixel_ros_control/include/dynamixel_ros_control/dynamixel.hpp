@@ -14,7 +14,8 @@ enum ControlMode
   POSITION = 3,
   EXTENDED_POSITION = 4,
   CURRENT_BASED_POSITION = 5,
-  PWM = 16
+  PWM = 16,
+  UNDEFINED = 255
 };
 
 enum HardwareErrorStatus

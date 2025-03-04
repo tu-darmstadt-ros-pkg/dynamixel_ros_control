@@ -35,11 +35,6 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
     preferred_position_control_mode_ = POSITION;
   }
 
-  // Set initial mode
-  if (!command_interfaces_.empty()) {
-    control_mode_ = getControlModeFromInterfaces(std::vector{command_interfaces_.front()});
-  }
-
   return true;
 }
 
@@ -99,6 +94,10 @@ bool Joint::removeActiveCommandInterface(const std::string& interface_name)
 
 bool Joint::updateControlMode()
 {
+  if (active_command_interfaces_.empty()) {
+    // Do nothing if no command interface is active
+    return true;
+  }
   // determine required control mode
   const ControlMode new_control_mode = getControlModeFromInterfaces(active_command_interfaces_);
   if (new_control_mode == control_mode_) {
@@ -135,7 +134,7 @@ ControlMode Joint::getControlModeFromInterfaces(const std::vector<std::string>& 
   DXL_LOG_WARN("None out of the command interfaces "
                << hardware_interface::HW_IF_POSITION << ", " << hardware_interface::HW_IF_VELOCITY << ", "
                << hardware_interface::HW_IF_EFFORT << " have been requested. Defaulting to "
-               << hardware_interface::HW_IF_POSITION);
+               << hardware_interface::HW_IF_POSITION << " mode");
   return POSITION;
 }
 

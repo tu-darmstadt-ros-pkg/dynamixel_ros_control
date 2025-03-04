@@ -42,7 +42,7 @@ public:
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;
 
-  ControlMode control_mode_{POSITION};
+  ControlMode control_mode_{UNDEFINED};
   std::vector<std::string> active_command_interfaces_;
 
   // Parameters

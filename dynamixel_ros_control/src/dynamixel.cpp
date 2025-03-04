@@ -20,7 +20,7 @@ bool Dynamixel::connect()
   if (!control_table_) {
     return false;
   }
-  DXL_LOG_DEBUG("ID: " << getId() << ": Loaded control table for model " << getModelNumber());
+  DXL_LOG_DEBUG("ID " << getIdInt() << ": Loaded control table for model " << getModelNumber());
   return true;
 }
 
