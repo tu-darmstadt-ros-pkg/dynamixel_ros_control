@@ -366,8 +366,9 @@ bool DynamixelHardwareInterface::setUpControlWriteManager()
       return false;
     }
 
-    const std::string register_name = commandInterfaceToRegisterName(joint.getActiveCommandInterfaces().front());
-    control_write_manager_.addRegister(*joint.dynamixel, register_name, joint.goal_state[register_name]);
+    const std::string interface_name = joint.getActiveCommandInterfaces().front();
+    const std::string register_name = commandInterfaceToRegisterName(interface_name);
+    control_write_manager_.addRegister(*joint.dynamixel, register_name, joint.goal_state.at(interface_name));
   }
 
   return control_write_manager_.init(driver_);
