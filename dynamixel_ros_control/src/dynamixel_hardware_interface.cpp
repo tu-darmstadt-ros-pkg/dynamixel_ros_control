@@ -116,9 +116,6 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     if (!joint.dynamixel->connect()) {
       return hardware_interface::CallbackReturn::FAILURE;
     }
-    if (!joint.dynamixel->writeControlMode(joint.getControlMode())) {
-      return hardware_interface::CallbackReturn::FAILURE;
-    }
   }
 
   // Set up read & torque manager
