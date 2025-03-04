@@ -64,17 +64,17 @@ bool SyncWriteManager::write()
     return true;
   }
   // Convert values and update params
-  for (const std::vector<WriteEntry>::value_type& entry : write_entries_) {
+  for (const auto& entry : write_entries_) {
     int32_t dxl_value;
     if (entry.d_value != nullptr) {
       const double unit_value = *entry.d_value + entry.offset;
       dxl_value = entry.dxl->unitToDxlValue(entry.register_name, unit_value);
-      // ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value:
-      // " << dxl_value << ", converted: " << *entry.d_value);
+      DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << entry.dxl->getIdInt() << ", value: " << dxl_value
+                                << ", converted: " << *entry.d_value);
     } else if (entry.b_value != nullptr) {
       dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);
-      // ROS_DEBUG_STREAM_THROTTLE(0.25, "[WRITING " << entry.register_name << "] id " << entry.dxl->getId() << "value:
-      // " << dxl_value << ", converted: " << *entry.b_value);
+      DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << entry.dxl->getIdInt() << ", value: " << dxl_value
+                                << ", converted: " << *entry.b_value);
     }
     unsigned char* value_ptr;
     int16_t value_16bit;
@@ -119,7 +119,7 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, con
   // Check if entry for dynamixel exists already
   for (const std::vector<WriteEntry>::value_type& entry : write_entries_) {
     if (dxl.getId() == entry.dxl->getId()) {
-      DXL_LOG_ERROR("A write entry for dynamixel ID " << static_cast<int>(dxl.getId()) << " exists already.");
+      DXL_LOG_ERROR("A write entry for dynamixel ID " << dxl.getIdInt() << " exists already.");
       return write_entries_.end();
     }
   }
@@ -138,7 +138,8 @@ std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, con
     data_length_ = register_data_length;
   } else {
     if (data_length_ != register_data_length) {
-      DXL_LOG_ERROR("Data length of register '" << register_name << "' does not match the data length of previous write entries.");
+      DXL_LOG_ERROR("Data length of register '" << register_name
+                                                << "' does not match the data length of previous write entries.");
       return write_entries_.end();
     }
   }

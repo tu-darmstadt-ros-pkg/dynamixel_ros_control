@@ -102,6 +102,7 @@ public:
   [[nodiscard]] bool registerAvailable(const std::string& register_name) const;
   [[nodiscard]] const ControlTableItem& getItem(const std::string& name) const;
   [[nodiscard]] uint8_t getId() const;
+  [[nodiscard]] unsigned int getIdInt() const;
   [[nodiscard]] uint16_t getModelNumber() const;
 
   bool setIndirectAddress(unsigned int indirect_address_index, const std::string& register_name,

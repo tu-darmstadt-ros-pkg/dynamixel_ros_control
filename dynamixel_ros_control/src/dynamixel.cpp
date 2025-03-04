@@ -243,6 +243,11 @@ uint8_t Dynamixel::getId() const
   return id_;
 }
 
+unsigned int Dynamixel::getIdInt() const
+{
+  return id_;
+}
+
 std::string Dynamixel::getHardwareErrorStatusString() const
 {
   std::stringstream ss;

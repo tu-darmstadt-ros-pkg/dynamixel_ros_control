@@ -8,7 +8,7 @@ void SyncReadManager::addDynamixel(Dynamixel* dxl)
 {
   std::pair<std::set<Dynamixel*>::iterator, bool> result = dynamixels_.emplace(dxl);
   if (!result.second) {
-    DXL_LOG_WARN("Already contained dynamixel with id " << dxl->getId());
+    DXL_LOG_WARN("Already contained dynamixel with id " << dxl->getIdInt());
   }
 }
 
@@ -45,7 +45,7 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
 
   for (const auto& [dynamixel, value] : dxl_value_pairs) {
     if (dynamixels_.find(dynamixel) == dynamixels_.end()) {
-      DXL_LOG_ERROR("Dynamixel with id " << dynamixel->getId() << " is unknown to the SyncReadManager.");
+      DXL_LOG_ERROR("Dynamixel with id " << dynamixel->getIdInt() << " is unknown to the SyncReadManager.");
       return false;
     }
   }
@@ -60,7 +60,7 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
       register_data_length = length;
     } else {
       if (register_data_length != length) {
-        DXL_LOG_ERROR("Length mismatch for register '" << register_name << "'. ID " << dxl->getId() << " wants size "
+        DXL_LOG_ERROR("Length mismatch for register '" << register_name << "'. ID " << dxl->getIdInt() << " wants size "
                                                        << length << ", current is " << register_data_length << ".");
         subsequent_error_count_++;
         return false;
@@ -170,18 +170,18 @@ bool SyncReadManager::read(rclcpp::Time& packet_receive_time)
         }
         if (value.dvalue) {
           const double unit_value = dxl->dxlValueToUnit(register_name, dxl_value) + offset;
-          // ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " <<
-          // dxl_value << ", converted: " << unit_value);
+          DXL_LOG_DEBUG("[READING " << register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value
+                                    << ", converted: " << unit_value);
           *value.dvalue = unit_value;
         }
         if (value.bvalue) {
           const bool bool_value = dxl->dxlValueToBool(register_name, dxl_value);
-          // ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " <<
-          // dxl_value << ", converted: " << (bool_value ? "true" : "false"));
+          DXL_LOG_DEBUG("[READING " << register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value
+                                    << ", converted: " << (bool_value ? "true" : "false"));
           *value.bvalue = bool_value;
         }
         if (value.ivalue) {
-          // ROS_DEBUG_STREAM_THROTTLE(0.25, "[READING " << register_name << "] id " << dxl->getId() << ", value: " << dxl_value);
+          DXL_LOG_DEBUG("[READING " << register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value);
           *value.ivalue = dxl_value;
         }
       }
