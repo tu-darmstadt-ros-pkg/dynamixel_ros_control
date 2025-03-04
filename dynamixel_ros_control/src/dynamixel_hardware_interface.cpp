@@ -254,12 +254,10 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rc
 }
 
 hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::Time& time,
-                                                                 const rclcpp::Duration& period)
+                                                                 const rclcpp::Duration& /*period*/)
 {
-  if (!read_manager_.read() && !first_read_successful_) {
-    // First read has to be successful
-    return hardware_interface::return_type::ERROR;
-  }
+  read_manager_.read();
+  // DXL_LOG_DEBUG("Joint position: " << joints_.begin()->second.current_state["position"]);
 
   if (!read_manager_.isOk()) {
     DXL_LOG_ERROR("Read manager lost connection");
@@ -271,12 +269,12 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& time,
-                                                                  const rclcpp::Duration& period)
+hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& /*time*/,
+                                                                  const rclcpp::Duration& /*period*/)
 {
   if (!first_read_successful_) {
-    DXL_LOG_ERROR("Write called without successful read. This should not happen.");
-    return hardware_interface::return_type::ERROR;
+    // DXL_LOG_ERROR("Write called without successful read. This should not happen.");
+    return hardware_interface::return_type::OK;
   }
 
   control_write_manager_.write();
@@ -419,6 +417,7 @@ std::string DynamixelHardwareInterface::commandInterfaceToRegisterName(const std
 
 bool DynamixelHardwareInterface::setTorque(const bool enabled)
 {
+  DXL_LOG_INFO((enabled ? "Enabling" : "Disabling") << " motor torque.");
   for (auto& [name, joint] : joints_) {
     joint.torque = enabled;
   }
