@@ -15,19 +15,23 @@ DynamixelDriver::DynamixelDriver()
 
 bool DynamixelDriver::init(const std::string& port_name, const int baud_rate)
 {
+  port_name_ = port_name;
+  setPortHandler(port_name_);
+
+  baud_rate_ = baud_rate;
+
   // Get package path
   package_path_ = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
   if (package_path_.empty()) {
     DXL_LOG_FATAL("Could not find own package path.");
     return false;
   }
+
   // Get model number to series mapping
   if (!loadSeriesMapping()) {
     DXL_LOG_FATAL("Failed to load model number to series mapping.");
     return false;
   }
-  port_name_ = port_name;
-  baud_rate_ = baud_rate;
 
   // Set Packet handler
   if (!setPacketHandler()) {
