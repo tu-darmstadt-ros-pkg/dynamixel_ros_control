@@ -5,6 +5,10 @@ state_interfaces:
     register_name: "present_velocity"
   - interface_name: "effort"  # hardware_interface::HW_IF_EFFORT
     register_name: "present_current"
+  - interface_name: "current"  # hardware_interface::HW_IF_CURRENT
+    register_name: "present_current"
+  - interface_name: "temperature"  # hardware_interface::HW_IF_TEMPERATURE
+    register_name: "present_temperature"
 
 command_interfaces:
   - interface_name: "position"
@@ -12,4 +16,6 @@ command_interfaces:
   - interface_name: "velocity"
     register_name: "goal_velocity"
   - interface_name: "effort"
+    register_name: "goal_torque"
+  - interface_name: "current"  # hardware_interface::HW_IF_CURRENT
     register_name: "goal_torque"
