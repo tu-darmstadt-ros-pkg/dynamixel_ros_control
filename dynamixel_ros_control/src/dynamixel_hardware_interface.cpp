@@ -366,10 +366,15 @@ bool DynamixelHardwareInterface::setUpControlWriteManager()
 {
   control_write_manager_ = SyncWriteManager();
   for (auto& [name, joint] : joints_) {
-    if (joint.getActiveCommandInterfaces().size() != 1) {
-      DXL_LOG_ERROR("No or more than one command interface claimed for joint '" << joint.name
+    DXL_LOG_DEBUG("Active command interfaces for joint '" << joint.name << "': " << iterableToString(joint.getActiveCommandInterfaces()));
+    if (joint.getActiveCommandInterfaces().size() > 1) {
+      DXL_LOG_ERROR("More than one command interface claimed for joint '" << joint.name
                                                                                 << ". For now, only one is supported.");
       return false;
+    }
+    if (joint.getActiveCommandInterfaces().empty()) {
+      // Nothing to register
+      continue;
     }
 
     const std::string interface_name = joint.getActiveCommandInterfaces().front();
