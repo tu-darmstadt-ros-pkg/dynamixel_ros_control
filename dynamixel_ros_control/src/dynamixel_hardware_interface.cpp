@@ -225,6 +225,11 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     return hardware_interface::return_type::ERROR;
   }
 
+  bool torque = !joints_.empty() && joints_.begin()->second.torque;
+  if (torque) {
+    setTorque(false);
+  }
+
   // write control mode
   for (auto& [name, joint] : joints_) {
     if (!joint.updateControlMode()) {
@@ -235,6 +240,10 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
   // set up control write manager
   if (!setUpControlWriteManager()) {
     return hardware_interface::return_type::ERROR;
+  }
+
+  if (torque) {
+    setTorque(true);
   }
 
   return hardware_interface::return_type::OK;

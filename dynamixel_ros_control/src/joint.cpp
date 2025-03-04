@@ -108,7 +108,7 @@ bool Joint::updateControlMode()
   control_mode_ = new_control_mode;
 
   // write control mode
-  return dynamixel->writeControlMode(control_mode_, true);
+  return dynamixel->writeControlMode(control_mode_, false);
 }
 
 const std::vector<std::string>& Joint::getActiveCommandInterfaces() const
