@@ -4,11 +4,32 @@
 #include <dynamixel_ros_control/joint.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 
+namespace {
+
+std::string interfaceToRegisterName(const std::string& interface_name,
+                                    const std::unordered_map<std::string, std::string>& conversion_map)
+{
+  std::string register_name = interface_name;  // Default to interface name
+  try {
+    register_name = conversion_map.at(interface_name);  // Check if there is a specific configuration
+  }
+  catch (const std::out_of_range&) {
+  }
+  return register_name;
+}
+
+}  // namespace
+
 namespace dynamixel_ros_control {
 
-bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info)
+bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info,
+                              const std::unordered_map<std::string, std::string>& state_interface_to_register,
+                              const std::unordered_map<std::string, std::string>& command_interface_to_register)
 {
   name = info.name;
+  state_interface_to_register_ = state_interface_to_register;
+  command_interface_to_register_ = command_interface_to_register;
+
   getParameter(info.parameters, "mounting_offset", mounting_offset, 0.0);
   getParameter(info.parameters, "offset", offset, 0.0);
   uint8_t id;
@@ -95,6 +116,7 @@ bool Joint::addActiveCommandInterface(const std::string& interface_name)
     return true;
   }
 
+  resetGoalState(interface_name);
   active_command_interfaces_.emplace_back(interface_name);
   return true;
 }
@@ -108,6 +130,15 @@ bool Joint::removeActiveCommandInterface(const std::string& interface_name)
                                                  << "'.");
     return false;
   }
+
+  // Write default value
+  if (interface_name != hardware_interface::HW_IF_POSITION) {
+    goal_state[interface_name] = 0.0;
+    if (!dynamixel->writeRegister(commandInterfaceToRegisterName(interface_name), 0.0)) {
+      return false;
+    }
+  }
+
   active_command_interfaces_.erase(it);
   return true;
 }
@@ -131,26 +162,43 @@ bool Joint::updateControlMode()
   return dynamixel->writeControlMode(control_mode_, false);
 }
 
+std::string Joint::stateInterfaceToRegisterName(const std::string& interface_name) const
+{
+  return interfaceToRegisterName(interface_name, state_interface_to_register_);
+}
+
+std::string Joint::commandInterfaceToRegisterName(const std::string& interface_name) const
+{
+  return interfaceToRegisterName(interface_name, command_interface_to_register_);
+}
+
+void Joint::resetGoalState(const std::string& interface_name)
+{
+  double& value = goal_state.at(interface_name);  // This should exist
+
+  // Special handling for position
+  if (interface_name == hardware_interface::HW_IF_POSITION) {
+    try {
+      value = current_state.at(hardware_interface::HW_IF_POSITION);
+    }
+    catch (const std::out_of_range& e) {
+      DXL_LOG_WARN("Joint '"
+                   << name
+                   << "' is controlled in position mode but the current position is not read out. Cannot initialize "
+                      "goal field. Add a position state interface to this joint to resolve this problem.");
+      value = 0.0;
+    }
+    return;
+  }
+
+  // Default value
+  value = 0.0;
+}
+
 void Joint::resetGoalState()
 {
   for (auto& interface_name : getActiveCommandInterfaces()) {
-    double& value = goal_state.at(interface_name);  // This should exist
-    // Special handling for position
-    if (interface_name == hardware_interface::HW_IF_POSITION) {
-      try {
-        value = current_state.at(hardware_interface::HW_IF_POSITION);
-      }
-      catch (const std::out_of_range& e) {
-        DXL_LOG_WARN("Joint '"
-                     << name
-                     << "' is controlled in position mode but the current position is not read out. Cannot initialize "
-                        "goal field. Add a position state interface to this joint to resolve this problem.");
-        value = 0.0;
-      }
-      continue;
-    }
-    // Default value
-    value = 0.0;
+    resetGoalState(interface_name);
   }
 }
 

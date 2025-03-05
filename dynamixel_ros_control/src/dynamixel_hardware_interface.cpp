@@ -7,17 +7,6 @@
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
 
 namespace {
-std::string interfaceToRegisterName(const std::string& interface_name,
-                                    const std::unordered_map<std::string, std::string>& conversion_map)
-{
-  std::string register_name = interface_name;  // Default to interface name
-  try {
-    register_name = conversion_map.at(interface_name);  // Check if there is a specific configuration
-  }
-  catch (const std::out_of_range&) {
-  }
-  return register_name;
-}
 
 std::unordered_map<std::string, std::string> loadInterfaceRegisterTranslationMap(const YAML::Node& node)
 {
@@ -36,6 +25,30 @@ std::unordered_map<std::string, std::string> loadInterfaceRegisterTranslationMap
     conversion_map.emplace(interface_name, register_name);
   }
   return conversion_map;
+}
+
+bool loadInterfaceRegisterNameTranslation(
+    std::unordered_map<std::string, std::string>& state_interface_to_register,
+    std::unordered_map<std::string, std::string>& command_interface_to_register)
+{
+  std::string package_path_ = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
+  const std::string path = package_path_ + "/devices/interface_to_register_names.yaml";
+  YAML::Node config;
+  try {
+    config = YAML::LoadFile(path);
+  }
+  catch (YAML::BadFile&) {
+    DXL_LOG_ERROR("Failed to read interface to register name translation at '" << path << "'. Does the file exist?");
+    return false;
+  }
+  if (!config.IsMap()) {
+    DXL_LOG_ERROR("interface_to_register_names.yaml is not a map (wrong format).");
+    return false;
+  }
+
+  state_interface_to_register = loadInterfaceRegisterTranslationMap(config["state_interfaces"]);
+  command_interface_to_register = loadInterfaceRegisterTranslationMap(config["command_interfaces"]);
+  return true;
 }
 
 }  // namespace
@@ -77,7 +90,9 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   }
 
   // Interface to register translation
-  if (!loadInterfaceRegisterNameTranslation()) {
+  std::unordered_map<std::string, std::string> state_interface_to_register;
+  std::unordered_map<std::string, std::string> command_interface_to_register;
+  if (!loadInterfaceRegisterNameTranslation(state_interface_to_register, command_interface_to_register)) {
     return hardware_interface::CallbackReturn::ERROR;
   }
 
@@ -85,7 +100,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   joints_.reserve(info_.joints.size());
   for (const auto& joint_info : info_.joints) {
     Joint joint;
-    if (!joint.loadConfiguration(driver_, joint_info)) {
+    if (!joint.loadConfiguration(driver_, joint_info, state_interface_to_register, command_interface_to_register)) {
       return hardware_interface::CallbackReturn::ERROR;
     }
     std::stringstream ss;
@@ -229,9 +244,6 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     DXL_LOG_ERROR("No successful read() before a controller is loaded.");
     return hardware_interface::return_type::ERROR;
   }
-  for (auto& [name, joint] : joints_) {
-    joint.resetGoalState();
-  }
 
   bool torque = !joints_.empty() && joints_.begin()->second.torque;
   if (torque) {
@@ -335,7 +347,7 @@ bool DynamixelHardwareInterface::setUpStateReadManager()
   for (auto& [name, joint] : joints_) {
     read_manager_.addDynamixel(joint.dynamixel.get());
     for (auto& [interface_name, interface_value] : joint.current_state) {
-      std::string register_name = stateInterfaceToRegisterName(interface_name);
+      std::string register_name = joint.stateInterfaceToRegisterName(interface_name);
       register_dynamixel_mappings[register_name].push_back(
           std::make_pair<Dynamixel*, DxlValue>(joint.dynamixel.get(), DxlValue(&interface_value)));
     }
@@ -387,43 +399,11 @@ bool DynamixelHardwareInterface::setUpControlWriteManager()
     }
 
     const std::string interface_name = joint.getActiveCommandInterfaces().front();
-    const std::string register_name = commandInterfaceToRegisterName(interface_name);
+    const std::string register_name = joint.commandInterfaceToRegisterName(interface_name);
     control_write_manager_.addRegister(*joint.dynamixel, register_name, joint.goal_state.at(interface_name));
   }
 
   return control_write_manager_.init(driver_);
-}
-
-bool DynamixelHardwareInterface::loadInterfaceRegisterNameTranslation()
-{
-  std::string package_path_ = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
-  const std::string path = package_path_ + "/devices/interface_to_register_names.yaml";
-  YAML::Node config;
-  try {
-    config = YAML::LoadFile(path);
-  }
-  catch (YAML::BadFile&) {
-    DXL_LOG_ERROR("Failed to read interface to register name translation at '" << path << "'. Does the file exist?");
-    return false;
-  }
-  if (!config.IsMap()) {
-    DXL_LOG_ERROR("interface_to_register_names.yaml is not a map (wrong format).");
-    return false;
-  }
-
-  state_interface_to_register_ = loadInterfaceRegisterTranslationMap(config["state_interfaces"]);
-  command_interface_to_register_ = loadInterfaceRegisterTranslationMap(config["command_interfaces"]);
-  return true;
-}
-
-std::string DynamixelHardwareInterface::stateInterfaceToRegisterName(const std::string& interface_name) const
-{
-  return interfaceToRegisterName(interface_name, state_interface_to_register_);
-}
-
-std::string DynamixelHardwareInterface::commandInterfaceToRegisterName(const std::string& interface_name) const
-{
-  return interfaceToRegisterName(interface_name, command_interface_to_register_);
 }
 
 bool DynamixelHardwareInterface::setTorque(const bool enabled)

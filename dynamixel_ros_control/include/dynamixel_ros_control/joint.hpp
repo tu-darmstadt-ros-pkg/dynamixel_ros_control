@@ -12,7 +12,9 @@ class Joint
 public:
   Joint() = default;
 
-  bool loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info);
+  bool loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info,
+                         const std::unordered_map<std::string, std::string>& state_interface_to_register,
+                         const std::unordered_map<std::string, std::string>& command_interface_to_register);
   void reset();
 
   [[nodiscard]] ControlMode getControlMode() const;
@@ -23,11 +25,16 @@ public:
   [[nodiscard]] const std::vector<std::string>& getAvailableStateInterfaces() const;
   [[nodiscard]] const std::vector<std::string>& getAvailableCommandInterfaces() const;
 
+  [[nodiscard]] const std::vector<std::string>& getActiveCommandInterfaces() const;
   bool addActiveCommandInterface(const std::string& interface_name);
   bool removeActiveCommandInterface(const std::string& interface_name);
   bool updateControlMode();
+
+  std::string stateInterfaceToRegisterName(const std::string& interface_name) const;
+  std::string commandInterfaceToRegisterName(const std::string& interface_name) const;
+
+  void resetGoalState(const std::string& interface_name);
   void resetGoalState();
-  [[nodiscard]] const std::vector<std::string>& getActiveCommandInterfaces() const;
 
   // Parameters
   std::string name;
@@ -39,10 +46,8 @@ public:
   bool torque{false};
   std::unordered_map<std::string, double> current_state;
   std::unordered_map<std::string, double> goal_state;
-
-
-
   double estop_position{0.0};
+
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;
 
@@ -54,6 +59,8 @@ private:
   ControlMode preferred_position_control_mode_{POSITION};
   std::vector<std::string> state_interfaces_;
   std::vector<std::string> command_interfaces_;
+  std::unordered_map<std::string, std::string> command_interface_to_register_;
+  std::unordered_map<std::string, std::string> state_interface_to_register_;
 };
 
 }  // namespace dynamixel_ros_control
