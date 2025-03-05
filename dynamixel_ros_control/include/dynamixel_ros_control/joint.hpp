@@ -13,18 +13,7 @@ public:
   Joint() = default;
 
   bool loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info);
-
-  std::string name;
-  std::shared_ptr<Dynamixel> dynamixel;
-
-  bool torque{false};
-  std::unordered_map<std::string, double> current_state;
-  std::unordered_map<std::string, double> goal_state;
-
-  double mounting_offset{0.0};
-  double offset{0.0};
-
-  double estop_position{0.0};
+  void reset();
 
   [[nodiscard]] ControlMode getControlMode() const;
 
@@ -40,14 +29,29 @@ public:
   void resetGoalState();
   [[nodiscard]] const std::vector<std::string>& getActiveCommandInterfaces() const;
 
+  // Parameters
+  std::string name;
+  std::shared_ptr<Dynamixel> dynamixel;
+  double mounting_offset{0.0};
+  double offset{0.0};
+
+  // Active state
+  bool torque{false};
+  std::unordered_map<std::string, double> current_state;
+  std::unordered_map<std::string, double> goal_state;
+
+
+
+  double estop_position{0.0};
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;
 
+  // Active state
   ControlMode control_mode_{UNDEFINED};
   std::vector<std::string> active_command_interfaces_;
 
   // Parameters
-  ControlMode preferred_position_control_mode_;
+  ControlMode preferred_position_control_mode_{POSITION};
   std::vector<std::string> state_interfaces_;
   std::vector<std::string> command_interfaces_;
 };

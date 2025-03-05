@@ -31,11 +31,21 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
   std::string control_mode_str;
   if (getParameter(info.parameters, "position_control_mode", control_mode_str)) {
     preferred_position_control_mode_ = stringToControlMode(control_mode_str);
-  } else {
-    preferred_position_control_mode_ = POSITION;
   }
 
   return true;
+}
+
+void Joint::reset()
+{
+  active_command_interfaces_.clear();
+  control_mode_ = UNDEFINED;
+  for (auto& [interface_name, value] : current_state) {
+    value = 0.0;
+  }
+  for (auto& [interface_name, value] : goal_state) {
+    value = 0.0;
+  }
 }
 
 ControlMode Joint::getControlMode() const
