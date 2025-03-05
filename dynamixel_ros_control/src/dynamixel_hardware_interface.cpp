@@ -119,10 +119,11 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     joint.reset();
   }
 
-  // Set up read & torque manager
+  // Set up sync read / write managers
   if (!setUpStatusReadManager() || !setUpStateReadManager() || !setUpTorqueWriteManager()) {
     return hardware_interface::CallbackReturn::FAILURE;
   }
+  control_write_manager_ = SyncWriteManager(); // Only reset here
 
   return CallbackReturn::SUCCESS;
 }
