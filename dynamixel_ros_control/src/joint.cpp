@@ -81,17 +81,27 @@ const std::vector<std::string>& Joint::getAvailableCommandInterfaces() const
 
 bool Joint::addActiveCommandInterface(const std::string& interface_name)
 {
+  // Check if existing interface
   const auto it = std::find(command_interfaces_.begin(), command_interfaces_.end(), interface_name);
   if (it == command_interfaces_.end()) {
     DXL_LOG_ERROR("No available command interface '" << interface_name << "' for joint '" << name << "'.");
     return false;
   }
+
+  // Check if already included
+  const auto it2 = std::find(active_command_interfaces_.begin(), active_command_interfaces_.end(), interface_name);
+  if (it2 != active_command_interfaces_.end()) {
+    // Already included
+    return true;
+  }
+
   active_command_interfaces_.emplace_back(interface_name);
   return true;
 }
 
 bool Joint::removeActiveCommandInterface(const std::string& interface_name)
 {
+  // Check if it exists
   const auto it = std::find(active_command_interfaces_.begin(), active_command_interfaces_.end(), interface_name);
   if (it == active_command_interfaces_.end()) {
     DXL_LOG_ERROR("Could not remove interface '" << interface_name << "' because it is not active for joint '" << name
