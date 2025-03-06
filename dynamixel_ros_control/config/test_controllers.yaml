@@ -22,22 +22,22 @@
   velocity_to_position_controller:
     ros__parameters:
       joints:
-        - flipper_fl_joint
+        - joint_1
 
   velocity_controller:
     ros__parameters:
       joints:
-        - flipper_fl_joint
+        - joint_1
 
   position_controller:
     ros__parameters:
       joints:
-        - flipper_fl_joint
+        - joint_1
 
   trajectory_controller:
     ros__parameters:
       joints:
-        - flipper_fl_joint
+        - joint_1
 
       command_interfaces:
         - position
