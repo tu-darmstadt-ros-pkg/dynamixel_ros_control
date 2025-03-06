@@ -4,9 +4,10 @@ _dynamixel_ros_control_ is a [ROS2](https://www.ros.org/) driver for [Robotis Dy
 **Main features:**
 * Support for all protocol 2.0 Dynamixel models
 * Support for mixed chains with different models in the same chain
+* Automatic conversion of all registers to SI units
 * Synchronized, efficient reading and writing of registers
-* Provides state interfaces for any readable register (position, velocity, current, ...)
-* Provides command interfaces for any writable register (position, velocity, current, ...)
+* Provides state interfaces for **all** readable register (position, velocity, input voltage, ...)
+* Provides command interfaces for **all** writable register (position, velocity, LEDs, ...)
 * Automatic switching of control mode during runtime
 * Automatic reconnection in case of errors
 
@@ -68,4 +69,11 @@ All configured command and state interfaces are made available to controllers. T
 ```
 will make the input voltage available to controllers as a state interface.
 
+## Advanced features
+### Automatic conversion to SI units
+All register values are converted from dynamixel counts to SI units automatically. This means, registers can be read and written using SI units without additional conversions required. Some examples are _goal_position_ and _max_position_limit_ in radians, _velocity_limit_ in radians per second or _present_temperature_ in celsius.
 
+## Contribution
+Feel free to contribute to this project by opening an issue or a pull request.
+### Adding support for new models
+The driver contains a database of control tables of supported models. If a control table of a specific model is missing, it needs to be added for the driver to work. The association of model number to control table is provided in [model_list.yaml](dynamixel_ros_control/devices/model_list.yaml) . If the control table of the missing model matches an existing control table, simply add an entry here. If the control table is different, a new name has to be chosen and a new control table file has to be placed in [dynamixel_ros_control/devices/models/](dynamixel_ros_control/devices/models/) . Make sure to use the correct conversion ratios from Dynamixel value counts to SI units. It is advised to use a high precision to prevent large rounding errors.
