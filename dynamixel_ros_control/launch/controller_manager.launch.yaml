@@ -12,11 +12,11 @@ launch:
         - name: "hardware_components_initial_state.unconfigured"
           value: ['hardware_interface']
 
-# - node:
-#     pkg: "controller_manager"
-#     exec: "hardware_spawner"
-#     name: "hardware_interface_spawner"
-#     output: "screen"
-#     args: "hardware_interface --activate"
-#     respawn: "true"
-#     respawn_delay: 5.0
+- node:
+    pkg: "controller_manager"
+    exec: "hardware_spawner"
+    name: "hardware_interface_spawner"
+    output: "screen"
+    args: "hardware_interface --activate"
+    respawn: "true"
+    respawn_delay: 5.0
