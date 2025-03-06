@@ -14,5 +14,5 @@
     <link name="link_1"/>
 
     <xacro:include filename="$(find dynamixel_ros_control)/config/ros2_control_test_config.xacro" />
-    <xacro:ros2_control_test_config/>
+    <xacro:ros2_control_test_config port_name="$(arg port_name)" baud_rate="$(arg baud_rate)" id="$(arg id)"/>
 </robot>

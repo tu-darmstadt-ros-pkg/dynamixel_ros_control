@@ -1,19 +1,19 @@
 <?xml version="1.0"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
 
-    <xacro:macro name="ros2_control_test_config">
+    <xacro:macro name="ros2_control_test_config" params="port_name baud_rate id">
         <ros2_control name="hardware_interface" type="system">
             <hardware>
                 <plugin>dynamixel_ros_control/DynamixelHardwareInterface</plugin>
                 <param name="debug">true</param>
-                <param name="port_name">/dev/ttyUSB0</param>
-                <param name="baud_rate">57600</param>
+                <param name="port_name">${port_name}</param>
+                <param name="baud_rate">${baud_rate}</param>
                 <param name="torque_on_startup">true</param>
                 <param name="torque_off_on_shutdown">false</param>
             </hardware>
 
             <joint name="joint_1">
-                <param name="id">1</param>
+                <param name="id">${id}</param>
                 <param name="position_control_mode">extended_position</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
