@@ -385,6 +385,9 @@ bool DynamixelHardwareInterface::setUpTorqueWriteManager()
 
 bool DynamixelHardwareInterface::setUpControlWriteManager()
 {
+  if (!control_write_manager_.release()) {
+    DXL_LOG_WARN("Failed to release indirect addresses of control write manager. This should not happen.");
+  }
   control_write_manager_ = SyncWriteManager();
   for (auto& [name, joint] : joints_) {
     DXL_LOG_DEBUG("Active command interfaces for joint '" << joint.name << "': " << iterableToString(joint.getActiveCommandInterfaces()));

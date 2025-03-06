@@ -10,7 +10,7 @@
 namespace dynamixel_ros_control {
 
 DynamixelDriver::DynamixelDriver()
-    : next_indirect_address_(0)
+    : next_indirect_address_index_(0)
 {}
 
 bool DynamixelDriver::init(const std::string& port_name, const int baud_rate)
@@ -146,7 +146,7 @@ bool DynamixelDriver::reboot(const uint8_t id) const
 bool DynamixelDriver::writeRegister(const uint8_t id, const uint16_t address, const uint8_t data_length,
                                     int32_t value) const
 {
-  DXL_LOG_DEBUG("[Register Write] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length:"
+  DXL_LOG_DEBUG("[Register Write] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: "
                                        << static_cast<unsigned int>(data_length) << ", value: " << value);
   uint8_t error = 0;
   int comm_result = COMM_TX_FAIL;
@@ -228,11 +228,26 @@ dynamixel::GroupSyncRead* DynamixelDriver::setSyncRead(uint16_t address, uint8_t
   return new dynamixel::GroupSyncRead(port_handler_, packet_handler_, address, data_length);
 }
 
-bool DynamixelDriver::requestIndirectAddresses(const unsigned int data_length, unsigned int& address_start)
+bool DynamixelDriver::requestIndirectAddresses(const unsigned int data_length, unsigned int& address_start_index)
 {
-  address_start = next_indirect_address_;
-  next_indirect_address_ += data_length;
+  address_start_index = next_indirect_address_index_;
+  next_indirect_address_index_ += data_length;
   return true;
+}
+
+bool DynamixelDriver::releaseIndirectAddresses(const unsigned int data_length, const unsigned int address_start_index)
+{
+  const unsigned int new_address_start = next_indirect_address_index_ - data_length;
+
+  // Check if this is the last address
+  if (new_address_start == address_start_index) {
+    next_indirect_address_index_ = address_start_index;
+    DXL_LOG_DEBUG("[INDIRECT ADDRESS] Realising indirect address index " << address_start_index << " with length " << data_length);
+    return true;
+  }
+
+  // Cannot release the address (for now)
+  return false;
 }
 
 std::string DynamixelDriver::communicationErrorToString(const int comm_result) const
@@ -272,7 +287,7 @@ bool DynamixelDriver::connectPort()
   }
 
   DXL_LOG_INFO("Succeeded to open port '" << port_handler_->getPortName() << "'.");
-  next_indirect_address_ = 0;
+  next_indirect_address_index_ = 0;
   return true;
 }
 

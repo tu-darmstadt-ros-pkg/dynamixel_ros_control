@@ -25,6 +25,7 @@ public:
   void addRegister(Dynamixel& dxl, const std::string& register_name, bool& value);
 
   bool init(DynamixelDriver& driver);
+  bool release() const;
   bool write();
 
   [[nodiscard]] bool isOk() const;

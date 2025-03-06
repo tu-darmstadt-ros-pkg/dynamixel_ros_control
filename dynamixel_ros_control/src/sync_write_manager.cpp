@@ -58,6 +58,11 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   return true;
 }
 
+bool SyncWriteManager::release() const
+{
+  return data_length_ == 0 || driver_->releaseIndirectAddresses(data_length_, indirect_address_index_);
+}
+
 bool SyncWriteManager::write()
 {
   if (write_entries_.empty()) {

@@ -36,7 +36,8 @@ public:
   [[nodiscard]] dynamixel::GroupSyncWrite* setSyncWrite(uint16_t address, uint8_t data_length) const;
   [[nodiscard]] dynamixel::GroupSyncRead* setSyncRead(uint16_t address, uint8_t data_length) const;
 
-  bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start);
+  bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start_index);
+  bool releaseIndirectAddresses(unsigned int data_length, unsigned int address_start_index);
 
   [[nodiscard]] std::string communicationErrorToString(int comm_result) const;
   [[nodiscard]] std::string packetErrorToString(uint8_t error) const;
@@ -51,7 +52,7 @@ private:
   dynamixel::PacketHandler* packet_handler_;
   dynamixel::PortHandler* port_handler_;
 
-  unsigned int next_indirect_address_;
+  unsigned int next_indirect_address_index_;
 
   std::string package_path_;
   std::map<uint16_t, std::string> model_number_to_series_;

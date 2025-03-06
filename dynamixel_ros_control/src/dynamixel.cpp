@@ -207,8 +207,8 @@ bool Dynamixel::setIndirectAddress(const unsigned int indirect_address_index, co
   catch (const std::out_of_range&) {
     return false;
   }
-  uint16_t register_address = item->address();
-  uint8_t data_length = item->data_length();
+  const uint16_t register_address = item->address();
+  const uint8_t data_length = item->data_length();
 
   DXL_LOG_DEBUG("[INDIRECT ADDRESS] Setting indirect address " << indirect_address << " to " << register_address << " ("
                                                                << register_name
