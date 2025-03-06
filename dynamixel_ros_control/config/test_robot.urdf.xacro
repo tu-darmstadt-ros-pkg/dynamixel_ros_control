@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+
+<robot xmlns:xacro="http://www.ros.org/wiki/xacro" name="test_robot">
+
+    <link name="base_link" />
+
+    <joint name="joint_1" type="continuous">
+        <parent link="base_link"/>
+        <child link="link_1"/>
+        <axis xyz="1 0 0" rpy="0 0 0" />
+        <limit effort="1000" velocity="1.5"/>
+    </joint>
+
+    <link name="link_1"/>
+
+    <xacro:include filename="$(find dynamixel_ros_control)/config/ros2_control_test_config.xacro" />
+    <xacro:ros2_control_test_config/>
+</robot>

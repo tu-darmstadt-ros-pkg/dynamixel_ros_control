@@ -1,0 +1,46 @@
+/**:
+  controller_manager:
+    ros__parameters:
+      update_rate: 25  # Hz
+
+      joint_state_broadcaster:
+        type: joint_state_broadcaster/JointStateBroadcaster
+
+      velocity_to_position_controller:
+        type: velocity_to_position_command_controller/VelocityToPositionCommandController
+
+      velocity_controller:
+        type: velocity_controllers/JointGroupVelocityController
+
+      position_controller:
+        type: position_controllers/JointGroupPositionController
+
+      trajectory_controller:
+        type: joint_trajectory_controller/JointTrajectoryController
+
+
+  velocity_to_position_controller:
+    ros__parameters:
+      joints:
+        - flipper_fl_joint
+
+  velocity_controller:
+    ros__parameters:
+      joints:
+        - flipper_fl_joint
+
+  position_controller:
+    ros__parameters:
+      joints:
+        - flipper_fl_joint
+
+  trajectory_controller:
+    ros__parameters:
+      joints:
+        - flipper_fl_joint
+
+      command_interfaces:
+        - position
+      state_interfaces:
+        - position
+        - velocity

@@ -1,6 +1,6 @@
 launch:
 - include:
-    file: "$(find-pkg-share athena_description)/launch/load_description.launch.py"
+    file: "$(find-pkg-share dynamixel_ros_control)/launch/load_description.launch.py"
 
 - node:
     pkg: "controller_manager"
@@ -10,13 +10,13 @@ launch:
         - from: "$(find-pkg-share athena_description)/config/athena_controllers.yaml"
           allow_substs: true
         - name: "hardware_components_initial_state.unconfigured"
-          value: ['athena_flipper_interface']
+          value: ['hardware_interface']
 
 - node:
     pkg: "controller_manager"
     exec: "hardware_spawner"
     name: "hardware_interface_spawner"
     output: "screen"
-    args: "athena_flipper_interface --activate"
+    args: "hardware_interface --activate"
     respawn: "true"
     respawn_delay: 5.0
