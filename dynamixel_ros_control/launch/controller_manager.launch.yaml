@@ -1,7 +1,9 @@
 launch:
+# Robot description
 - include:
     file: "$(find-pkg-share dynamixel_ros_control)/launch/load_description.launch.py"
 
+# Controller manager
 - node:
     pkg: "controller_manager"
     exec: "ros2_control_node"
@@ -11,7 +13,7 @@ launch:
           allow_substs: true
         - name: "hardware_components_initial_state.unconfigured"
           value: ['hardware_interface']
-
+# Controller manager lifecycle management
 - node:
     pkg: "controller_manager"
     exec: "hardware_spawner"
@@ -20,3 +22,22 @@ launch:
     args: "hardware_interface --activate"
     respawn: "true"
     respawn_delay: 5.0
+
+# Controllers
+- node:
+    pkg: "controller_manager"
+    exec: "spawner"
+    name: "joint_state_broadcaster_spawner"
+    output: "screen"
+    args: "joint_state_broadcaster"
+    respawn: "true"
+    respawn_delay: 5.0
+
+- node:
+    pkg: "controller_manager"
+    exec: "spawner"
+    name: "position_controller_spawner"
+    output: "screen"
+    args: "position_controller"
+    param:
+        - from: "$(find-pkg-share dynamixel_ros_control)/config/test_controllers.yaml"
