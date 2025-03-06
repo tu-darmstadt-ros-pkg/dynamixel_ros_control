@@ -178,22 +178,22 @@ std::vector<hardware_interface::StateInterface::ConstSharedPtr> DynamixelHardwar
   std::vector<hardware_interface::StateInterface::ConstSharedPtr> state_interfaces;
 
   // Read all requested fields from all motors
-  std::set<std::string> requested_state_interface_names;
+  std::set<std::string> configured_state_interface_names;
   for (const auto& [name, joint] : joints_) {
-    requested_state_interface_names.insert(joint.getAvailableStateInterfaces().begin(),
+    configured_state_interface_names.insert(joint.getAvailableStateInterfaces().begin(),
                                            joint.getAvailableStateInterfaces().end());
   }
   // Create the state interfaces
   for (auto& [name, joint] : joints_) {
-    joint.current_state.reserve(requested_state_interface_names.size());
-    for (const auto& interface_name : requested_state_interface_names) {
+    joint.current_state.reserve(configured_state_interface_names.size());
+    for (const auto& interface_name : configured_state_interface_names) {
       joint.current_state[interface_name] = 0.0;
       const auto state_interface = std::make_shared<hardware_interface::StateInterface>(
           joint.name, interface_name, &joint.current_state[interface_name]);
       state_interfaces.emplace_back(state_interface);
     }
   }
-  DXL_LOG_DEBUG("State interfaces: " << iterableToString(requested_state_interface_names));
+  DXL_LOG_DEBUG("State interfaces: " << iterableToString(configured_state_interface_names));
   return state_interfaces;
 }
 
@@ -202,23 +202,17 @@ std::vector<hardware_interface::CommandInterface::SharedPtr> DynamixelHardwareIn
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_export_command_interfaces");
   std::vector<hardware_interface::CommandInterface::SharedPtr> command_interfaces;
 
-  // Read all requested fields from all motors
-  std::set<std::string> requested_command_interface_names;
-  for (const auto& [name, joint] : joints_) {
-    requested_command_interface_names.insert(joint.getAvailableCommandInterfaces().begin(),
-                                             joint.getAvailableCommandInterfaces().end());
-  }
+
   // Create the state interfaces
   for (auto& [name, joint] : joints_) {
-    joint.goal_state.reserve(requested_command_interface_names.size());
-    for (const auto& interface_name : requested_command_interface_names) {
+    joint.goal_state.reserve(joint.getAvailableCommandInterfaces().size());
+    for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
       joint.goal_state[interface_name] = 0.0;
       const auto command_interface = std::make_shared<hardware_interface::CommandInterface>(
           joint.name, interface_name, &joint.goal_state[interface_name]);
       command_interfaces.emplace_back(command_interface);
     }
   }
-  DXL_LOG_DEBUG("Command interfaces: " << iterableToString(requested_command_interface_names));
   return command_interfaces;
 }
 
