@@ -6,8 +6,8 @@ _dynamixel_ros_control_ is a [ROS2](https://www.ros.org/) driver for [Robotis Dy
 * Support for mixed chains with different models in the same chain
 * Automatic conversion of all registers to SI units
 * Synchronized, efficient reading and writing of registers
-* Provides state interfaces for **all** readable register (position, velocity, input voltage, ...)
-* Provides command interfaces for **all** writable register (position, velocity, LEDs, ...)
+* Provides state interfaces for **all** readable registers (position, velocity, input voltage, ...)
+* Provides command interfaces for **all** writable registers (position, velocity, LEDs, ...)
 * Automatic switching of control mode during runtime
 * Automatic reconnection in case of errors
 
