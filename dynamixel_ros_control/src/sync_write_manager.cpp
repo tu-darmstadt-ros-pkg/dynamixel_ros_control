@@ -101,6 +101,9 @@ bool SyncWriteManager::write()
         dxl_value = dxl->boolToDxlValue(entry.register_name, *entry.b_value);
         DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value
                                   << ", converted: " << *entry.b_value);
+      } else {
+        DXL_LOG_ERROR("No value set");
+        dxl_value = 0;
       }
       std::memcpy(buffer, &dxl_value, entry.data_length);
       buffer += entry.data_length;

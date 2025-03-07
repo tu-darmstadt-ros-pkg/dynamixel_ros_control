@@ -219,8 +219,9 @@ ControlMode Joint::getControlModeFromInterfaces(const std::vector<std::string>& 
     return VELOCITY;
   }
 
-  const auto effort_it = std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_EFFORT);
-  if (effort_it != interfaces.end()) {
+  if (std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_EFFORT) != interfaces.end()
+    || std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_CURRENT) != interfaces.end()) {
+
     return CURRENT;
   }
   DXL_LOG_WARN("None out of the command interfaces "

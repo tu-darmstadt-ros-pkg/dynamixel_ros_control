@@ -230,6 +230,7 @@ dynamixel::GroupSyncRead* DynamixelDriver::setSyncRead(uint16_t address, uint8_t
 
 bool DynamixelDriver::requestIndirectAddresses(const unsigned int data_length, unsigned int& address_start_index)
 {
+  DXL_LOG_DEBUG("[INDIRECT ADDRESS] Reserving indirect address index " << address_start_index << " with length " << data_length);
   address_start_index = next_indirect_address_index_;
   next_indirect_address_index_ += data_length;
   return true;
