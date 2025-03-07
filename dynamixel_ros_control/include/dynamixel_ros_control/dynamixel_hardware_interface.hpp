@@ -60,6 +60,9 @@ private:
   bool setUpTorqueWriteManager();
   bool setUpControlWriteManager();
 
+  bool isHardwareOk() const;
+  bool reboot() const;
+
   bool setTorque(bool enabled);
 
   std::unordered_map<std::string, Joint> joints_;
@@ -79,6 +82,7 @@ private:
   bool debug_{false};
   bool torque_on_startup_{false};
   bool torque_off_on_shutdown_{false};
+  bool reboot_on_hardware_error_{false};
 
   // ROS interface
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;

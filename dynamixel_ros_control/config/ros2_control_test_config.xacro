@@ -10,6 +10,7 @@
                 <param name="baud_rate">${baud_rate}</param>
                 <param name="torque_on_startup">true</param>
                 <param name="torque_off_on_shutdown">true</param>
+                <param name="reboot_on_hardware_error">true</param>
             </hardware>
 
             <joint name="joint_1">

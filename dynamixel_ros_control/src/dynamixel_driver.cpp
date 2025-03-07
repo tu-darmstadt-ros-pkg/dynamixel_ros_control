@@ -140,6 +140,7 @@ std::vector<std::pair<uint8_t, uint16_t>> DynamixelDriver::scan() const
 bool DynamixelDriver::reboot(const uint8_t id) const
 {
   uint8_t error;
+  DXL_LOG_DEBUG("[REBOOT] id " << static_cast<unsigned int>(id));
   return packet_handler_->reboot(port_handler_, id, &error);
 }
 
