@@ -2,26 +2,15 @@
 unit_conversions: # dxl value to unit ratio
   rad: 0.00002068538
   rad_per_s: 0.000344746
-  Nm: 0.006675773 # TODO
-  rad_per_s2: 1.123489409 # TODO
+  rad_per_s2: 1 # TODO
   celsius: 1.0
-  V: 0.1 # TODO
-  ms: 1.0 # TODO
-  A: 0.00269 # TODO
+  V: 0.1
+  A: 0.00402832031
   
 indirect_addresses:
 # address start | data start  | count
   - 49          | 634         | 256
   
-#register_names:
-  #enable_torque_name:    torque_enable
-  #current_position_name: present_position
-  #current_velocity_name: present_velocity
-  #current_torque_name:   present_current
-  #goal_position_name:    goal_position
-  #goal_velocity_name:    goal_velocity
-  #goal_torque_name:      goal_torque
-
 control_table:
 # addr  | item name                | length | access | memory | unit/type
   - 0   | model_number             | 2      | R      | EEPROM |
@@ -36,7 +25,7 @@ control_table:
   - 22  | max_voltage_limit        | 2      | RW     | EEPROM | V
   - 24  | min_voltage_limit        | 2      | RW     | EEPROM | V
   - 26  | acceleration_limit       | 4      | RW     | EEPROM | rad_per_s2
-  - 30  | torque_limit             | 2      | RW     | EEPROM | Nm
+  - 30  | torque_limit             | 2      | RW     | EEPROM | A
   - 32  | velocity_limit           | 4      | RW     | EEPROM | rad_per_s
   - 36  | max_position_limit       | 4      | RW     | EEPROM | rad
   - 40  | min_position_limit       | 4      | RW     | EEPROM | rad
@@ -54,7 +43,7 @@ control_table:
   - 594 | position_p_gain          | 2      | RW     | RAM    |
   - 596 | goal_position            | 4      | RW     | RAM    | rad
   - 600 | goal_velocity            | 4      | RW     | RAM    | rad_per_s
-  - 604 | goal_torque              | 2      | RW     | RAM    | Nm
+  - 604 | goal_torque              | 2      | RW     | RAM    | A
   - 606 | goal_acceleration        | 4      | RW     | RAM    | rad_per_s2
   - 610 | moving                   | 1      | R      | RAM    | bool
   - 611 | present_position         | 4      | R      | RAM    | rad

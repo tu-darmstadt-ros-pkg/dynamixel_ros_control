@@ -5,7 +5,6 @@ unit_conversions: # dxl value to unit ratio
   rad_per_s2: 1 # TODO
   celsius: 1.0
   V: 0.1
-  ms: 1.0
   A: 0.01611328125
   
 indirect_addresses:
