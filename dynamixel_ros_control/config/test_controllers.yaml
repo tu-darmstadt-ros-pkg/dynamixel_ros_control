@@ -18,6 +18,18 @@
       trajectory_controller:
         type: joint_trajectory_controller/JointTrajectoryController
 
+      multi_interface_controller:
+        type: forward_command_controller/MultiInterfaceForwardCommandController
+
+
+  multi_interface_controller:
+    ros__parameters:
+      joint: "joint_1"
+      interface_names:
+        - position
+        - velocity
+        - current
+
 
   velocity_to_position_controller:
     ros__parameters:
