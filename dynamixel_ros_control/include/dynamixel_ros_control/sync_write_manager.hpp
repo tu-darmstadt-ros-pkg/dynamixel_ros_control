@@ -10,8 +10,9 @@ namespace dynamixel_ros_control {
 
 struct WriteEntry
 {
-  Dynamixel* dxl{nullptr};
   std::string register_name;
+  uint8_t data_length;
+  uint16_t indirect_data_address;
   double* d_value{nullptr};
   bool* b_value{nullptr};
   double offset{0.0};
@@ -32,12 +33,11 @@ public:
   void setErrorThreshold(unsigned int threshold);
 
 private:
-  std::vector<WriteEntry>::iterator addEntry(Dynamixel& dxl, const std::string& register_name);
-  std::vector<WriteEntry> write_entries_;
+  std::optional<std::reference_wrapper<WriteEntry>> addEntry(Dynamixel& dxl, const std::string& register_name);
+  std::unordered_map<Dynamixel*, std::vector<WriteEntry>> write_entries_;
 
   unsigned int indirect_address_index_{0};
-  uint16_t indirect_data_address_{0};
-  uint8_t data_length_{0};
+  uint8_t total_data_length_{0};
 
   DynamixelDriver* driver_{nullptr};
   dynamixel::GroupSyncWrite* sync_write_{nullptr};

@@ -6,53 +6,71 @@ namespace dynamixel_ros_control {
 
 void SyncWriteManager::addRegister(Dynamixel& dxl, const std::string& register_name, double& value, const double offset)
 {
-  const auto it = addEntry(dxl, register_name);
-  if (it != write_entries_.end()) {
-    it->d_value = &value;
-    it->offset = offset;
+  if (const auto entry = addEntry(dxl, register_name)) {
+    entry->get().d_value = &value;
+    entry->get().offset = offset;
   }
 }
 
 void SyncWriteManager::addRegister(Dynamixel& dxl, const std::string& register_name, bool& value)
 {
-  const auto it = addEntry(dxl, register_name);
-  if (it != write_entries_.end()) {
-    it->b_value = &value;
+  if (const auto entry = addEntry(dxl, register_name)) {
+    entry->get().b_value = &value;
   }
 }
 
 bool SyncWriteManager::init(DynamixelDriver& driver)
 {
+  if (write_entries_.empty()) {
+    return true;
+  }
   driver_ = &driver;
+  total_data_length_ = 0;
+  // Determine total data length
+  for (const auto& [dxl, write_entries]: write_entries_) {
+    unsigned int dxl_data_length = 0;
+    for (const auto& entry: write_entries) {
+      dxl_data_length += entry.data_length;
+    }
+    if (dxl_data_length > total_data_length_) {
+      total_data_length_ = dxl_data_length;
+    }
+  }
+
   // Request indirect address space from dynamixel_driver
-  if (!driver.requestIndirectAddresses(data_length_, indirect_address_index_)) {
-    DXL_LOG_ERROR("Failed to acquire indirect addresses for register with data length of " << data_length_ << ".");
+  if (!driver.requestIndirectAddresses(total_data_length_, indirect_address_index_)) {
+    DXL_LOG_ERROR("Failed to acquire indirect addresses for register with data length of " << total_data_length_ << ".");
     return false;
   }
 
+  // Register indirect addresses
+  uint16_t total_indirect_data_address = 0;
   bool first = true;
-  for (std::vector<WriteEntry>::value_type& entry : write_entries_) {
-    uint16_t indirect_data_address;
-    if (!entry.dxl->setIndirectAddress(indirect_address_index_, entry.register_name, indirect_data_address)) {
-      DXL_LOG_ERROR("Failed to set indirect address mapping");
-      return false;
-    }
-    if (first) {  // Save address of first dynamixel, should be the same for every one
-      indirect_data_address_ = indirect_data_address;
-      first = false;
+  for (auto& [dxl, write_entries]: write_entries_) {
+    unsigned int indirect_address_index = indirect_address_index_;
+    for (auto& entry: write_entries) {
+      if (!dxl->setIndirectAddress(indirect_address_index, entry.register_name, entry.indirect_data_address)) {
+        DXL_LOG_ERROR("Failed to set indirect address mapping");
+        return false;
+      }
+      if (first) {
+        first = false;
+        total_indirect_data_address = entry.indirect_data_address; // Should be the same for every servo
+      }
+      indirect_address_index += entry.data_length;
     }
   }
 
   // Create sync write group
-  sync_write_ = driver.setSyncWrite(indirect_data_address_, data_length_);
+  sync_write_ = driver.setSyncWrite(total_indirect_data_address, total_data_length_);
   if (!sync_write_) {
     DXL_LOG_ERROR("Failed to initialize GroupSyncWrite.");
     return false;
   }
 
-  std::vector<unsigned char> tmp(data_length_, 0);  // Will not be used
-  for (std::vector<WriteEntry>::value_type& entry : write_entries_) {
-    if (!sync_write_->addParam(entry.dxl->getId(), &tmp[0]))
+  std::vector<unsigned char> tmp(total_data_length_, 0);  // Will not be used
+  for (auto& [dxl, write_entries]: write_entries_) {
+    if (!sync_write_->addParam(dxl->getId(), &tmp[0]))
       return false;
   }
   return true;
@@ -60,7 +78,7 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
 
 bool SyncWriteManager::release() const
 {
-  return data_length_ == 0 || driver_->releaseIndirectAddresses(data_length_, indirect_address_index_);
+  return total_data_length_ == 0 || driver_->releaseIndirectAddresses(total_data_length_, indirect_address_index_);
 }
 
 bool SyncWriteManager::write()
@@ -69,34 +87,25 @@ bool SyncWriteManager::write()
     return true;
   }
   // Convert values and update params
-  for (const auto& entry : write_entries_) {
-    int32_t dxl_value;
-    if (entry.d_value != nullptr) {
-      const double unit_value = *entry.d_value + entry.offset;
-      dxl_value = entry.dxl->unitToDxlValue(entry.register_name, unit_value);
-      DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << entry.dxl->getIdInt() << ", value: " << dxl_value
-                                << ", converted: " << *entry.d_value);
-    } else if (entry.b_value != nullptr) {
-      dxl_value = entry.dxl->boolToDxlValue(entry.register_name, *entry.b_value);
-      DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << entry.dxl->getIdInt() << ", value: " << dxl_value
-                                << ", converted: " << *entry.b_value);
+  for (auto& [dxl, write_entries]: write_entries_) {
+    std::vector<unsigned char> write_value(total_data_length_, 0);
+    auto *buffer = write_value.data();
+    for (auto& entry: write_entries) {
+      int32_t dxl_value;
+      if (entry.d_value) {
+        const double unit_value = *entry.d_value + entry.offset;
+        dxl_value = dxl->unitToDxlValue(entry.register_name, unit_value);
+        DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value
+                                  << ", converted: " << *entry.d_value);
+      } else if (entry.b_value) {
+        dxl_value = dxl->boolToDxlValue(entry.register_name, *entry.b_value);
+        DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value
+                                  << ", converted: " << *entry.b_value);
+      }
+      std::memcpy(buffer, &dxl_value, entry.data_length);
+      buffer += entry.data_length;
     }
-    unsigned char* value_ptr;
-    int16_t value_16bit;
-    int8_t value_8bit;
-    if (data_length_ == 4) {
-      value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
-    } else if (data_length_ == 2) {
-      value_16bit = static_cast<int16_t>(dxl_value);
-      value_ptr = reinterpret_cast<unsigned char*>(&value_16bit);
-    } else if (data_length_ == 1) {
-      value_8bit = static_cast<int8_t>(dxl_value);
-      value_ptr = reinterpret_cast<unsigned char*>(&value_8bit);
-    } else {
-      DXL_LOG_ERROR("Unsupported data length: " << data_length_);
-      value_ptr = reinterpret_cast<unsigned char*>(&dxl_value);
-    }
-    sync_write_->changeParam(entry.dxl->getId(), value_ptr);
+    sync_write_->changeParam(dxl->getId(), write_value.data());
   }
 
   const int result = sync_write_->txPacket();
@@ -119,41 +128,23 @@ void SyncWriteManager::setErrorThreshold(const unsigned int threshold)
   error_threshold_ = threshold;
 }
 
-std::vector<WriteEntry>::iterator SyncWriteManager::addEntry(Dynamixel& dxl, const std::string& register_name)
+std::optional<std::reference_wrapper<WriteEntry>> SyncWriteManager::addEntry(Dynamixel& dxl, const std::string& register_name)
 {
-  // Check if entry for dynamixel exists already
-  for (const std::vector<WriteEntry>::value_type& entry : write_entries_) {
-    if (dxl.getId() == entry.dxl->getId()) {
-      DXL_LOG_ERROR("A write entry for dynamixel ID " << dxl.getIdInt() << " exists already.");
-      return write_entries_.end();
-    }
-  }
-
-  // Check if data length matches
-  uint8_t register_data_length;
-  try {
-    register_data_length = dxl.getItem(register_name).data_length();
-  }
-  catch (const std::out_of_range&) {
-    DXL_LOG_ERROR("Failed to add write entry");
-    return write_entries_.end();
-  }
-
-  if (data_length_ == 0) {
-    data_length_ = register_data_length;
-  } else {
-    if (data_length_ != register_data_length) {
-      DXL_LOG_ERROR("Data length of register '" << register_name
-                                                << "' does not match the data length of previous write entries.");
-      return write_entries_.end();
-    }
-  }
-
   WriteEntry entry;
-  entry.dxl = &dxl;
   entry.register_name = register_name;
-  write_entries_.push_back(entry);
-  return std::prev(write_entries_.end());
+  try {
+    entry.data_length = dxl.getItem(register_name).data_length();
+  } catch (const std::out_of_range&) {
+    DXL_LOG_ERROR("Unknown register '" << register_name << "'. Failed to add write entry");
+    return {};
+  }
+  if (entry.data_length > sizeof(int32_t)) {
+    DXL_LOG_ERROR("Data length must not exceed " << sizeof(int32_t));
+    return {};
+  }
+  std::vector<WriteEntry>& dxl_write_entries = write_entries_[&dxl];
+  dxl_write_entries.push_back(std::move(entry));
+  return dxl_write_entries.back();
 }
 
 }  // namespace dynamixel_ros_control
