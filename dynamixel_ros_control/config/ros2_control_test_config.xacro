@@ -9,12 +9,13 @@
                 <param name="port_name">${port_name}</param>
                 <param name="baud_rate">${baud_rate}</param>
                 <param name="torque_on_startup">true</param>
-                <param name="torque_off_on_shutdown">false</param>
+                <param name="torque_off_on_shutdown">true</param>
             </hardware>
 
             <joint name="joint_1">
                 <param name="id">${id}</param>
                 <param name="position_control_mode">extended_position</param>
+                <param name="registers.velocity_limit">2.0</param>
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <command_interface name="current"/>

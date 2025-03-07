@@ -1,3 +1,5 @@
+#include "dynamixel_ros_control/log.hpp"
+
 #include <cstdint>
 #include <limits>
 #include <stdexcept>
@@ -11,8 +13,7 @@ bool getParameter<std::string>(const ParameterMap& map, const std::string& param
   try {
     value = map.at(param_name);
   }
-  catch (const std::out_of_range& e) {
-    // RCLCPP_ERROR_STREAM(get_logger(), "Parameter '" << param_name << "' does not exist");
+  catch (const std::out_of_range&) {
     return false;
   }
   return true;
@@ -30,7 +31,7 @@ bool getParameter<double>(const ParameterMap& map, const std::string& param_name
     value = std::stod(parameter_string);
   }
   catch (const std::exception& e) {
-    // RCLCPP_ERROR_STREAM(get_logger(), "Failed to convert parameter '" << param_name << "' to a double: " << e.what());
+    DXL_LOG_ERROR("Failed to convert parameter '" << param_name << "' to a double: " << e.what());
     return false;
   }
   return true;
@@ -48,7 +49,7 @@ bool getParameter<int>(const ParameterMap& map, const std::string& param_name, i
     value = std::stoi(parameter_string);
   }
   catch (const std::exception& e) {
-    // RCLCPP_ERROR_STREAM(get_logger(), "Failed to convert parameter '" << param_name << "' to an integer: " << e.what());
+    DXL_LOG_ERROR("Failed to convert parameter '" << param_name << "' to an integer: " << e.what());
     return false;
   }
   return true;
@@ -72,7 +73,7 @@ bool getParameter<bool>(const ParameterMap& map, const std::string& param_name, 
     value = false;
     return true;
   }
-  // RCLCPP_ERROR_STREAM(get_logger(), "Failed to convert parameter '" << param_name << "' to a bool.");
+  DXL_LOG_ERROR("Failed to convert parameter '" << param_name << "' to a bool.");
   return false;
 }
 
@@ -85,7 +86,7 @@ bool getParameter<uint8_t>(const ParameterMap& map, const std::string& param_nam
   }
 
   if (param_int < std::numeric_limits<uint8_t>::min() || param_int > std::numeric_limits<uint8_t>::max()) {
-    // RCLCPP_ERROR_STREAM(get_logger(), "Failed to convert parameter '" << param_name << "' to an uint8: Exceeded bounds.");
+    DXL_LOG_ERROR("Failed to convert parameter '" << param_name << "' to an uint8: Exceeded bounds.");
     return false;
   }
   value = param_int;

@@ -21,6 +21,8 @@ bool Dynamixel::connect()
     return false;
   }
   DXL_LOG_DEBUG("ID " << getIdInt() << ": Loaded control table for model " << getModelNumber());
+
+  writeInitialValues();
   return true;
 }
 
@@ -32,6 +34,47 @@ bool Dynamixel::ping() const
 bool Dynamixel::reboot() const
 {
   return driver_.reboot(getId());
+}
+
+bool Dynamixel::writeRegister(const std::string& register_name, const std::string& value) const
+{
+  // Get control table entry
+  const ControlTableItem* item;
+  try {
+    item = &getItem(register_name);
+  }
+  catch (const std::out_of_range&) {
+    DXL_LOG_ERROR("Unknown register '" << register_name << "'");
+    return false;
+  }
+  // Check if bool
+  if (item->unit() == "bool") {
+    std::string value_lower_case = value;
+    std::transform(value_lower_case.begin(), value_lower_case.end(), value_lower_case.begin(),
+                   [](const unsigned char c) { return std::tolower(c); });
+
+    bool bool_value;
+    if (value_lower_case == "true" || value_lower_case == "1") {
+      bool_value = true;
+    } else if (value_lower_case == "false" || value_lower_case == "0") {
+      bool_value = false;
+    } else {
+      DXL_LOG_ERROR("Cannot convert '" << value << "' to bool");
+      return false;
+    }
+    return writeRegister(register_name, bool_value);
+  }
+
+  // Not a bool
+  double double_value;
+  try {
+    double_value = std::stod(value);
+  }
+  catch (const std::exception& e) {
+    DXL_LOG_ERROR("Failed to convert value '" << value << "' to a double: " << e.what());
+    return false;
+  }
+  return writeRegister(register_name, double_value);
 }
 
 bool Dynamixel::readWriteRegister(const uint16_t address, const uint8_t data_length, const int32_t value) const
@@ -56,7 +99,7 @@ bool Dynamixel::writeRegister(const std::string& register_name, const bool value
 
 bool Dynamixel::writeRegister(const std::string& register_name, const double value) const
 {
-  int32_t dxl_value = unitToDxlValue(register_name, value);
+  const int32_t dxl_value = unitToDxlValue(register_name, value);
   return writeRegister(register_name, dxl_value);
 }
 
@@ -67,6 +110,7 @@ bool Dynamixel::writeRegister(const std::string& register_name, const int32_t va
     item = &getItem(register_name);
   }
   catch (const std::out_of_range&) {
+    DXL_LOG_ERROR("Unknown register '" << register_name << "'");
     return false;
   }
   return writeRegister(item->address(), item->data_length(), value);
@@ -220,6 +264,16 @@ bool Dynamixel::setIndirectAddress(const unsigned int indirect_address_index, co
   return success;
 }
 
+void Dynamixel::setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values)
+{
+  initial_values_ = values;
+}
+
+const std::unordered_map<std::string, std::string>& Dynamixel::getInitialRegisterValues() const
+{
+  return initial_values_;
+}
+
 void Dynamixel::indirectIndexToAddresses(const unsigned int indirect_address_index, uint16_t& indirect_address,
                                          uint16_t& indirect_data_address) const
 {
@@ -236,6 +290,15 @@ void Dynamixel::indirectIndexToAddresses(const unsigned int indirect_address_ind
   }
   indirect_address = info->indirect_address_start + static_cast<uint16_t>(local_index * 2);
   indirect_data_address = info->indirect_data_start + static_cast<uint16_t>(local_index);
+}
+
+bool Dynamixel::writeInitialValues()
+{
+  bool success = true;
+  for (const auto& [register_name, register_value] : initial_values_) {
+    success &= writeRegister(register_name, register_value);
+  }
+  return success;
 }
 
 uint8_t Dynamixel::getId() const

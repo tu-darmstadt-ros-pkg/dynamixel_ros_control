@@ -54,6 +54,17 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
     preferred_position_control_mode_ = stringToControlMode(control_mode_str);
   }
 
+  // Initial values
+  std::unordered_map<std::string, std::string> initial_register_values;
+  for (const auto& [param_name, param_value] : info.parameters) {
+    if (param_name.rfind("registers.", 0) != 0) {
+      continue;
+    }
+    std::string register_name = param_name.substr(10, param_name.size() - 10);
+    initial_register_values.emplace(register_name, param_value);
+  }
+  dynamixel->setInitialRegisterValues(initial_register_values);
+
   return true;
 }
 
@@ -219,8 +230,8 @@ ControlMode Joint::getControlModeFromInterfaces(const std::vector<std::string>& 
     return VELOCITY;
   }
 
-  if (std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_EFFORT) != interfaces.end()
-    || std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_CURRENT) != interfaces.end()) {
+  if (std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_EFFORT) != interfaces.end() ||
+      std::find(interfaces.begin(), interfaces.end(), hardware_interface::HW_IF_CURRENT) != interfaces.end()) {
 
     return CURRENT;
   }

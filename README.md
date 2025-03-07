@@ -53,6 +53,7 @@ The motors are configured in the ros2_control tag of the robot description. Exam
             <joint name="joint_1">
                 <param name="id">1</param>  <!-- ID of the dynamixel -->
                 <param name="position_control_mode">extended_position</param> <!-- control mode used for the position interface (default: position) -->
+                <param name="registers.velocity_limit">2.0</param> <!-- set a register to some initial value -->
                 <command_interface name="position"/>
                 <command_interface name="velocity"/>
                 <state_interface name="position"/>

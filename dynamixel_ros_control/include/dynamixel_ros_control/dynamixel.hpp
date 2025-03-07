@@ -57,6 +57,7 @@ public:
   bool reboot() const;
 
   // Register access
+  bool writeRegister(const std::string& register_name, const std::string& value) const;
   bool writeRegister(const std::string& register_name, double value) const;
   bool writeRegister(const std::string& register_name, bool value) const;
   bool writeRegister(const std::string& register_name, int32_t value) const;
@@ -112,9 +113,12 @@ public:
   [[nodiscard]] std::string getHardwareErrorStatusString() const;
   int32_t hardware_error_status;
 
+  void setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values);
+  const std::unordered_map<std::string, std::string>& getInitialRegisterValues() const;
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address,
                                 uint16_t& indirect_data_address) const;
+  bool writeInitialValues();
 
   DynamixelDriver& driver_;
   ControlTable* control_table_;
@@ -122,6 +126,8 @@ private:
   uint8_t id_;
   uint16_t model_number_;
   std::string model_name_;
+
+  std::unordered_map<std::string, std::string> initial_values_; // register to value
 };
 
 }  // namespace dynamixel_ros_control

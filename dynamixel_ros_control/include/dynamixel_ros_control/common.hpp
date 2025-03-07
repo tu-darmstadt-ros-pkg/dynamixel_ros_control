@@ -44,6 +44,22 @@ std::string iterableToString(const Iterable& container)
   return ss.str();
 }
 
+template <typename Map>
+std::string mapToString(const Map& m, const std::string& separator = ", ", const std::string& keyValueSeparator = ": ") {
+  std::ostringstream oss;
+  bool first = true;
+
+  for (const auto& [key, value] : m) {
+    if (!first) {
+      oss << separator;
+    }
+    first = false;
+    oss << key << keyValueSeparator << value;
+  }
+
+  return oss.str();
+}
+
 inline std::string& removeWhitespace(std::string& s)
 {
   const auto end_pos = std::remove(s.begin(), s.end(), ' ');

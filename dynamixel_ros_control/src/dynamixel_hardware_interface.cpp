@@ -111,6 +111,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     ss << "-- state interfaces: " << iterableToString(joint.getAvailableStateInterfaces()) << std::endl;
     ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
     ss << "-- offset: " << joint.offset << std::endl;
+    ss << "-- initial values: " << mapToString(joint.dynamixel->getInitialRegisterValues()) << std::endl;
     DXL_LOG_DEBUG(ss.str());
     joints_.emplace(joint.name, std::move(joint));
   }
