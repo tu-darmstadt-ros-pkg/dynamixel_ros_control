@@ -63,7 +63,7 @@ private:
   bool isHardwareOk() const;
   bool reboot() const;
 
-  bool setTorque(bool enabled);
+  bool setTorque(bool enabled, bool direct_write=false);
 
   std::unordered_map<std::string, Joint> joints_;
   DynamixelDriver driver_;

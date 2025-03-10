@@ -67,6 +67,14 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
 
   return true;
 }
+bool Joint::connect()
+{
+  if (!dynamixel->connect()) {
+    return false;
+  }
+  dynamixel->readRegister(DXL_REGISTER_CMD_TORQUE, torque);
+  return true;
+}
 
 void Joint::reset()
 {

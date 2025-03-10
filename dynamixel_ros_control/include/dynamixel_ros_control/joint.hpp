@@ -15,6 +15,7 @@ public:
   bool loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info,
                          const std::unordered_map<std::string, std::string>& state_interface_to_register,
                          const std::unordered_map<std::string, std::string>& command_interface_to_register);
+  bool connect();
   void reset();
 
   [[nodiscard]] ControlMode getControlMode() const;

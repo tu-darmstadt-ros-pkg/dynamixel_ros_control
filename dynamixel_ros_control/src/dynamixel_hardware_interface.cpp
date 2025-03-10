@@ -129,10 +129,15 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
   }
 
   for (auto& [name, joint] : joints_) {
-    if (!joint.dynamixel->connect()) {
+    if (!joint.connect()) {
       return hardware_interface::CallbackReturn::FAILURE;
     }
     joint.reset();
+  }
+
+  const bool torque = !joints_.empty() && joints_.begin()->second.torque;
+  if (torque) {
+    setTorque(false, true);
   }
 
   // Set up sync read / write managers
@@ -140,6 +145,10 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     return hardware_interface::CallbackReturn::FAILURE;
   }
   control_write_manager_ = SyncWriteManager();  // Only reset here
+
+  if (torque) {
+    setTorque(true);
+  }
 
   return CallbackReturn::SUCCESS;
 }
@@ -437,16 +446,21 @@ bool DynamixelHardwareInterface::reboot() const
   return true;
 }
 
-bool DynamixelHardwareInterface::setTorque(const bool enabled)
+bool DynamixelHardwareInterface::setTorque(const bool enabled, const bool direct_write)
 {
   DXL_LOG_INFO((enabled ? "Enabling" : "Disabling") << " motor torque.");
   for (auto& [name, joint] : joints_) {
     joint.torque = enabled;
+    if (direct_write && !joint.dynamixel->writeRegister(DXL_REGISTER_CMD_TORQUE, joint.torque)) {
+      return false;
+    }
   }
-  if (!torque_write_manager_.write()) {
+
+  if (!direct_write && !torque_write_manager_.write()) {
     DXL_LOG_ERROR("Setting torque failed!");
     return false;
   }
+
   return true;
 }
 
