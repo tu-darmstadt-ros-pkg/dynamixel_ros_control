@@ -169,9 +169,19 @@ bool Joint::updateControlMode()
   DXL_LOG_DEBUG("Changing control mode of joint '" << name << "' from '" << control_mode_ << " to '" << new_control_mode
                                                    << "'.");
   control_mode_ = new_control_mode;
+  control_mode_changed_ = true;
 
   // write control mode
   return dynamixel->writeControlMode(control_mode_, torque);
+}
+bool Joint::controlModeChanged()
+{
+  return control_mode_changed_;
+}
+
+void Joint::resetControlModeChanged()
+{
+  control_mode_changed_ = false;
 }
 
 std::string Joint::stateInterfaceToRegisterName(const std::string& interface_name) const

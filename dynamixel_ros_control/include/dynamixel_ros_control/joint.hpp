@@ -30,6 +30,8 @@ public:
   bool addActiveCommandInterface(const std::string& interface_name);
   bool removeActiveCommandInterface(const std::string& interface_name);
   bool updateControlMode();
+  bool controlModeChanged();
+  void resetControlModeChanged();
 
   std::string stateInterfaceToRegisterName(const std::string& interface_name) const;
   std::string commandInterfaceToRegisterName(const std::string& interface_name) const;
@@ -54,6 +56,7 @@ private:
 
   // Active state
   ControlMode control_mode_{UNDEFINED};
+  bool control_mode_changed_{false};
   std::vector<std::string> active_command_interfaces_;
 
   // Parameters

@@ -288,13 +288,15 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     DXL_LOG_ERROR("Read manager lost connection");
     return hardware_interface::return_type::ERROR;
   }
-  if (!first_read_successful_) {
-    first_read_successful_ = true;
-    for (auto& [name, joint]: joints_) {
+
+  for (auto& [name, joint]: joints_) {
+    if (!first_read_successful_ || joint.controlModeChanged()) {
       joint.resetGoalState();
+      joint.resetControlModeChanged();
     }
   }
 
+  first_read_successful_ = true;
   last_successful_read_time_ = time;
   return hardware_interface::return_type::OK;
 }
@@ -302,7 +304,16 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
 hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& /*time*/,
                                                                   const rclcpp::Duration& /*period*/)
 {
-  if (!first_read_successful_) {
+  // Wait for a successful read after changing the control mode
+  bool control_mode_changed = false;
+  for (auto& [name, joint]: joints_) {
+    if (joint.controlModeChanged()) {
+      control_mode_changed = true;
+      break;
+    }
+  }
+
+  if (!first_read_successful_ || control_mode_changed) {
     // DXL_LOG_ERROR("Write called without successful read. This should not happen.");
     return hardware_interface::return_type::OK;
   }
