@@ -135,20 +135,19 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     joint.reset();
   }
 
-  const bool torque = !joints_.empty() && joints_.begin()->second.torque;
-  if (torque) {
-    setTorque(false, true);
-  }
+  // const bool torque = !joints_.empty() && joints_.begin()->second.torque;
+  // if (torque) {
+  //   setTorque(false, true);
+  // }
 
   // Set up sync read / write managers
-  if (!setUpStatusReadManager() || !setUpStateReadManager() || !setUpTorqueWriteManager()) {
+  if (!setUpStatusReadManager() || !setUpStateReadManager() || !setUpTorqueWriteManager() || !setUpControlWriteManager()) {
     return hardware_interface::CallbackReturn::FAILURE;
   }
-  control_write_manager_ = SyncWriteManager();  // Only reset here
 
-  if (torque) {
-    setTorque(true);
-  }
+  // if (torque) {
+  //   setTorque(true);
+  // }
 
   return CallbackReturn::SUCCESS;
 }
@@ -234,6 +233,11 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
   DXL_LOG_DEBUG("start_interfaces: " << iterableToString(start_interfaces));
   DXL_LOG_DEBUG("stop_interfaces: " << iterableToString(stop_interfaces));
 
+  if (!first_read_successful_) {
+    DXL_LOG_ERROR("No successful read() before a controller is loaded.");
+    return hardware_interface::return_type::ERROR;
+  }
+
   // Start interfaces
   if (!processCommandInterfaceUpdates(start_interfaces, false)) {
     return hardware_interface::return_type::ERROR;
@@ -242,31 +246,11 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     return hardware_interface::return_type::ERROR;
   }
 
-  // initialize goal fields
-  if (!first_read_successful_) {
-    DXL_LOG_ERROR("No successful read() before a controller is loaded.");
-    return hardware_interface::return_type::ERROR;
-  }
-
-  bool torque = !joints_.empty() && joints_.begin()->second.torque;
-  if (torque) {
-    setTorque(false);
-  }
-
   // write control mode
   for (auto& [name, joint] : joints_) {
     if (!joint.updateControlMode()) {
       return hardware_interface::return_type::ERROR;
     }
-  }
-
-  // set up control write manager
-  if (!setUpControlWriteManager()) {
-    return hardware_interface::return_type::ERROR;
-  }
-
-  if (torque) {
-    setTorque(true);
   }
 
   return hardware_interface::return_type::OK;
@@ -304,8 +288,13 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     DXL_LOG_ERROR("Read manager lost connection");
     return hardware_interface::return_type::ERROR;
   }
+  if (!first_read_successful_) {
+    first_read_successful_ = true;
+    for (auto& [name, joint]: joints_) {
+      joint.resetGoalState();
+    }
+  }
 
-  first_read_successful_ = true;
   last_successful_read_time_ = time;
   return hardware_interface::return_type::OK;
 }
@@ -403,18 +392,15 @@ bool DynamixelHardwareInterface::setUpTorqueWriteManager()
 
 bool DynamixelHardwareInterface::setUpControlWriteManager()
 {
-  if (!control_write_manager_.release()) {
-    DXL_LOG_WARN("Failed to release indirect addresses of control write manager. This should not happen.");
-  }
   control_write_manager_ = SyncWriteManager();
   for (auto& [name, joint] : joints_) {
-    DXL_LOG_DEBUG("Active command interfaces for joint '"
-                  << joint.name << "': " << iterableToString(joint.getActiveCommandInterfaces()));
-    if (joint.getActiveCommandInterfaces().empty()) {
+    // DXL_LOG_DEBUG("Active command interfaces for joint '"
+    //               << joint.name << "': " << iterableToString(joint.getActiveCommandInterfaces()));
+    if (joint.getAvailableCommandInterfaces().empty()) {
       // Nothing to register
       continue;
     }
-    for (const auto& interface_name : joint.getActiveCommandInterfaces()) {
+    for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
       const std::string register_name = joint.commandInterfaceToRegisterName(interface_name);
       control_write_manager_.addRegister(*joint.dynamixel, register_name, joint.goal_state.at(interface_name));
     }

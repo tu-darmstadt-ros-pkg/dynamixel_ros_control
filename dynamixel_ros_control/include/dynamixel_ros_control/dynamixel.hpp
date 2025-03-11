@@ -93,7 +93,7 @@ public:
     return true;
   }
 
-  bool writeControlMode(ControlMode mode, bool disable_torque_if_required=false) const;
+  bool writeControlMode(ControlMode mode, bool disable_torque=false) const;
 
   // Value conversion functions
   [[nodiscard]] double dxlValueToUnit(const std::string& register_name, int32_t value) const;

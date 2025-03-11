@@ -158,7 +158,7 @@ bool Dynamixel::readRegister(const uint16_t address, const uint8_t data_length, 
   return driver_.readRegister(getId(), address, data_length, value_out);
 }
 
-bool Dynamixel::writeControlMode(const ControlMode mode, const bool disable_torque_if_required) const
+bool Dynamixel::writeControlMode(const ControlMode mode, const bool disable_torque) const
 {
   // Check if mode needs to be updated
   int32_t current_mode;
@@ -168,15 +168,10 @@ bool Dynamixel::writeControlMode(const ControlMode mode, const bool disable_torq
   if (current_mode == mode) {
     return true;
   }
+
   // Check if torque is enabled and disable if required
-  bool torque_enabled = false;
-  if (disable_torque_if_required) {
-    if (!readRegister(DXL_REGISTER_CMD_TORQUE, torque_enabled)) {
-      return false;
-    }
-    if (torque_enabled && !writeRegister(DXL_REGISTER_CMD_TORQUE, false)) {
-      return false;
-    }
+  if (disable_torque && !writeRegister(DXL_REGISTER_CMD_TORQUE, false)) {
+    return false;
   }
 
   // Write operating mode
@@ -185,10 +180,8 @@ bool Dynamixel::writeControlMode(const ControlMode mode, const bool disable_torq
   }
 
   // Restore torque setting
-  if (torque_enabled) {
-    if (!writeRegister(DXL_REGISTER_CMD_TORQUE, true)) {
-      return false;
-    }
+  if (disable_torque && !writeRegister(DXL_REGISTER_CMD_TORQUE, true)) {
+    return false;
   }
 
   return true;

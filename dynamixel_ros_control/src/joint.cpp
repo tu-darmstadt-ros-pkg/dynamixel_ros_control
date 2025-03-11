@@ -150,14 +150,7 @@ bool Joint::removeActiveCommandInterface(const std::string& interface_name)
     return false;
   }
 
-  // Write default value
-  if (interface_name != hardware_interface::HW_IF_POSITION) {
-    goal_state[interface_name] = 0.0;
-    if (!dynamixel->writeRegister(commandInterfaceToRegisterName(interface_name), 0.0)) {
-      return false;
-    }
-  }
-
+  resetGoalState(interface_name);
   active_command_interfaces_.erase(it);
   return true;
 }
@@ -178,7 +171,7 @@ bool Joint::updateControlMode()
   control_mode_ = new_control_mode;
 
   // write control mode
-  return dynamixel->writeControlMode(control_mode_, false);
+  return dynamixel->writeControlMode(control_mode_, torque);
 }
 
 std::string Joint::stateInterfaceToRegisterName(const std::string& interface_name) const
@@ -216,7 +209,7 @@ void Joint::resetGoalState(const std::string& interface_name)
 
 void Joint::resetGoalState()
 {
-  for (auto& interface_name : getActiveCommandInterfaces()) {
+  for (auto& interface_name : getAvailableCommandInterfaces()) {
     resetGoalState(interface_name);
   }
 }
