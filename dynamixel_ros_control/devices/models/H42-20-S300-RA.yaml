@@ -1,12 +1,12 @@
 # H42-20-S300-R
 unit_conversions: # dxl value to unit ratio
-  rad: 0.00002068538
-  rad_per_s: 0.000344746
-  rad_per_s2: 1 # TODO
+  rad: 0.00001034269
+  rad_per_s: 0.00104719755
+  rad_per_s2: 0.00174532925
   celsius: 1.0
   V: 0.1
   ms: 1.0
-  A: 0.00402832031
+  A: 0.001
   
 indirect_addresses:
 # address start | data start  | count

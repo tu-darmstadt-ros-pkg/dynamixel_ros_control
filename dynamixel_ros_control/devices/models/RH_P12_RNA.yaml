@@ -28,19 +28,19 @@ control_table:
   - 7   | id                       | 1      | RW     | EEPROM |
   - 8   | baud_rate                | 1      | RW     | EEPROM |
   - 9   | return_delay_time        | 1      | RW     | EEPROM |
-  - 10  | drive_mode               | 1      | RW     | EEPROM | 
+  - 10  | drive_mode               | 1      | RW     | EEPROM |
   - 11  | operating_mode           | 1      | RW     | EEPROM |
   - 20  | homing_offset            | 4      | RW     | EEPROM | rad
   - 24  | moving_threshold         | 4      | RW     | EEPROM | rad_per_s
   - 31  | temperature_limit        | 1      | RW     | EEPROM | celsius
   - 32  | max_voltage_limit        | 2      | RW     | EEPROM | V
-  - 24  | min_voltage_limit        | 2      | RW     | EEPROM | V
-  - 36  | pwm_limit                | 2      | RW     | EEPROM | 
+  - 34  | min_voltage_limit        | 2      | RW     | EEPROM | V
+  - 36  | pwm_limit                | 2      | RW     | EEPROM |
   - 38  | current_limit            | 2      | RW     | EEPROM | A
   - 40  | acceleration_limit       | 4      | RW     | EEPROM | rad_per_s2
   - 44  | velocity_limit           | 4      | RW     | EEPROM | rad_per_s
   - 48  | max_position_limit       | 4      | RW     | EEPROM | rad
-  - 452 | min_position_limit       | 4      | RW     | EEPROM | rad
+  - 52  | min_position_limit       | 4      | RW     | EEPROM | rad
   - 56  | external_port_mod_1      | 1      | RW     | EEPROM |
   - 57  | external_port_mod_2      | 1      | RW     | EEPROM |
   - 58  | external_port_mod_3      | 1      | RW     | EEPROM |
@@ -69,7 +69,7 @@ control_table:
   - 568 | realtime_tick            | 2      | R      | RAM    | ms
   - 570 | moving                   | 1      | R      | RAM    | bool
   - 571 | moving_status            | 1      | R      | RAM    |
-  - 572 | present_pwm              | 2      | R      | RAM    | 
+  - 572 | present_pwm              | 2      | R      | RAM    |
   - 574 | present_current          | 2      | R      | RAM    | A
   - 576 | present_velocity         | 4      | R      | RAM    | rad_per_s
   - 580 | present_position         | 4      | R      | RAM    | rad
