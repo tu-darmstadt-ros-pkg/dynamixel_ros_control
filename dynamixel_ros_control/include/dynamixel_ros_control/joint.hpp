@@ -4,8 +4,14 @@
 #include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <hardware_interface/hardware_info.hpp>
-
+#include <transmission_interface/transmission.hpp>
 namespace dynamixel_ros_control {
+
+struct State
+{
+  std::unordered_map<std::string, double> current;
+  std::unordered_map<std::string, double> goal;
+};
 
 class Joint
 {
@@ -30,7 +36,7 @@ public:
   bool addActiveCommandInterface(const std::string& interface_name);
   bool removeActiveCommandInterface(const std::string& interface_name);
   bool updateControlMode();
-  bool controlModeChanged();
+  bool controlModeChanged() const;
   void resetControlModeChanged();
 
   std::string stateInterfaceToRegisterName(const std::string& interface_name) const;
@@ -38,6 +44,12 @@ public:
 
   void resetGoalState(const std::string& interface_name);
   void resetGoalState();
+
+  /**
+   * Returns the current/goal state that is written to the dynamixel motors
+   * @return
+   */
+  State& getActuatorState();
 
   // Parameters
   std::string name;
@@ -47,8 +59,10 @@ public:
 
   // Active state
   bool torque{false};
-  std::unordered_map<std::string, double> current_state;
-  std::unordered_map<std::string, double> goal_state;
+  State joint_state;
+  State actuator_state; // Only used if there is a transmission
+  std::shared_ptr<transmission_interface::Transmission> state_transmission;
+  std::shared_ptr<transmission_interface::Transmission> command_transmission;
   double estop_position{0.0};
 
 private:

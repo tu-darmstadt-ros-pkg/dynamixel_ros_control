@@ -10,7 +10,7 @@
                 <param name="baud_rate">${baud_rate}</param>
                 <param name="torque_on_startup">true</param>
                 <param name="torque_off_on_shutdown">true</param>
-                <param name="reboot_on_hardware_error">true</param>
+                <param name="reboot_on_hardware_error">false</param>
             </hardware>
 
             <joint name="joint_1">
@@ -24,6 +24,15 @@
                 <state_interface name="velocity"/>
                 <state_interface name="effort"/>
             </joint>
+
+            <transmission name="transmission1">
+                <plugin>transmission_interface/SimpleTransmission</plugin>
+                <actuator name="actuator_1" role="actuator_1"/>
+                <joint name="joint_1" role="joint_1">
+                    <mechanical_reduction>2.0</mechanical_reduction>
+                    <offset>0.0</offset>
+                </joint>
+            </transmission>
         </ros2_control>
     </xacro:macro>
 </robot>
