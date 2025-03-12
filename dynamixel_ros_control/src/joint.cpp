@@ -80,10 +80,16 @@ void Joint::reset()
 {
   active_command_interfaces_.clear();
   control_mode_ = UNDEFINED;
-  for (auto& [interface_name, value] : current_state) {
+  for (auto& [interface_name, value] : joint_state.current) {
     value = 0.0;
   }
-  for (auto& [interface_name, value] : goal_state) {
+  for (auto& [interface_name, value] : actuator_state.current) {
+    value = 0.0;
+  }
+  for (auto& [interface_name, value] : joint_state.goal) {
+    value = 0.0;
+  }
+  for (auto& [interface_name, value] : actuator_state.goal) {
     value = 0.0;
   }
 }
@@ -174,7 +180,8 @@ bool Joint::updateControlMode()
   // write control mode
   return dynamixel->writeControlMode(control_mode_, torque);
 }
-bool Joint::controlModeChanged()
+
+bool Joint::controlModeChanged() const
 {
   return control_mode_changed_;
 }
@@ -196,14 +203,14 @@ std::string Joint::commandInterfaceToRegisterName(const std::string& interface_n
 
 void Joint::resetGoalState(const std::string& interface_name)
 {
-  double& value = goal_state.at(interface_name);  // This should exist
+  double& value = getActuatorState().goal.at(interface_name);  // This should exist
 
   // Special handling for position
   if (interface_name == hardware_interface::HW_IF_POSITION) {
     try {
-      value = current_state.at(hardware_interface::HW_IF_POSITION);
+      value = getActuatorState().current.at(hardware_interface::HW_IF_POSITION);
     }
-    catch (const std::out_of_range& e) {
+    catch (const std::out_of_range&) {
       DXL_LOG_WARN("Joint '"
                    << name
                    << "' is controlled in position mode but the current position is not read out. Cannot initialize "
@@ -222,6 +229,11 @@ void Joint::resetGoalState()
   for (auto& interface_name : getAvailableCommandInterfaces()) {
     resetGoalState(interface_name);
   }
+}
+
+State& Joint::getActuatorState()
+{
+  return state_transmission ? actuator_state : joint_state;
 }
 
 const std::vector<std::string>& Joint::getActiveCommandInterfaces() const

@@ -24,6 +24,9 @@ find_package(yaml-cpp REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+find_package(transmission_interface REQUIRED)
+
+
 
 set(HEADERS
   include/${PROJECT_NAME}/common.hpp
@@ -54,7 +57,7 @@ include_directories(include)
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
 target_link_libraries(${PROJECT_NAME} PUBLIC yaml-cpp)
 ament_target_dependencies(${PROJECT_NAME} PUBLIC rclcpp rclcpp_lifecycle lifecycle_msgs hardware_interface pluginlib
-    dynamixel_sdk yaml-cpp std_msgs std_srvs ament_index_cpp)
+    dynamixel_sdk yaml-cpp std_msgs std_srvs ament_index_cpp transmission_interface)
 
 pluginlib_export_plugin_description_file(hardware_interface dynamixel_ros_control.xml)
 

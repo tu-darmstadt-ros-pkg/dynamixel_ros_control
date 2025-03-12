@@ -9,6 +9,7 @@
 #include "sync_write_manager.hpp"
 
 #include <hardware_interface/system_interface.hpp>
+#include <transmission_interface/transmission.hpp>
 
 namespace dynamixel_ros_control {
 

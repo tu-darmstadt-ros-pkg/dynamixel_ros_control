@@ -6,6 +6,10 @@
 #include <boost/algorithm/string/split.hpp>
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
 
+#include <transmission_interface/simple_transmission_loader.hpp>
+#include <transmission_interface/transmission.hpp>
+#include <transmission_interface/transmission_interface_exception.hpp>
+
 namespace {
 
 std::unordered_map<std::string, std::string> loadInterfaceRegisterTranslationMap(const YAML::Node& node)
@@ -116,6 +120,44 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     joints_.emplace(joint.name, std::move(joint));
   }
 
+  // Transmissions
+  auto transmission_loader = transmission_interface::SimpleTransmissionLoader();
+  for (const auto& transmission_info : info_.transmissions) {
+    // only simple transmissions are supported right now
+    if (transmission_info.type != "transmission_interface/SimpleTransmission") {
+      RCLCPP_FATAL(get_logger(), "Transmission '%s' of type '%s' not supported.", transmission_info.name.c_str(),
+                   transmission_info.type.c_str());
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+    // Only exactly one joint and actuator per transmission
+    if (transmission_info.joints.size() != 1 || transmission_info.actuators.size() != 1) {
+      RCLCPP_FATAL(get_logger(), "Only transmissions with exactly one joint and actuator are supported");
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+
+    // Load transmission from info
+    std::shared_ptr<transmission_interface::Transmission> state_transmission;
+    std::shared_ptr<transmission_interface::Transmission> command_transmission;
+    try {
+      state_transmission = transmission_loader.load(transmission_info);
+      command_transmission = transmission_loader.load(transmission_info);
+    }
+    catch (const transmission_interface::TransmissionInterfaceException& exc) {
+      RCLCPP_FATAL(get_logger(), "Error while loading %s: %s", transmission_info.name.c_str(), exc.what());
+      return hardware_interface::CallbackReturn::ERROR;
+    }
+
+    // Assign to joint
+    try {
+      Joint& joint = joints_.at(transmission_info.joints.front().name);
+      joint.state_transmission = state_transmission;
+      joint.command_transmission = command_transmission;
+    }
+    catch (std::out_of_range&) {
+      DXL_LOG_ERROR("Unknown joint '" << transmission_info.joints.front().name << "' in transmission interface");
+    }
+  }
+
   return hardware_interface::CallbackReturn::SUCCESS;
 }
 
@@ -141,7 +183,8 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
   // }
 
   // Set up sync read / write managers
-  if (!setUpStatusReadManager() || !setUpStateReadManager() || !setUpTorqueWriteManager() || !setUpControlWriteManager()) {
+  if (!setUpStatusReadManager() || !setUpStateReadManager() || !setUpTorqueWriteManager() ||
+      !setUpControlWriteManager()) {
     return hardware_interface::CallbackReturn::FAILURE;
   }
 
@@ -194,15 +237,35 @@ std::vector<hardware_interface::StateInterface::ConstSharedPtr> DynamixelHardwar
   }
   // Create the state interfaces
   for (auto& [name, joint] : joints_) {
-    joint.current_state.reserve(configured_state_interface_names.size());
+    joint.joint_state.current.reserve(configured_state_interface_names.size());
     for (const auto& interface_name : configured_state_interface_names) {
-      joint.current_state[interface_name] = 0.0;
+      joint.joint_state.current[interface_name] = 0.0;
       const auto state_interface = std::make_shared<hardware_interface::StateInterface>(
-          joint.name, interface_name, &joint.current_state[interface_name]);
+          joint.name, interface_name, &joint.joint_state.current[interface_name]);
       state_interfaces.emplace_back(state_interface);
     }
   }
   DXL_LOG_DEBUG("State interfaces: " << iterableToString(configured_state_interface_names));
+
+  for (const auto& transmission_info : info_.transmissions) {
+    std::vector<transmission_interface::JointHandle> joint_handles;
+    std::vector<transmission_interface::ActuatorHandle> actuator_handles;
+    const std::string& joint_name = transmission_info.joints.front().name;
+    const std::string& actuator_name = transmission_info.actuators.front().name;
+    Joint& joint = joints_.at(joint_name);  // This should exist
+    for (const auto& interface_name : configured_state_interface_names) {
+      transmission_interface::JointHandle joint_handle(transmission_info.joints.front().name, interface_name,
+                                                       &joint.joint_state.current[interface_name]);
+      joint_handles.push_back(joint_handle);
+
+      double& actuator_state = joint.actuator_state.current[interface_name];
+      actuator_state = 0.0;
+      transmission_interface::ActuatorHandle actuator_handle(actuator_name, interface_name,
+                                                             &actuator_state);
+      actuator_handles.push_back(actuator_handle);
+    }
+    joint.state_transmission->configure(joint_handles, actuator_handles);
+  }
   return state_interfaces;
 }
 
@@ -213,14 +276,35 @@ std::vector<hardware_interface::CommandInterface::SharedPtr> DynamixelHardwareIn
 
   // Create the state interfaces
   for (auto& [name, joint] : joints_) {
-    joint.goal_state.reserve(joint.getAvailableCommandInterfaces().size());
+    joint.joint_state.goal.reserve(joint.getAvailableCommandInterfaces().size());
     for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
-      joint.goal_state[interface_name] = 0.0;
+      joint.joint_state.goal[interface_name] = 0.0;
       const auto command_interface = std::make_shared<hardware_interface::CommandInterface>(
-          joint.name, interface_name, &joint.goal_state[interface_name]);
+          joint.name, interface_name, &joint.joint_state.goal[interface_name]);
       command_interfaces.emplace_back(command_interface);
     }
   }
+
+  for (const auto& transmission_info : info_.transmissions) {
+    std::vector<transmission_interface::JointHandle> joint_handles;
+    std::vector<transmission_interface::ActuatorHandle> actuator_handles;
+    const std::string& joint_name = transmission_info.joints.front().name;
+    const std::string& actuator_name = transmission_info.actuators.front().name;
+    Joint& joint = joints_.at(joint_name);  // This should exist
+    for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
+      transmission_interface::JointHandle joint_handle(joint_name, interface_name,
+                                                       &joint.joint_state.goal[interface_name]);
+      joint_handles.push_back(joint_handle);
+
+      double &actuator_state = joint.actuator_state.goal[interface_name];
+      actuator_state = 0.0;
+      transmission_interface::ActuatorHandle actuator_handle(actuator_name, interface_name,
+                                                             &actuator_state);
+      actuator_handles.push_back(actuator_handle);
+    }
+    joint.command_transmission->configure(joint_handles, actuator_handles);
+  }
+
   return command_interfaces;
 }
 
@@ -289,7 +373,12 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::ERROR;
   }
 
-  for (auto& [name, joint]: joints_) {
+
+  for (auto& [name, joint] : joints_) {
+    if (joint.state_transmission) {
+      joint.state_transmission->actuator_to_joint();
+    }
+
     if (!first_read_successful_ || joint.controlModeChanged()) {
       joint.resetGoalState();
       joint.resetControlModeChanged();
@@ -306,7 +395,11 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
 {
   // Wait for a successful read after changing the control mode
   bool control_mode_changed = false;
-  for (auto& [name, joint]: joints_) {
+  for (auto& [name, joint] : joints_) {
+    if (joint.command_transmission) {
+      joint.command_transmission->joint_to_actuator();
+    }
+
     if (joint.controlModeChanged()) {
       control_mode_changed = true;
       break;
@@ -364,7 +457,8 @@ bool DynamixelHardwareInterface::setUpStateReadManager()
   std::unordered_map<std::string, DxlValueMappingList> register_dynamixel_mappings;
   for (auto& [name, joint] : joints_) {
     read_manager_.addDynamixel(joint.dynamixel.get());
-    for (auto& [interface_name, interface_value] : joint.current_state) {
+    auto& [current_state, goal_state] = joint.getActuatorState();
+    for (auto& [interface_name, interface_value] : current_state) {
       std::string register_name = joint.stateInterfaceToRegisterName(interface_name);
       register_dynamixel_mappings[register_name].push_back(
           std::make_pair<Dynamixel*, DxlValue>(joint.dynamixel.get(), DxlValue(&interface_value)));
@@ -411,9 +505,10 @@ bool DynamixelHardwareInterface::setUpControlWriteManager()
       // Nothing to register
       continue;
     }
+    auto& [current_state, goal_state] = joint.getActuatorState();
     for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
       const std::string register_name = joint.commandInterfaceToRegisterName(interface_name);
-      control_write_manager_.addRegister(*joint.dynamixel, register_name, joint.goal_state.at(interface_name));
+      control_write_manager_.addRegister(*joint.dynamixel, register_name, goal_state.at(interface_name));
     }
   }
 
