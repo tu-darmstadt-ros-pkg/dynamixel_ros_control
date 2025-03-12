@@ -121,41 +121,8 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   }
 
   // Transmissions
-  auto transmission_loader = transmission_interface::SimpleTransmissionLoader();
-  for (const auto& transmission_info : info_.transmissions) {
-    // only simple transmissions are supported right now
-    if (transmission_info.type != "transmission_interface/SimpleTransmission") {
-      RCLCPP_FATAL(get_logger(), "Transmission '%s' of type '%s' not supported.", transmission_info.name.c_str(),
-                   transmission_info.type.c_str());
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-    // Only exactly one joint and actuator per transmission
-    if (transmission_info.joints.size() != 1 || transmission_info.actuators.size() != 1) {
-      RCLCPP_FATAL(get_logger(), "Only transmissions with exactly one joint and actuator are supported");
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    // Load transmission from info
-    std::shared_ptr<transmission_interface::Transmission> state_transmission;
-    std::shared_ptr<transmission_interface::Transmission> command_transmission;
-    try {
-      state_transmission = transmission_loader.load(transmission_info);
-      command_transmission = transmission_loader.load(transmission_info);
-    }
-    catch (const transmission_interface::TransmissionInterfaceException& exc) {
-      RCLCPP_FATAL(get_logger(), "Error while loading %s: %s", transmission_info.name.c_str(), exc.what());
-      return hardware_interface::CallbackReturn::ERROR;
-    }
-
-    // Assign to joint
-    try {
-      Joint& joint = joints_.at(transmission_info.joints.front().name);
-      joint.state_transmission = state_transmission;
-      joint.command_transmission = command_transmission;
-    }
-    catch (std::out_of_range&) {
-      DXL_LOG_ERROR("Unknown joint '" << transmission_info.joints.front().name << "' in transmission interface");
-    }
+  if (!loadTransmissionConfiguration()) {
+    return hardware_interface::CallbackReturn::ERROR;
   }
 
   return hardware_interface::CallbackReturn::SUCCESS;
@@ -418,6 +385,48 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     return hardware_interface::return_type::ERROR;
   }
   return hardware_interface::return_type::OK;
+}
+
+bool DynamixelHardwareInterface::loadTransmissionConfiguration()
+{
+  auto transmission_loader = transmission_interface::SimpleTransmissionLoader();
+  for (const auto& transmission_info : info_.transmissions) {
+    // only simple transmissions are supported right now
+    if (transmission_info.type != "transmission_interface/SimpleTransmission") {
+      RCLCPP_FATAL(get_logger(), "Transmission '%s' of type '%s' not supported.", transmission_info.name.c_str(),
+                   transmission_info.type.c_str());
+      return false;
+    }
+    // Only exactly one joint and actuator per transmission
+    if (transmission_info.joints.size() != 1 || transmission_info.actuators.size() != 1) {
+      RCLCPP_FATAL(get_logger(), "Only transmissions with exactly one joint and actuator are supported");
+      return false;
+    }
+
+    // Load transmission from info
+    std::shared_ptr<transmission_interface::Transmission> state_transmission;
+    std::shared_ptr<transmission_interface::Transmission> command_transmission;
+    try {
+      state_transmission = transmission_loader.load(transmission_info);
+      command_transmission = transmission_loader.load(transmission_info);
+    }
+    catch (const transmission_interface::TransmissionInterfaceException& exc) {
+      RCLCPP_FATAL(get_logger(), "Error while loading %s: %s", transmission_info.name.c_str(), exc.what());
+      return false;
+    }
+
+    // Assign to joint
+    try {
+      Joint& joint = joints_.at(transmission_info.joints.front().name);
+      joint.state_transmission = state_transmission;
+      joint.command_transmission = command_transmission;
+    }
+    catch (std::out_of_range&) {
+      DXL_LOG_ERROR("Unknown joint '" << transmission_info.joints.front().name << "' in transmission interface");
+      return false;
+    }
+  }
+  return true;
 }
 
 bool DynamixelHardwareInterface::processCommandInterfaceUpdates(const std::vector<std::string>& interface_updates,

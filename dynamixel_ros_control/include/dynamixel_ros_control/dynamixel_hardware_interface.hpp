@@ -51,10 +51,7 @@ public:
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
 private:
-  /**
-   * Load dynamixels from the configuration
-   * @return success
-   */
+  bool loadTransmissionConfiguration();
   bool processCommandInterfaceUpdates(const std::vector<std::string>& interface_updates, bool stopping);
   bool setUpStateReadManager();
   bool setUpStatusReadManager();
