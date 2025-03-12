@@ -11,15 +11,6 @@ indirect_addresses:
 # address start | data start  | count
   - 49          | 634         | 256
   
-#register_names:
-  #enable_torque_name:    torque_enable
-  #current_position_name: present_position
-  #current_velocity_name: present_velocity
-  #current_torque_name:   present_current
-  #goal_position_name:    goal_position
-  #goal_velocity_name:    goal_velocity
-  #goal_torque_name:      goal_torque
-
 control_table:
 # addr  | item name                | length | access | memory | unit/type
   - 0   | model_number             | 2      | R      | EEPROM |

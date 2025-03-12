@@ -11,15 +11,6 @@ unit_conversions: # dxl value to unit ratio
 indirect_addresses:
 # address start | data start  | count
   - 49          | 634         | 256
-  
-#register_names:
-  #enable_torque_name:    torque_enable
-  #current_position_name: present_position
-  #current_velocity_name: present_velocity
-  #current_torque_name:   present_current
-  #goal_position_name:    goal_position
-  #goal_velocity_name:    goal_velocity
-  #goal_torque_name:      goal_torque
 
 control_table:
 # addr  | item name                | length | access | memory | unit/type
@@ -53,7 +44,7 @@ control_table:
   - 594 | position_p_gain          | 2      | RW     | RAM    |
   - 596 | goal_position            | 4      | RW     | RAM    | rad
   - 600 | goal_velocity            | 4      | RW     | RAM    | rad_per_s
-  - 604 | goal_current             | 2      | RW     | RAM    | A
+  - 604 | goal_torque              | 2      | RW     | RAM    | A
   - 606 | goal_acceleration        | 4      | RW     | RAM    | rad_per_s2
   - 610 | moving                   | 1      | R      | RAM    | bool
   - 611 | present_position         | 4      | R      | RAM    | rad
