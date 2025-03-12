@@ -217,11 +217,14 @@ void Joint::resetGoalState(const std::string& interface_name)
                       "goal field. Add a position state interface to this joint to resolve this problem.");
       value = 0.0;
     }
-    return;
+  } else {
+    // Default value
+    value = 0.0;
   }
 
-  // Default value
-  value = 0.0;
+  if (command_transmission) {
+    command_transmission->actuator_to_joint(); // Unfortunately, there is no interface for single interface handles
+  }
 }
 
 void Joint::resetGoalState()
