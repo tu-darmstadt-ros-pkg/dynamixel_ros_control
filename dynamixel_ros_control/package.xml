@@ -19,7 +19,6 @@
   <depend>pluginlib</depend>
   <depend>dynamixel_sdk</depend>
   <depend>yaml_cpp_vendor</depend>
-<!--   <depend>dynamixel_ros_control_msgs</depend> -->
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>ament_index_cpp</depend>
