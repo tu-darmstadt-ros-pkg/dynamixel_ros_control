@@ -67,11 +67,13 @@ public:
 
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;
+  bool initDefaultGoalValues();
 
   // Active state
   ControlMode control_mode_{UNDEFINED};
   bool control_mode_changed_{false};
   std::vector<std::string> active_command_interfaces_;
+  std::unordered_map<std::string, double> default_goal_values_;
 
   // Parameters
   ControlMode preferred_position_control_mode_{POSITION};

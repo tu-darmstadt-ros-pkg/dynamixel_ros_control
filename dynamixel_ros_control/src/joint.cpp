@@ -73,6 +73,9 @@ bool Joint::connect()
     return false;
   }
   dynamixel->readRegister(DXL_REGISTER_CMD_TORQUE, torque);
+  if (!initDefaultGoalValues()) {
+    return false;
+  }
   return true;
 }
 
@@ -215,11 +218,11 @@ void Joint::resetGoalState(const std::string& interface_name)
                    << name
                    << "' is controlled in position mode but the current position is not read out. Cannot initialize "
                       "goal field. Add a position state interface to this joint to resolve this problem.");
-      value = 0.0;
+      value = 0;
     }
   } else {
     // Default value
-    value = 0.0;
+    value = default_goal_values_.at(interface_name); // This should exist
   }
 
   if (command_transmission) {
@@ -266,6 +269,19 @@ ControlMode Joint::getControlModeFromInterfaces(const std::vector<std::string>& 
                << hardware_interface::HW_IF_EFFORT << " have been requested. Defaulting to "
                << hardware_interface::HW_IF_POSITION << " mode");
   return POSITION;
+}
+
+bool Joint::initDefaultGoalValues()
+{
+  for (auto& interface_name : getAvailableCommandInterfaces()) {
+    const std::string register_name = commandInterfaceToRegisterName(interface_name);
+    double default_value;
+    if (!dynamixel->readRegister(register_name, default_value)) {
+      return false;
+    }
+    default_goal_values_[interface_name] = default_value;
+  }
+  return true;
 }
 
 }  // namespace dynamixel_ros_control
