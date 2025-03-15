@@ -194,7 +194,7 @@ double Dynamixel::dxlValueToUnit(const std::string& register_name, const int32_t
 
 bool Dynamixel::dxlValueToBool(const std::string& register_name, const int32_t value) const
 {
-  std::string unit = getItem(register_name).unit();
+  const std::string unit = getItem(register_name).unit();
   if (unit != "bool") {
     DXL_LOG_ERROR("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
     return false;
@@ -209,7 +209,7 @@ int32_t Dynamixel::unitToDxlValue(const std::string& register_name, const double
 
 int32_t Dynamixel::boolToDxlValue(const std::string& register_name, const bool b) const
 {
-  std::string unit = getItem(register_name).unit();
+  const std::string unit = getItem(register_name).unit();
   if (unit != "bool") {
     DXL_LOG_ERROR("The register '" << register_name << "' (type=" << unit << ") is not of type bool");
     return false;

@@ -111,7 +111,7 @@ public:
                           uint16_t& indirect_data_address) const;
 
   [[nodiscard]] std::string getHardwareErrorStatusString() const;
-  int32_t hardware_error_status;
+  int32_t hardware_error_status{OK};
 
   void setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values);
   const std::unordered_map<std::string, std::string>& getInitialRegisterValues() const;
@@ -121,11 +121,10 @@ private:
   bool writeInitialValues();
 
   DynamixelDriver& driver_;
-  ControlTable* control_table_;
+  ControlTable* control_table_{nullptr};
 
   uint8_t id_;
-  uint16_t model_number_;
-  std::string model_name_;
+  uint16_t model_number_{0};
 
   std::unordered_map<std::string, std::string> initial_values_; // register to value
 };

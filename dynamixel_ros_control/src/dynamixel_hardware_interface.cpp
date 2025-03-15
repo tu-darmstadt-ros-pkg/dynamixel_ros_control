@@ -137,12 +137,14 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     return hardware_interface::CallbackReturn::FAILURE;
   }
 
+  bool connection_successful = true;
   for (auto& [name, joint] : joints_) {
     if (!joint.connect()) {
-      return hardware_interface::CallbackReturn::FAILURE;
+      connection_successful = false;
     }
     joint.reset();
   }
+  if (!connection_successful) return hardware_interface::CallbackReturn::FAILURE;
 
   // const bool torque = !joints_.empty() && joints_.begin()->second.torque;
   // if (torque) {
