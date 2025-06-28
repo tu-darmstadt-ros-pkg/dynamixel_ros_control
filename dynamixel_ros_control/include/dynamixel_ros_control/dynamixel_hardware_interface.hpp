@@ -11,7 +11,7 @@
 
 #include <hardware_interface/system_interface.hpp>
 #include <transmission_interface/transmission.hpp>
-
+#include <controller_orchestrator/controller_orchestrator.hpp>
 namespace dynamixel_ros_control {
 
 class DynamixelHardwareInterface : public hardware_interface::SystemInterface
@@ -93,6 +93,7 @@ private:
   rclcpp::executors::SingleThreadedExecutor::SharedPtr  exe_;
   std::thread exe_thread_;
   std::mutex set_torque_mutex_;
+  std::shared_ptr<controller_orchestrator::ControllerOrchestrator> controller_orchestrator_;
 };
 
 }  // namespace dynamixel_ros_control

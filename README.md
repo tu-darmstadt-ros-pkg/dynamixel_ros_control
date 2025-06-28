@@ -95,7 +95,7 @@ To ensure safe behavior:
 The onboard LED reflects the current state of the hardware interface:
 
 * **🔴 Red** – Hardware interface is **inactive** or **unconfigured**
-* **🔵 Blue** – Hardware interface is **active**, and motors are **torqued on** ((controllers can command the joints)
+* **🔵 Blue** – Hardware interface is **active**, and motors are **torqued on** (controllers can command the joints)
 * **🟢 Green** – Hardware interface is **active**, but motors are **torqued off** (safe for manual movement)
 
 ## Contribution

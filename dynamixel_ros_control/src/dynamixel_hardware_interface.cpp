@@ -120,10 +120,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     joints_.emplace(joint.name, std::move(joint));
   }
 
-  // Transmissions
-  if (!loadTransmissionConfiguration()) {
-    return hardware_interface::CallbackReturn::ERROR;
-  }
+
   // create and spinn a ros2 node in a separate thread
   node_ = std::make_shared<rclcpp::Node>("dynamixel_ros_control");
   exe_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
@@ -138,6 +135,12 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
         response->success = setTorque(request->data);
         response->message = response->success ? "Torque set successfully" : "Failed to set torque";
       });
+  // setup controller orchestrator
+    controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
+  // Transmissions
+  if (!loadTransmissionConfiguration()) {
+    return hardware_interface::CallbackReturn::ERROR;
+  }
 
   return hardware_interface::CallbackReturn::SUCCESS;
 }
@@ -603,6 +606,10 @@ bool DynamixelHardwareInterface::setTorque(const bool enabled, const bool direct
       DXL_LOG_ERROR("Failed to write goal positions before enabling torque. Cannot enable torque.");
       return false;
     }
+  }else {
+    // unload all controllers of the joint
+    auto ctrls = controller_orchestrator_->getActiveControllerOfHardwareInterface(get_name());//TODO is get_name() correct here?
+    controller_orchestrator_->deactivateControllers(ctrls);
   }
   DXL_LOG_INFO((enabled ? "Enabling" : "Disabling") << " motor torque.");
 
