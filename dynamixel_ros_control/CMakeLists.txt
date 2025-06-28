@@ -56,7 +56,7 @@ set(SOURCES
 include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
-target_link_libraries(${PROJECT_NAME} PUBLIC yaml-cpp hector_transmission_interface controller_orchestrator)
+target_link_libraries(${PROJECT_NAME} PUBLIC yaml-cppq)
 ament_target_dependencies(${PROJECT_NAME} PUBLIC rclcpp rclcpp_lifecycle lifecycle_msgs hardware_interface pluginlib
     dynamixel_sdk yaml-cpp std_msgs std_srvs ament_index_cpp transmission_interface hector_transmission_interface controller_orchestrator)
 

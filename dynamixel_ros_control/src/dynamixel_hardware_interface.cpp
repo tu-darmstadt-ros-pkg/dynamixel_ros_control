@@ -120,7 +120,6 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     joints_.emplace(joint.name, std::move(joint));
   }
 
-
   // create and spinn a ros2 node in a separate thread
   node_ = std::make_shared<rclcpp::Node>("dynamixel_ros_control");
   exe_ = std::make_shared<rclcpp::executors::SingleThreadedExecutor>();
@@ -136,7 +135,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
         response->message = response->success ? "Torque set successfully" : "Failed to set torque";
       });
   // setup controller orchestrator
-    controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
+  controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
   // Transmissions
   if (!loadTransmissionConfiguration()) {
     return hardware_interface::CallbackReturn::ERROR;
@@ -603,12 +602,13 @@ bool DynamixelHardwareInterface::setTorque(const bool enabled, const bool direct
 
     // Write goal positions
     if (!control_write_manager_.write() || !control_write_manager_.isOk() || !isHardwareOk()) {
-      DXL_LOG_ERROR("Failed to write goal positions before enabling torque. Cannot enable torque.");
+      DXL_LOG_ERROR("Failed to write qqgoal positions before enabling torque. Cannot enable torque.");
       return false;
     }
-  }else {
+  } else {
     // unload all controllers of the joint
-    auto ctrls = controller_orchestrator_->getActiveControllerOfHardwareInterface(get_name());//TODO is get_name() correct here?
+    auto ctrls = controller_orchestrator_->getActiveControllerOfHardwareInterface(
+        get_name());  // TODO is get_name() correct here?
     controller_orchestrator_->deactivateControllers(ctrls);
   }
   DXL_LOG_INFO((enabled ? "Enabling" : "Disabling") << " motor torque.");
@@ -636,7 +636,7 @@ void DynamixelHardwareInterface::setColorLED(const int& red, const int& green, c
         !joint.dynamixel->writeRegister(DXL_REGISTER_LED_GREEN, green) ||
         !joint.dynamixel->writeRegister(DXL_REGISTER_LED_BLUE, blue)) {
       DXL_LOG_ERROR("Failed to set color LED for joint '" << name << "'");
-        }
+    }
   }
 }
 
@@ -656,9 +656,9 @@ void DynamixelHardwareInterface::setColorLED(const std::string& color)
 void DynamixelHardwareInterface::updateColorLED()
 {
   if (lifecycle_state_.label() == hardware_interface::lifecycle_state_names::UNCONFIGURED ||
-    lifecycle_state_.label() == hardware_interface::lifecycle_state_names::INACTIVE) {
+      lifecycle_state_.label() == hardware_interface::lifecycle_state_names::INACTIVE) {
     setColorLED(COLOR_RED);
-  }else {
+  } else {
     // hardware interface is active
     if (is_torqued_) {
       setColorLED(COLOR_BLUE);
@@ -667,7 +667,6 @@ void DynamixelHardwareInterface::updateColorLED()
     }
   }
 }
-
 
 }  // namespace dynamixel_ros_control
 
