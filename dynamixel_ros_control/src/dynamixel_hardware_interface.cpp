@@ -9,6 +9,7 @@
 #include <transmission_interface/simple_transmission_loader.hpp>
 #include <transmission_interface/transmission.hpp>
 #include <transmission_interface/transmission_interface_exception.hpp>
+#include <hector_transmission_interface/adjustable_offset_transmission_loader.hpp>
 
 namespace {
 
@@ -134,6 +135,11 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
         response->success = setTorque(request->data);
         response->message = response->success ? "Torque set successfully" : "Failed to set torque";
       });
+
+  adjust_offset_service_ = node_->create_service<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>(
+      hardware_info.name + "/adjust_transmission_offsets",
+      std::bind(&DynamixelHardwareInterface::adjustTransmissionOffsetsCallback, this, std::placeholders::_1,
+                std::placeholders::_2));
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
   // Transmissions
@@ -426,10 +432,12 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
 
 bool DynamixelHardwareInterface::loadTransmissionConfiguration()
 {
-  auto transmission_loader = transmission_interface::SimpleTransmissionLoader();
+  auto simple_transmission_loader = transmission_interface::SimpleTransmissionLoader();
+  auto adjustable_offset_transmission_loader = hector_transmission_interface::AdjustableOffsetTransmissionLoader();
   for (const auto& transmission_info : info_.transmissions) {
     // only simple transmissions are supported right now
-    if (transmission_info.type != "transmission_interface/SimpleTransmission") {
+    if (transmission_info.type != "transmission_interface/SimpleTransmission" &&
+        transmission_info.type != "hector_transmission_interface/AdjustableOffsetTransmission") {
       RCLCPP_FATAL(get_logger(), "Transmission '%s' of type '%s' not supported.", transmission_info.name.c_str(),
                    transmission_info.type.c_str());
       return false;
@@ -444,8 +452,13 @@ bool DynamixelHardwareInterface::loadTransmissionConfiguration()
     std::shared_ptr<transmission_interface::Transmission> state_transmission;
     std::shared_ptr<transmission_interface::Transmission> command_transmission;
     try {
-      state_transmission = transmission_loader.load(transmission_info);
-      command_transmission = transmission_loader.load(transmission_info);
+      if (transmission_info.type == "transmission_interface::SimpleTransmission") {
+        state_transmission = simple_transmission_loader.load(transmission_info);
+        command_transmission = simple_transmission_loader.load(transmission_info);
+      } else if (transmission_info.type == "hector_transmission_interface/AdjustableOffsetTransmission") {
+        state_transmission = adjustable_offset_transmission_loader.load(transmission_info);
+        command_transmission = adjustable_offset_transmission_loader.load(transmission_info);
+      }
     }
     catch (const transmission_interface::TransmissionInterfaceException& exc) {
       RCLCPP_FATAL(get_logger(), "Error while loading %s: %s", transmission_info.name.c_str(), exc.what());
@@ -602,14 +615,20 @@ bool DynamixelHardwareInterface::setTorque(const bool enabled, const bool direct
 
     // Write goal positions
     if (!control_write_manager_.write() || !control_write_manager_.isOk() || !isHardwareOk()) {
-      DXL_LOG_ERROR("Failed to write qqgoal positions before enabling torque. Cannot enable torque.");
+      DXL_LOG_ERROR("Failed to write goal positions before enabling torque. Cannot enable torque.");
       return false;
     }
   } else {
     // unload all controllers of the joint
     auto ctrls = controller_orchestrator_->getActiveControllerOfHardwareInterface(
         get_name());  // TODO is get_name() correct here?
-    controller_orchestrator_->deactivateControllers(ctrls);
+    std::stringstream ss;
+    ss << "Disabling torque for hardware interface '" << get_name()
+       << "'. Deactivating controllers: " << iterableToString(ctrls);
+    DXL_LOG_WARN(ss.str().c_str());  // TODO: remove after verifying get_name()
+    if (!controller_orchestrator_->deactivateControllers(ctrls)) {
+      DXL_LOG_ERROR("Failed to deactivate controllers before disabling torque. Disabling torque...");
+    }
   }
   DXL_LOG_INFO((enabled ? "Enabling" : "Disabling") << " motor torque.");
 
@@ -666,6 +685,68 @@ void DynamixelHardwareInterface::updateColorLED()
       setColorLED(COLOR_GREEN);
     }
   }
+}
+
+void DynamixelHardwareInterface::adjustTransmissionOffsetsCallback(
+    const std::shared_ptr<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Request> request,
+    const std::shared_ptr<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Response> response)
+{
+  DXL_LOG_INFO("Request to adjust transmission offsets received.");
+  response->success = true;
+
+  auto ctrls = controller_orchestrator_->getActiveControllerOfHardwareInterface(get_name());
+  if (!controller_orchestrator_->deactivateControllers(ctrls)) {
+    DXL_LOG_ERROR("Failed to deactivate controllers. Cannot adjust offsets.");
+    response->success = false;
+    response->message = "Failed to deactivate controllers. Cannot adjust offsets.";
+    return;
+  }
+
+  for (size_t i = 0; i < request->external_joint_measurements.name.size(); ++i) {
+    const auto& joint_name = request->external_joint_measurements.name[i];
+    const auto& external_joint_position = request->external_joint_measurements.position[i];
+    const auto& internal_joint_position = joints_[joint_name].joint_state.current["position"];
+
+    double current_offset = 0.0;
+    std::string transmission_type;
+    for (const auto& info : info_.transmissions) {
+      if (info.joints.front().name == joint_name) {
+        current_offset = info.joints.front().offset;
+        transmission_type = info.type;
+        break;
+      }
+    }
+
+    const double corrected_offset = external_joint_position - internal_joint_position + current_offset;
+
+    if (transmission_type == "hector_transmission_interface/AdjustableOffsetTransmission") {
+      auto adjustable_state = std::dynamic_pointer_cast<hector_transmission_interface::AdjustableOffsetTransmission>(
+          joints_[joint_name].state_transmission);
+      auto adjustable_command = std::dynamic_pointer_cast<hector_transmission_interface::AdjustableOffsetTransmission>(
+          joints_[joint_name].command_transmission);
+
+      if (!adjustable_state || !adjustable_command) {
+        DXL_LOG_ERROR("Failed to cast transmission for joint '" << joint_name << "'.");
+        response->success = false;
+        response->message = "Transmission cast failed for joint: " + joint_name;
+        return;
+      }
+
+      adjustable_state->adjustTransmissionOffset(corrected_offset);
+      adjustable_command->adjustTransmissionOffset(corrected_offset);
+    } else {
+      DXL_LOG_ERROR("Transmission type '" << transmission_type << "' is not supported for offset adjustment.");
+      response->success = false;
+      response->message = "Unsupported transmission type: " + transmission_type;
+      return;
+    }
+
+    DXL_LOG_INFO("Adjusted offset for joint '" << joint_name << "' to " << corrected_offset);
+    response->adjusted_offsets.push_back(corrected_offset);
+  }
+
+  response->success = true;
+  response->message = "Offsets adjusted successfully";
 }
 
 }  // namespace dynamixel_ros_control

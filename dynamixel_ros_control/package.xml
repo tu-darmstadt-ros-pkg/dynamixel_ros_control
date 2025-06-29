@@ -15,6 +15,7 @@
   <depend>dynamixel_sdk</depend>
   <depend>hardware_interface</depend>
   <depend>hector_transmission_interface</depend>
+  <depend>hector_transmission_interface_msgs</depend>
   <depend>lifecycle_msgs</depend>
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>

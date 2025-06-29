@@ -11,6 +11,7 @@
 
 #include <hardware_interface/system_interface.hpp>
 #include <transmission_interface/transmission.hpp>
+#include <hector_transmission_interface_msgs/srv/adjust_transmission_offsets.hpp>
 #include <controller_orchestrator/controller_orchestrator.hpp>
 namespace dynamixel_ros_control {
 
@@ -51,7 +52,6 @@ public:
   hardware_interface::return_type read(const rclcpp::Time& time, const rclcpp::Duration& period) override;
   hardware_interface::return_type write(const rclcpp::Time& time, const rclcpp::Duration& period) override;
 
-
 private:
   bool loadTransmissionConfiguration();
   bool processCommandInterfaceUpdates(const std::vector<std::string>& interface_updates, bool stopping);
@@ -67,6 +67,9 @@ private:
   void updateColorLED();
   void setColorLED(const int& red, const int& green, const int& blue);
   void setColorLED(const std::string& color);
+  void adjustTransmissionOffsetsCallback(
+      const std::shared_ptr<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Request> request,
+      const std::shared_ptr<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Response> response);
 
   std::unordered_map<std::string, Joint> joints_;
   DynamixelDriver driver_;
@@ -90,7 +93,8 @@ private:
   // ROS interface
   rclcpp::Node::SharedPtr node_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;
-  rclcpp::executors::SingleThreadedExecutor::SharedPtr  exe_;
+  rclcpp::Service<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>::SharedPtr adjust_offset_service_;
+  rclcpp::executors::SingleThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;
   std::mutex set_torque_mutex_;
   std::shared_ptr<controller_orchestrator::ControllerOrchestrator> controller_orchestrator_;
