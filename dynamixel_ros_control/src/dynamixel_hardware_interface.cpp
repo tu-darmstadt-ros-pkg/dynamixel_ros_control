@@ -452,7 +452,7 @@ bool DynamixelHardwareInterface::loadTransmissionConfiguration()
     std::shared_ptr<transmission_interface::Transmission> state_transmission;
     std::shared_ptr<transmission_interface::Transmission> command_transmission;
     try {
-      if (transmission_info.type == "transmission_interface::SimpleTransmission") {
+      if (transmission_info.type == "transmission_interface/SimpleTransmission") {
         state_transmission = simple_transmission_loader.load(transmission_info);
         command_transmission = simple_transmission_loader.load(transmission_info);
       } else if (transmission_info.type == "hector_transmission_interface/AdjustableOffsetTransmission") {
