@@ -123,26 +123,24 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // create and spinn a ros2 node in a separate thread (making sure it gets a separate name)
   auto tmp_node = rclcpp::Node::make_shared("dynamixel_ros_control_node");
-  std::string ns = std::string(tmp_node->get_namespace())+"/" + hardware_info.name;
-  node_ = std::make_shared<rclcpp::Node>("dynamixel_ros_control_",ns,
-                                         rclcpp::NodeOptions().use_global_arguments(false));
+  std::string ns = std::string(tmp_node->get_namespace()) + "/dynamixel";
+  node_ = std::make_shared<rclcpp::Node>(hardware_info.name, ns, rclcpp::NodeOptions().use_global_arguments(false));
   exe_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
   exe_->add_node(node_);
   exe_thread_ = std::thread([this] { exe_->spin(); });
 
   // create a service to set torque
   set_torque_service_ = node_->create_service<std_srvs::srv::SetBool>(
-       "set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-                                                 const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+      "set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                           const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
         DXL_LOG_INFO("Request to set torque to " << (request->data ? "ON" : "OFF") << " received.");
         response->success = setTorque(request->data);
         response->message = response->success ? "Torque set successfully" : "Failed to set torque";
       });
 
   adjust_offset_service_ = node_->create_service<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>(
-       "adjust_transmission_offsets",
-      std::bind(&DynamixelHardwareInterface::adjustTransmissionOffsetsCallback, this, std::placeholders::_1,
-                std::placeholders::_2));
+      "adjust_transmission_offsets", std::bind(&DynamixelHardwareInterface::adjustTransmissionOffsetsCallback, this,
+                                               std::placeholders::_1, std::placeholders::_2));
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
   // Transmissions
