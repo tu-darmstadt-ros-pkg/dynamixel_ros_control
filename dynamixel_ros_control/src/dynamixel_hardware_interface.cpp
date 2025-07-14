@@ -623,11 +623,11 @@ bool DynamixelHardwareInterface::setTorque(const bool enabled, const bool direct
   } else {
     // unload all controllers of the joint
     auto ctrls = controller_orchestrator_->getActiveControllerOfHardwareInterface(
-        get_name());  // TODO is get_name() correct here?
+        get_name());
     std::stringstream ss;
     ss << "Disabling torque for hardware interface '" << get_name()
-       << "'. Deactivating controllers: " << iterableToString(ctrls);
-    DXL_LOG_WARN(ss.str().c_str());  // TODO: remove after verifying get_name()
+       << "'. -> Deactivating the following controllers: " << iterableToString(ctrls);
+    DXL_LOG_WARN(ss.str().c_str());
     if (!controller_orchestrator_->deactivateControllers(ctrls)) {
       DXL_LOG_ERROR("Failed to deactivate controllers before disabling torque. Disabling torque...");
     }
