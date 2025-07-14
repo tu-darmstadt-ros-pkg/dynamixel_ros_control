@@ -122,7 +122,10 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   }
 
   // create and spinn a ros2 node in a separate thread (making sure it gets a separate name)
-  node_ = std::make_shared<rclcpp::Node>("dynamixel_ros_control_",hardware_info.name);
+  auto tmp_node = rclcpp::Node::make_shared("dynamixel_ros_control_node");
+  std::string ns = std::string(tmp_node->get_namespace())+"/" + hardware_info.name;
+  node_ = std::make_shared<rclcpp::Node>("dynamixel_ros_control_",ns,
+                                         rclcpp::NodeOptions().use_global_arguments(false));
   exe_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
   exe_->add_node(node_);
   exe_thread_ = std::thread([this] { exe_->spin(); });
