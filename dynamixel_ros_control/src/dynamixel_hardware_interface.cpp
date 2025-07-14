@@ -122,15 +122,14 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   }
 
   // create and spinn a ros2 node in a separate thread (making sure it gets a separate name)
-  node_ = std::make_shared<rclcpp::Node>("dynamixel_ros_control_" + hardware_info.name,
-                                         rclcpp::NodeOptions().use_global_arguments(false));
+  node_ = std::make_shared<rclcpp::Node>("dynamixel_ros_control_",hardware_info.name);
   exe_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
   exe_->add_node(node_);
   exe_thread_ = std::thread([this] { exe_->spin(); });
 
   // create a service to set torque
   set_torque_service_ = node_->create_service<std_srvs::srv::SetBool>(
-      hardware_info.name + "/set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+       "set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                                                  const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
         DXL_LOG_INFO("Request to set torque to " << (request->data ? "ON" : "OFF") << " received.");
         response->success = setTorque(request->data);
@@ -138,7 +137,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
       });
 
   adjust_offset_service_ = node_->create_service<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>(
-      hardware_info.name + "/adjust_transmission_offsets",
+       "adjust_transmission_offsets",
       std::bind(&DynamixelHardwareInterface::adjustTransmissionOffsetsCallback, this, std::placeholders::_1,
                 std::placeholders::_2));
   // setup controller orchestrator
