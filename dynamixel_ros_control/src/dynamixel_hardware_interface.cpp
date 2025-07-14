@@ -122,8 +122,9 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   }
 
   // create and spinn a ros2 node in a separate thread (making sure it gets a separate name)
+  // TODO: for now: hacky solution for preventing name conflicts while ensuring namespace is set correctly
   auto tmp_node = rclcpp::Node::make_shared("dynamixel_ros_control_node");
-  std::string ns = std::string(tmp_node->get_namespace()) + "/dynamixel";
+  std::string ns = std::string(tmp_node->get_namespace());
   node_ = std::make_shared<rclcpp::Node>(hardware_info.name, ns, rclcpp::NodeOptions().use_global_arguments(false));
   exe_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
   exe_->add_node(node_);
@@ -131,7 +132,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // create a service to set torque
   set_torque_service_ = node_->create_service<std_srvs::srv::SetBool>(
-      "set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+      "~/set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                            const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
         DXL_LOG_INFO("Request to set torque to " << (request->data ? "ON" : "OFF") << " received.");
         response->success = setTorque(request->data);
@@ -139,7 +140,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
       });
 
   adjust_offset_service_ = node_->create_service<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>(
-      "adjust_transmission_offsets", std::bind(&DynamixelHardwareInterface::adjustTransmissionOffsetsCallback, this,
+      "~/adjust_transmission_offsets", std::bind(&DynamixelHardwareInterface::adjustTransmissionOffsetsCallback, this,
                                                std::placeholders::_1, std::placeholders::_2));
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
@@ -707,24 +708,20 @@ void DynamixelHardwareInterface::adjustTransmissionOffsetsCallback(
     const auto& joint_name = request->external_joint_measurements.name[i];
     const auto& external_joint_position = request->external_joint_measurements.position[i];
     const auto& internal_joint_position = joints_[joint_name].joint_state.current["position"];
-
-    double current_offset = 0.0;
+    double corrected_offset = std::numeric_limits<double>::quiet_NaN();
     std::string transmission_type;
     for (const auto& info : info_.transmissions) {
       if (info.joints.front().name == joint_name) {
-        current_offset = info.joints.front().offset;
         transmission_type = info.type;
         break;
       }
     }
-
-    const double corrected_offset = external_joint_position - internal_joint_position + current_offset;
-
     if (transmission_type == "hector_transmission_interface/AdjustableOffsetTransmission") {
-      auto adjustable_state = std::dynamic_pointer_cast<hector_transmission_interface::AdjustableOffsetTransmission>(
+          auto adjustable_state = std::dynamic_pointer_cast<hector_transmission_interface::AdjustableOffsetTransmission>(
           joints_[joint_name].state_transmission);
       auto adjustable_command = std::dynamic_pointer_cast<hector_transmission_interface::AdjustableOffsetTransmission>(
           joints_[joint_name].command_transmission);
+
 
       if (!adjustable_state || !adjustable_command) {
         DXL_LOG_ERROR("Failed to cast transmission for joint '" << joint_name << "'.");
@@ -732,6 +729,17 @@ void DynamixelHardwareInterface::adjustTransmissionOffsetsCallback(
         response->message = "Transmission cast failed for joint: " + joint_name;
         return;
       }
+      double current_offset = adjustable_state->get_joint_offset();
+      std::stringstream ss;
+      ss << "Adjusting offset for joint '" << joint_name << "':" << std::endl;
+      ss << "-- external joint position: " << external_joint_position << std::endl;
+      ss << "-- internal joint position: " << internal_joint_position << std::endl;
+      ss << "-- current offset: " << current_offset << std::endl;
+      ss << "-- transmission type: " << transmission_type << std::endl;
+      corrected_offset = external_joint_position - internal_joint_position + current_offset;
+      ss << "-- corrected offset: " << corrected_offset << std::endl;
+      DXL_LOG_INFO(ss.str());
+
 
       adjustable_state->adjustTransmissionOffset(corrected_offset);
       adjustable_command->adjustTransmissionOffset(corrected_offset);
