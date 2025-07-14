@@ -94,7 +94,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;
   rclcpp::Service<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>::SharedPtr adjust_offset_service_;
-  rclcpp::executors::SingleThreadedExecutor::SharedPtr exe_;
+  rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;
   std::mutex set_torque_mutex_;
   std::shared_ptr<controller_orchestrator::ControllerOrchestrator> controller_orchestrator_;
