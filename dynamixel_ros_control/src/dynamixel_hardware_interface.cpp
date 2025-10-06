@@ -189,7 +189,6 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
   // if (torque) {
   //   setTorque(true);
   // }
-  DXL_LOG_INFO("Dynamixel hardware interface configured successfully.");  // TODO: remove
   updateColorLED(hardware_interface::lifecycle_state_names::INACTIVE);
 
   return CallbackReturn::SUCCESS;
@@ -727,17 +726,10 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify()
   for (auto& [name, joint] : joints_) {
     for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
       if (joint.read_goal_values_.count(interface_name) == 0) {
-        DXL_LOG_ERROR("Joint '" << name << "' does not have read goal values for interface '" << interface_name
-                                << "'. Cannot verify goal position.");  // TODO: remove
-        std::stringstream ss;
-        ss << "Available interfaces: ";
-        for (const auto& [fst, snd] : joint.read_goal_values_) {
-          ss << fst << ", ";
-        }
+        DXL_LOG_ERROR("Cannot verify cmd values from motor "<<name<<"!");
         return false;
       }
       const auto& interface_value = joint.read_goal_values_.at(interface_name);
-      DXL_LOG_INFO("Verifying goal values for joint " << name << " interface " << interface_name);  // TODO: remove
       if (std::abs(interface_value - joint.getActuatorState().goal[interface_name]) > 1e-2) {
         DXL_LOG_ERROR("Joint '" << name << "' goal " << interface_name
                                 << " does not match read goal position before enabling torque. "

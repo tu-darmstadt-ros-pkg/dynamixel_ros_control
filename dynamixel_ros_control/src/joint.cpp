@@ -232,14 +232,11 @@ void Joint::resetGoalState(const std::string& interface_name)
         active_command_interfaces_.end()) {
       // velocity or current Controller is active for this interface, set to zero
       value = 0.0;
-      DXL_LOG_INFO("Resetting goal value of joint '" << name << "' for interface '" << interface_name << "' to 0.0");
     } else {
       // Default value, e.g. as velocity limit in position mode
       value = default_goal_values_.at(interface_name);  // This should exist
     }
   }
-  DXL_LOG_INFO("Resetting goal value of joint '" << name << "' for interface '" << interface_name << "' to "
-                                                 << value);  // TODO: remove
 
   if (command_transmission) {
     command_transmission->actuator_to_joint();  // Unfortunately, there is no interface for single interface handles
@@ -311,8 +308,6 @@ bool Joint::initDefaultGoalValues()
       }
     }
     default_goal_values_[interface_name] = default_value;
-    DXL_LOG_ERROR("Default goal value for interface '" << interface_name << "' for joint '" << name << "' is "
-                                                       << default_value);  // TODO: remove
   }
   return true;
 }
