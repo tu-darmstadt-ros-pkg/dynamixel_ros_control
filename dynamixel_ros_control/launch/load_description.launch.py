@@ -28,7 +28,7 @@ def generate_launch_description():
 
     id_arg = DeclareLaunchArgument(
         name='id',
-        default_value='1',
+        default_value='16',
         description='ID of the dynamixel to control'
     )
     ld.add_action(id_arg)

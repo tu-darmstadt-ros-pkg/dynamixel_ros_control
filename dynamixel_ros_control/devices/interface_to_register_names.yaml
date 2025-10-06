@@ -19,3 +19,11 @@ command_interfaces:
     register_name: "goal_torque"
   - interface_name: "current"  # hardware_interface::HW_IF_CURRENT
     register_name: "goal_torque"
+
+limits:
+  - interface_name: "velocity"
+    register_name: "velocity_limit"
+  - interface_name: "effort"
+    register_name: "torque_limit"
+  - interface_name: "current"
+    register_name: "current_limit"

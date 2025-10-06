@@ -24,11 +24,13 @@ namespace dynamixel_ros_control {
 
 bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info,
                               const std::unordered_map<std::string, std::string>& state_interface_to_register,
-                              const std::unordered_map<std::string, std::string>& command_interface_to_register)
+                              const std::unordered_map<std::string, std::string>& command_interface_to_register,
+                              const std::unordered_map<std::string, std::string>& interface_to_register_limits)
 {
   name = info.name;
   state_interface_to_register_ = state_interface_to_register;
   command_interface_to_register_ = command_interface_to_register;
+  interface_to_register_limits_ = interface_to_register_limits;
 
   getParameter(info.parameters, "mounting_offset", mounting_offset, 0.0);
   getParameter(info.parameters, "offset", offset, 0.0);
@@ -204,6 +206,11 @@ std::string Joint::commandInterfaceToRegisterName(const std::string& interface_n
   return interfaceToRegisterName(interface_name, command_interface_to_register_);
 }
 
+std::string Joint::interfaceToLimitRegisterName(const std::string& interface_name) const
+{
+  return interfaceToRegisterName(interface_name, interface_to_register_limits_);
+}
+
 void Joint::resetGoalState(const std::string& interface_name)
 {
   double& value = getActuatorState().goal.at(interface_name);  // This should exist
@@ -221,7 +228,8 @@ void Joint::resetGoalState(const std::string& interface_name)
       value = 0;
     }
   } else {
-    if (std::find(active_command_interfaces_.begin(), active_command_interfaces_.end(), interface_name) != active_command_interfaces_.end()) {
+    if (std::find(active_command_interfaces_.begin(), active_command_interfaces_.end(), interface_name) !=
+        active_command_interfaces_.end()) {
       // velocity or current Controller is active for this interface, set to zero
       value = 0.0;
       DXL_LOG_INFO("Resetting goal value of joint '" << name << "' for interface '" << interface_name << "' to 0.0");
@@ -280,14 +288,31 @@ ControlMode Joint::getControlModeFromInterfaces(const std::vector<std::string>& 
 }
 
 bool Joint::initDefaultGoalValues()
+/**
+ * Initialize default goal values for all available command interfaces by reading the corresponding limit registers
+ * from the motor.
+ * The 'default' value is used when the corresponding command interface is not active!
+ * E.g.: in position control mode, the velocity limit is used to limit the velocity. Hence, we read the maximum velocity.
+ */
 {
   for (auto& interface_name : getAvailableCommandInterfaces()) {
-    const std::string register_name = commandInterfaceToRegisterName(interface_name);
+    if (interface_name == hardware_interface::HW_IF_POSITION)
+      continue;  // position does not need a default value
+    std::string register_name = interfaceToLimitRegisterName(interface_name);
     double default_value;
     if (!dynamixel->readRegister(register_name, default_value)) {
-      return false;
+      // in case limit register is not available, try to read the value from the command register itself
+      // after reboot (!) this should be the maximum value
+      register_name = commandInterfaceToRegisterName(interface_name);
+      if (!dynamixel->readRegister(register_name, default_value)) {
+        DXL_LOG_ERROR("Could not read default value for interface '" << interface_name << "' for joint '" << name
+                                                                     << "'.");
+        return false;
+      }
     }
     default_goal_values_[interface_name] = default_value;
+    DXL_LOG_ERROR("Default goal value for interface '" << interface_name << "' for joint '" << name << "' is "
+                                                       << default_value);  // TODO: remove
   }
   return true;
 }

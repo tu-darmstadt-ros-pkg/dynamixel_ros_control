@@ -20,7 +20,8 @@ public:
 
   bool loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info,
                          const std::unordered_map<std::string, std::string>& state_interface_to_register,
-                         const std::unordered_map<std::string, std::string>& command_interface_to_register);
+                         const std::unordered_map<std::string, std::string>& command_interface_to_register,
+                         const std::unordered_map<std::string, std::string>& interface_to_register_limits);
   bool connect();
   void reset();
 
@@ -41,6 +42,7 @@ public:
 
   std::string stateInterfaceToRegisterName(const std::string& interface_name) const;
   std::string commandInterfaceToRegisterName(const std::string& interface_name) const;
+  std::string interfaceToLimitRegisterName(const std::string& interface_name) const;
 
   void resetGoalState(const std::string& interface_name);
   void resetGoalState();
@@ -65,7 +67,7 @@ public:
   // Active state
   bool torque{false};
   State joint_state;
-  State actuator_state;                 // Only used if there is a transmission
+  State actuator_state;                                       // Only used if there is a transmission
   std::unordered_map<std::string, double> read_goal_values_;  // read from dynamixel
   std::shared_ptr<transmission_interface::Transmission> state_transmission;
   std::shared_ptr<transmission_interface::Transmission> command_transmission;
@@ -87,7 +89,9 @@ private:
   std::vector<std::string> command_interfaces_;
   std::unordered_map<std::string, std::string> command_interface_to_register_;
   std::unordered_map<std::string, std::string> state_interface_to_register_;
+  std::unordered_map<std::string, std::string> interface_to_register_limits_;
 };
+
 
 }  // namespace dynamixel_ros_control
 

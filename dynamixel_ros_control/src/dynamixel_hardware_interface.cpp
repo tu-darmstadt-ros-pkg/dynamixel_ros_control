@@ -33,7 +33,8 @@ std::unordered_map<std::string, std::string> loadInterfaceRegisterTranslationMap
 }
 
 bool loadInterfaceRegisterNameTranslation(std::unordered_map<std::string, std::string>& state_interface_to_register,
-                                          std::unordered_map<std::string, std::string>& command_interface_to_register)
+                                          std::unordered_map<std::string, std::string>& command_interface_to_register,
+                                          std::unordered_map<std::string, std::string>& interface_to_register_limits)
 {
   std::string package_path_ = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
   const std::string path = package_path_ + "/devices/interface_to_register_names.yaml";
@@ -52,6 +53,7 @@ bool loadInterfaceRegisterNameTranslation(std::unordered_map<std::string, std::s
 
   state_interface_to_register = loadInterfaceRegisterTranslationMap(config["state_interfaces"]);
   command_interface_to_register = loadInterfaceRegisterTranslationMap(config["command_interfaces"]);
+  interface_to_register_limits = loadInterfaceRegisterTranslationMap(config["limits"]);
   return true;
 }
 
@@ -97,7 +99,9 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   // Interface to register translation
   std::unordered_map<std::string, std::string> state_interface_to_register;
   std::unordered_map<std::string, std::string> command_interface_to_register;
-  if (!loadInterfaceRegisterNameTranslation(state_interface_to_register, command_interface_to_register)) {
+  std::unordered_map<std::string, std::string> interface_to_register_limits;  // e.g. velocity and current limits
+  if (!loadInterfaceRegisterNameTranslation(state_interface_to_register, command_interface_to_register,
+                                            interface_to_register_limits)) {
     return hardware_interface::CallbackReturn::ERROR;
   }
 
@@ -105,7 +109,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   joints_.reserve(info_.joints.size());
   for (const auto& joint_info : info_.joints) {
     Joint joint;
-    if (!joint.loadConfiguration(driver_, joint_info, state_interface_to_register, command_interface_to_register)) {
+    if (!joint.loadConfiguration(driver_, joint_info, state_interface_to_register, command_interface_to_register, interface_to_register_limits)) {
       return hardware_interface::CallbackReturn::ERROR;
     }
     std::stringstream ss;
@@ -185,7 +189,7 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
   // if (torque) {
   //   setTorque(true);
   // }
-  DXL_LOG_INFO("Dynamixel hardware interface configured successfully."); // TODO: remove
+  DXL_LOG_INFO("Dynamixel hardware interface configured successfully.");  // TODO: remove
   updateColorLED(hardware_interface::lifecycle_state_names::INACTIVE);
 
   return CallbackReturn::SUCCESS;
@@ -197,13 +201,18 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
     if (exe_) {
       exe_->cancel();
       if (node_) {
-        try { exe_->remove_node(node_); } catch (...) {}
+        try {
+          exe_->remove_node(node_);
+        }
+        catch (...) {
+        }
       }
     }
     if (exe_thread_.joinable()) {
       exe_thread_.join();
     }
-  } catch (...) {
+  }
+  catch (...) {
   }
   exe_.reset();
   node_.reset();
@@ -348,7 +357,6 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     return hardware_interface::return_type::ERROR;
   }
 
-
   // Start & stop interfaces
   if (!processCommandInterfaceUpdates(start_interfaces, false)) {
     return hardware_interface::return_type::ERROR;
@@ -416,7 +424,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     }
 
     // reset after first read (e.g. goal position = current position)
-    if (!first_read_successful_ ) {
+    if (!first_read_successful_) {
       joint.resetGoalState();
     }
   }
@@ -441,7 +449,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     }
   }
 
-  if (!first_read_successful_ ) {
+  if (!first_read_successful_) {
     // DXL_LOG_ERROR("Write called without successful read. This should not happen.");
     return hardware_interface::return_type::OK;
   }
@@ -720,7 +728,7 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify()
     for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
       if (joint.read_goal_values_.count(interface_name) == 0) {
         DXL_LOG_ERROR("Joint '" << name << "' does not have read goal values for interface '" << interface_name
-                                << "'. Cannot verify goal position."); // TODO: remove
+                                << "'. Cannot verify goal position.");  // TODO: remove
         std::stringstream ss;
         ss << "Available interfaces: ";
         for (const auto& [fst, snd] : joint.read_goal_values_) {
@@ -729,7 +737,7 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify()
         return false;
       }
       const auto& interface_value = joint.read_goal_values_.at(interface_name);
-      DXL_LOG_INFO("Verifying goal values for joint " << name << " interface " << interface_name); // TODO: remove
+      DXL_LOG_INFO("Verifying goal values for joint " << name << " interface " << interface_name);  // TODO: remove
       if (std::abs(interface_value - joint.getActuatorState().goal[interface_name]) > 1e-2) {
         DXL_LOG_ERROR("Joint '" << name << "' goal " << interface_name
                                 << " does not match read goal position before enabling torque. "
@@ -779,10 +787,10 @@ void DynamixelHardwareInterface::setColorLED(const std::string& color)
 
 void DynamixelHardwareInterface::updateColorLED(std::string new_state)
 {
-  if (new_state.empty()) new_state = lifecycle_state_.label();
+  if (new_state.empty())
+    new_state = lifecycle_state_.label();
   if (new_state == hardware_interface::lifecycle_state_names::UNCONFIGURED ||
-      new_state == hardware_interface::lifecycle_state_names::INACTIVE
-     ) {
+      new_state == hardware_interface::lifecycle_state_names::INACTIVE) {
     setColorLED(COLOR_RED);
   } else {
     // hardware interface is active
