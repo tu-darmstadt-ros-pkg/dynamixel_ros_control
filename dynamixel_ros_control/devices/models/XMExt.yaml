@@ -1,4 +1,4 @@
-# XM series  
+# XM series
 unit_conversions: # dxl value to unit ratio
   rad: 0.001533980787885641
   rad_per_s: 0.023980117
@@ -8,12 +8,12 @@ unit_conversions: # dxl value to unit ratio
   V: 0.1
   ms: 1.0
   A: 0.00269
-  
+
 indirect_addresses:
 # address start | data start  | count
   #- 168        | 224         | 28
   - 578         | 634         | 28
-  
+
 control_table:
 # addr  | item name                | length | access | memory | unit/type
   - 0   | model_number             | 2      | R      | EEPROM |
@@ -47,7 +47,7 @@ control_table:
   - 80  | position_d_gain          | 2      | RW     | RAM    |
   - 82  | position_i_gain          | 2      | RW     | RAM    |
   - 84  | position_p_gain          | 2      | RW     | RAM    |
-  - 88  | feedforward_2nd_gain     | 2      | RW     | RAM    |
+  - 88  | feedforward_2and_gain     | 2      | RW     | RAM    |
   - 90  | feedforward_1st_gain     | 2      | RW     | RAM    |
   - 98  | bus_watchdog             | 1      | RW     | RAM    |
   - 100 | goal_pwm                 | 2      | RW     | RAM    |

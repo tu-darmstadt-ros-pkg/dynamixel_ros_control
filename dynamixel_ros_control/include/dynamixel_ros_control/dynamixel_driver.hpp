@@ -41,6 +41,7 @@ public:
 
   [[nodiscard]] std::string communicationErrorToString(int comm_result) const;
   [[nodiscard]] std::string packetErrorToString(uint8_t error) const;
+
 private:
   bool loadSeriesMapping();
   ControlTable* readControlTable(std::string series);

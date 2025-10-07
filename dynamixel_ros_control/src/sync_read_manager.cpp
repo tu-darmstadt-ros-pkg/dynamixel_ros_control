@@ -84,7 +84,7 @@ bool SyncReadManager::init(DynamixelDriver& driver)
 
   // Request indirect address space from dynamixel_driver
   if (!driver.requestIndirectAddresses(total_data_length_, indirect_address_index_)) {
-    DXL_LOG_ERROR("Failed to aquire indirect addresses for register with data length of " << total_data_length_ << ".");
+    DXL_LOG_ERROR("Failed to acquire indirect addresses for register with data length of " << total_data_length_ << ".");
     return false;
   }
 

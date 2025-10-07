@@ -23,6 +23,7 @@
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>transmission_interface</depend>
+  <depend>yaml-cpp</depend>
   <depend>yaml_cpp_vendor</depend>
 
   <exec_depend>controller_manager</exec_depend>

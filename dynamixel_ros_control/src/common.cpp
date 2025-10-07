@@ -63,7 +63,7 @@ bool getParameter<bool>(const ParameterMap& map, const std::string& param_name, 
     return false;
   }
   std::transform(parameter_string.begin(), parameter_string.end(), parameter_string.begin(),
-      [](const unsigned char c){ return std::tolower(c); });
+                 [](const unsigned char c) { return std::tolower(c); });
 
   if (parameter_string == "true" || parameter_string == "1") {
     value = true;

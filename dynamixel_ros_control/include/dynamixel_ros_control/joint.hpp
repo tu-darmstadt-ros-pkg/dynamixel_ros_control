@@ -91,7 +91,6 @@ private:
   std::unordered_map<std::string, std::string> interface_to_register_limits_;
 };
 
-
 }  // namespace dynamixel_ros_control
 
 #endif

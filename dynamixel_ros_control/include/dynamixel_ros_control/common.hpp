@@ -41,7 +41,7 @@ std::string iterableToString(const Iterable& container)
 
   auto it = container.begin();
   if (it != container.end()) {
-    ss << *it; // First element (avoid trailing comma)
+    ss << *it;  // First element (avoid trailing comma)
     ++it;
   }
 
@@ -55,7 +55,8 @@ std::string iterableToString(const Iterable& container)
 }
 
 template <typename Map>
-std::string mapToString(const Map& m, const std::string& separator = ", ", const std::string& keyValueSeparator = ": ") {
+std::string mapToString(const Map& m, const std::string& separator = ", ", const std::string& keyValueSeparator = ": ")
+{
   std::ostringstream oss;
   bool first = true;
 

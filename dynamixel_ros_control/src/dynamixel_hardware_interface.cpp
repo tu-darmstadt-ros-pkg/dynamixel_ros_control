@@ -454,7 +454,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   // if mode switch failed, bring robot to halt and return error
   if (mode_switch_failed_) {
     // while e-stop not active, try to activate it
-    if (!e_stopp_active_ && !activateEStop())
+    if (!e_stop_active_ && !activateEStop())
       return hardware_interface::return_type::OK;  // sending ok, allows to retry in next write cycle while ignoring cmds
     // forces controller unloading if e-stop is active (-> motors cannot move anymore)
     DXL_LOG_ERROR("In error state, not writing commands.");
@@ -474,7 +474,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   }
 
   // do not write controller commands if e-stop is active
-  if (e_stopp_active_)
+  if (e_stop_active_)
     return hardware_interface::return_type::OK;
 
   control_write_manager_.write();
@@ -832,7 +832,7 @@ void DynamixelHardwareInterface::updateColorLED(std::string new_state)
     // hardware interface is active
     if (!is_torqued_) {
       setColorLED(COLOR_GREEN);
-    } else if (e_stopp_active_) {
+    } else if (e_stop_active_) {
       setColorLED(COLOR_ORANGE);
     } else {
       setColorLED(COLOR_BLUE);
@@ -899,7 +899,7 @@ void DynamixelHardwareInterface::adjustTransmissionOffsetsCallback(
 
 bool DynamixelHardwareInterface::setEStop(bool do_enable)
 {
-  if (do_enable != e_stopp_active_) {
+  if (do_enable != e_stop_active_) {
     if (do_enable) {
       if (!is_torqued_) {
         DXL_LOG_WARN("Torqued not set, cannot activate e-stop");
@@ -915,7 +915,7 @@ bool DynamixelHardwareInterface::setEStop(bool do_enable)
       activateEStop();
     } else {
       DXL_LOG_WARN("E-STOP INACTIVATED via topic");
-      e_stopp_active_ = false;
+      e_stop_active_ = false;
       std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
       updateColorLED();
     }
@@ -957,7 +957,7 @@ bool DynamixelHardwareInterface::activateEStop()
   }
   // Note: the motor is still in position control mode with the last goal position set
 
-  e_stopp_active_ = true;
+  e_stop_active_ = true;
   updateColorLED();
   return true;
 }

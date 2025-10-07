@@ -97,7 +97,7 @@ public:
     return true;
   }
 
-  bool writeControlMode(ControlMode mode, bool disable_torque=false) const;
+  bool writeControlMode(ControlMode mode, bool disable_torque = false) const;
 
   // Value conversion functions
   [[nodiscard]] double dxlValueToUnit(const std::string& register_name, int32_t value) const;
@@ -119,6 +119,7 @@ public:
 
   void setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values);
   const std::unordered_map<std::string, std::string>& getInitialRegisterValues() const;
+
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address,
                                 uint16_t& indirect_data_address) const;
@@ -130,7 +131,7 @@ private:
   uint8_t id_;
   uint16_t model_number_{0};
 
-  std::unordered_map<std::string, std::string> initial_values_; // register to value
+  std::unordered_map<std::string, std::string> initial_values_;  // register to value
 };
 
 }  // namespace dynamixel_ros_control

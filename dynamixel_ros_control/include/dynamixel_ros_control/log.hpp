@@ -12,4 +12,4 @@ constexpr char DXL_LOGGER_NAME[] = "dynamixel_ros_control";
 #define DXL_LOG_ERROR(msg) DXL_LOG(ERROR, msg)
 #define DXL_LOG_FATAL(msg) DXL_LOG(FATAL, msg)
 
-#endif //DYNAMIXEL_ROS_CONTROL_LOG_H
+#endif  // DYNAMIXEL_ROS_CONTROL_LOG_H

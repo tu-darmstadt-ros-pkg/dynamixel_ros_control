@@ -229,7 +229,8 @@ void Joint::resetGoalState(const std::string& interface_name)
     }
   } else {
     if (std::find(active_command_interfaces_.begin(), active_command_interfaces_.end(), interface_name) !=
-        active_command_interfaces_.end() || active_command_interfaces_.empty()) {
+            active_command_interfaces_.end() ||
+        active_command_interfaces_.empty()) {
       // if no command interface is set (or known), reset to zero ( motor might be in velocity or current mode)
       // also reset to zero if in velocity / effort mode
       value = 0.0;

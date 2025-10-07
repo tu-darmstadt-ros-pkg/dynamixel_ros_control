@@ -27,9 +27,9 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   driver_ = &driver;
   total_data_length_ = 0;
   // Determine total data length
-  for (const auto& [dxl, write_entries]: write_entries_) {
+  for (const auto& [dxl, write_entries] : write_entries_) {
     unsigned int dxl_data_length = 0;
-    for (const auto& entry: write_entries) {
+    for (const auto& entry : write_entries) {
       dxl_data_length += entry.data_length;
     }
     if (dxl_data_length > total_data_length_) {
@@ -46,16 +46,16 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   // Register indirect addresses
   uint16_t total_indirect_data_address = 0;
   bool first = true;
-  for (auto& [dxl, write_entries]: write_entries_) {
+  for (auto& [dxl, write_entries] : write_entries_) {
     unsigned int indirect_address_index = indirect_address_index_;
-    for (auto& entry: write_entries) {
+    for (auto& entry : write_entries) {
       if (!dxl->setIndirectAddress(indirect_address_index, entry.register_name, entry.indirect_data_address)) {
         DXL_LOG_ERROR("Failed to set indirect address mapping");
         return false;
       }
       if (first) {
         first = false;
-        total_indirect_data_address = entry.indirect_data_address; // Should be the same for every servo
+        total_indirect_data_address = entry.indirect_data_address;  // Should be the same for every servo
       }
       indirect_address_index += entry.data_length;
     }
@@ -69,7 +69,7 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   }
 
   std::vector<unsigned char> tmp(total_data_length_, 0);  // Will not be used
-  for (auto& [dxl, write_entries]: write_entries_) {
+  for (auto& [dxl, write_entries] : write_entries_) {
     if (!sync_write_->addParam(dxl->getId(), &tmp[0]))
       return false;
   }
@@ -87,10 +87,10 @@ bool SyncWriteManager::write()
     return true;
   }
   // Convert values and update params
-  for (auto& [dxl, write_entries]: write_entries_) {
+  for (auto& [dxl, write_entries] : write_entries_) {
     std::vector<unsigned char> write_value(total_data_length_, 0);
-    auto *buffer = write_value.data();
-    for (auto& entry: write_entries) {
+    auto* buffer = write_value.data();
+    for (auto& entry : write_entries) {
       int32_t dxl_value;
       if (entry.d_value) {
         const double unit_value = *entry.d_value + entry.offset;
@@ -131,13 +131,15 @@ void SyncWriteManager::setErrorThreshold(const unsigned int threshold)
   error_threshold_ = threshold;
 }
 
-std::optional<std::reference_wrapper<WriteEntry>> SyncWriteManager::addEntry(Dynamixel& dxl, const std::string& register_name)
+std::optional<std::reference_wrapper<WriteEntry>> SyncWriteManager::addEntry(Dynamixel& dxl,
+                                                                             const std::string& register_name)
 {
   WriteEntry entry;
   entry.register_name = register_name;
   try {
     entry.data_length = dxl.getItem(register_name).data_length();
-  } catch (const std::out_of_range&) {
+  }
+  catch (const std::out_of_range&) {
     DXL_LOG_ERROR("Unknown register '" << register_name << "'. Failed to add write entry");
     return {};
   }

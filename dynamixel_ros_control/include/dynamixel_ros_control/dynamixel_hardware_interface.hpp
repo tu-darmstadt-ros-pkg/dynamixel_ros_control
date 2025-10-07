@@ -66,7 +66,7 @@ private:
   bool isHardwareOk() const;
   bool reboot() const;
 
-  bool setTorque(bool do_enable, bool skip_controller_unloading=false, int retries = 5, bool direct_write = false);
+  bool setTorque(bool do_enable, bool skip_controller_unloading = false, int retries = 5, bool direct_write = false);
   bool setEStop(bool do_enable);
   bool resetGoalStateAndVerify();
   bool unloadControllers() const;
@@ -100,7 +100,7 @@ private:
 
   // variables
   bool is_torqued_{false};
-  std::atomic<bool> e_stopp_active_{false}; // true if e-stop is active
+  std::atomic<bool> e_stop_active_{false};  // true if e-stop is active
   bool mode_switch_failed_{false};
 
   // ROS interface

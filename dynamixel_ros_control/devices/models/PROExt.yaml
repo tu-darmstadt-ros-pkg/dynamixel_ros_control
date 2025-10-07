@@ -1,4 +1,4 @@
-# PRO extended 
+# PRO extended
 unit_conversions: # dxl value to unit ratio
   rad: 0.00001251822
   rad_per_s: 0.00020863735
@@ -6,11 +6,11 @@ unit_conversions: # dxl value to unit ratio
   celsius: 1.0
   V: 0.1
   A: 0.01611328125
-  
+
 indirect_addresses:
 # address start | data start  | count
   - 49          | 634         | 256
-  
+
 control_table:
 # addr  | item name                | length | access | memory | unit/type
   - 0   | model_number             | 2      | R      | EEPROM |
