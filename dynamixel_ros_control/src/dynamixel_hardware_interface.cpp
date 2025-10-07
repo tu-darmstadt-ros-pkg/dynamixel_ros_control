@@ -351,6 +351,10 @@ hardware_interface::return_type
 DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::string>& start_interfaces,
                                                         const std::vector<std::string>& stop_interfaces)
 {
+  std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+  // make sure no commands are written while switching the control mode and in case of errors
+  // makes sure not to write commands while control modes out of sync
+  mode_switch_failed_ = true;
   // Set up write manager
   DXL_LOG_DEBUG("DynamixelHardwareInterface::perform_command_mode_switch");
   DXL_LOG_DEBUG("start_interfaces: " << iterableToString(start_interfaces));
@@ -380,7 +384,7 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
       return hardware_interface::return_type::ERROR;
     }
   }
-
+  mode_switch_failed_ = false; // mark as successful
   return hardware_interface::return_type::OK;
 }
 
@@ -446,6 +450,17 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     // Another operation is holding dynamixel_comm_mutex_; skipping write
     return hardware_interface::return_type::OK;
   }
+
+  // if mode switch failed, bring robot to halt and return error
+  if (mode_switch_failed_) {
+    // while e-stop not active, try to activate it
+    if (!e_stopp_active_ && !activateEStop())
+      return hardware_interface::return_type::OK;
+    // forces controller unloading if e-stop is active (-> motors cannot not move anymore)
+    DXL_LOG_ERROR("In error state, not writing commands.");
+    return hardware_interface::return_type::ERROR;
+  }
+
   // Wait for a successful read after changing the control mode
   for (auto& [name, joint] : joints_) {
     if (joint.command_transmission) {
@@ -896,6 +911,7 @@ bool DynamixelHardwareInterface::setEStop(bool do_enable)
         DXL_LOG_ERROR("Failed to unload controllers. Cannot activate e-stop.");
         return false;
       }
+      std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
       activateEStop();
     } else {
       DXL_LOG_WARN("E-STOP INACTIVATED via topic");
@@ -909,7 +925,6 @@ bool DynamixelHardwareInterface::setEStop(bool do_enable)
 
 bool DynamixelHardwareInterface::activateEStop()
 {
-  std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
   // switch to position mode if not already in it
   for (auto& [name, joint] : joints_) {
     const auto available_interfaces = joint.getAvailableCommandInterfaces();

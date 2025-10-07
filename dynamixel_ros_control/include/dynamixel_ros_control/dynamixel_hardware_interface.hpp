@@ -101,6 +101,8 @@ private:
   // variables
   bool is_torqued_{false};
   std::atomic<bool> e_stopp_active_{false}; // true if e-stop is active
+  bool mode_switch_failed_{false};
+  int counter_ =  0; //TODO: remove
 
   // ROS interface
   rclcpp::Node::SharedPtr node_;
