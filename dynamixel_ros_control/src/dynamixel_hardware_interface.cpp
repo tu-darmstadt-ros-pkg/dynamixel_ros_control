@@ -384,7 +384,7 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
       return hardware_interface::return_type::ERROR;
     }
   }
-  mode_switch_failed_ = false; // mark as successful
+  mode_switch_failed_ = false;  // mark as successful
   return hardware_interface::return_type::OK;
 }
 
@@ -455,8 +455,8 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   if (mode_switch_failed_) {
     // while e-stop not active, try to activate it
     if (!e_stopp_active_ && !activateEStop())
-      return hardware_interface::return_type::OK;
-    // forces controller unloading if e-stop is active (-> motors cannot not move anymore)
+      return hardware_interface::return_type::OK;  // sending ok, allows to retry in next write cycle while ignoring cmds
+    // forces controller unloading if e-stop is active (-> motors cannot move anymore)
     DXL_LOG_ERROR("In error state, not writing commands.");
     return hardware_interface::return_type::ERROR;
   }
