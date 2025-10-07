@@ -407,7 +407,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
 {
   std::unique_lock<std::mutex> lock(dynamixel_comm_mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
-    // setTorque is running, skipping read
+    // Another operation is holding dynamixel_comm_mutex_; skipping read
     return hardware_interface::return_type::OK;
   }
   // Check for hardware errors
@@ -443,7 +443,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
 {
   std::unique_lock<std::mutex> lock(dynamixel_comm_mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
-    // setTorque is running, skip write
+    // Another operation is holding dynamixel_comm_mutex_; skipping write
     return hardware_interface::return_type::OK;
   }
   // Wait for a successful read after changing the control mode
