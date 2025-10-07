@@ -152,7 +152,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // set up e-stop subscription
   soft_e_stop_subscription_ = node_->create_subscription<std_msgs::msg::Bool>(
-      "~/e_stop", rclcpp::SystemDefaultsQoS(), [this](const std_msgs::msg::Bool::SharedPtr msg) {
+      "~/soft_e_stop", rclcpp::SystemDefaultsQoS(), [this](const std_msgs::msg::Bool::SharedPtr msg) {
         if (msg->data != e_stopp_active_) {
           if (msg->data) {
             if (!is_torqued_) {
