@@ -47,7 +47,7 @@ control_table:
  -  80  | position_d_gain          | 2      | RW     | RAM    |
  -  82  | position_i_gain          | 2      | RW     | RAM    |
  -  84  | position_p_gain          | 2      | RW     | RAM    |
- -  88  | feedforward_2and_gain     | 2      | RW     | RAM    |
+ -  88  | feedforward_2nd_gain     | 2      | RW     | RAM    |
  -  90  | feedforward_1st_gain     | 2      | RW     | RAM    |
  -  98  | bus_watchdog             | 1      | RW     | RAM    |
  -  100 | goal_pwm                 | 2      | RW     | RAM    |

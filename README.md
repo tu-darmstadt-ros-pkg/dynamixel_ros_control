@@ -1,7 +1,7 @@
 # dynamixel_ros_control
 
 _dynamixel_ros_control_ is a [ROS2](https://www.ros.org/) driver
-for [Robotics Dynamixel](http://www.robotis.us/dynamixel/) actuators. It is based on
+for [Robotis Dynamixel](http://www.robotis.us/dynamixel/) actuators. It is based on
 the  [ros2_control](https://control.ros.org/rolling/index.html) framework and implements a hardware interface.
 
 **Main features:**

@@ -75,14 +75,20 @@ repos:
     hooks:
       - id: typos
 
+  # Prevent committing with Bug comments
+  - repo: local
+    hooks:
+      - id: no-bug-comments
+        name: 'No Bug comments'
+        description: 'Prevent commit if Bug comments are present'
+        entry: '(?i)#\s*bug'
+        language: pygrep
+        types: [file]
+
   - repo: https://github.com/python-jsonschema/check-jsonschema
     rev: 0.33.2
     hooks:
       - id: check-github-workflows
         args: ["--verbose"]
       - id: check-github-actions
-        args: ["--verbose"]
-      - id: check-gitlab-ci
-        args: ["--verbose"]
-      - id: check-compose-spec
         args: ["--verbose"]

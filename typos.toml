@@ -1,0 +1,5 @@
+[default.extend-words]
+Robotis= "Robotis"
+
+[default.extend-identifiers]
+feedforward_2nd_gain = "feedforward_2nd_gain"
