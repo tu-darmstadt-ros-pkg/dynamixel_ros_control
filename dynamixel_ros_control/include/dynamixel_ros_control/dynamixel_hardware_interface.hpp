@@ -66,7 +66,8 @@ private:
   bool isHardwareOk() const;
   bool reboot() const;
 
-  bool setTorque(bool do_enable, int retries = 5, bool direct_write = false);
+  bool setTorque(bool do_enable, bool skip_controller_unloading=false, int retries = 5, bool direct_write = false);
+  bool setEStop(bool do_enable);
   bool resetGoalStateAndVerify();
   bool unloadControllers() const;
   void updateColorLED(std::string new_state = "");
@@ -100,7 +101,6 @@ private:
   // variables
   bool is_torqued_{false};
   std::atomic<bool> e_stopp_active_{false}; // true if e-stop is active
-  std::atomic<bool> e_stop_request_{false}; // stores request to activate e-stop
 
   // ROS interface
   rclcpp::Node::SharedPtr node_;
@@ -109,7 +109,7 @@ private:
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;
-  std::mutex set_torque_mutex_;
+  std::mutex dynamixel_comm_mutex_;
   std::shared_ptr<controller_orchestrator::ControllerOrchestrator> controller_orchestrator_;
 };
 

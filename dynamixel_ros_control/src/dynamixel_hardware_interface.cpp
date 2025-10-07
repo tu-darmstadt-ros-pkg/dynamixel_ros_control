@@ -152,22 +152,8 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // set up e-stop subscription
   soft_e_stop_subscription_ = node_->create_subscription<std_msgs::msg::Bool>(
-      "~/soft_e_stop", rclcpp::SystemDefaultsQoS(), [this](const std_msgs::msg::Bool::SharedPtr msg) {
-        if (msg->data != e_stopp_active_) {
-          if (msg->data) {
-            if (!is_torqued_) {
-              DXL_LOG_WARN("Torqued not set, cannot activate e-stop");
-              return;
-            }
-            // Activating e-stop
-            DXL_LOG_WARN("E-STOP ACTIVATED via topic");
-            e_stop_request_ = true;
-          } else {
-            DXL_LOG_WARN("E-STOP INACTIVATED via topic");
-            e_stopp_active_ = true;
-          }
-        }
-      });
+      "~/soft_e_stop", rclcpp::SystemDefaultsQoS(),
+      [this](const std_msgs::msg::Bool::SharedPtr msg) { setEStop(msg->data); });
   // Transmissions
   if (!loadTransmissionConfiguration()) {
     return hardware_interface::CallbackReturn::ERROR;
@@ -252,7 +238,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_activate from " << previous_state.label());
-  if (!setTorque(torque_on_startup_)) {
+  if (!setTorque(torque_on_startup_, true)) {
     DXL_LOG_ERROR("Failed to set torque on activation to " << (torque_on_startup_ ? "ON" : "OFF"));
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -268,7 +254,7 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
-  if (!setTorque(!torque_off_on_shutdown_)) {
+  if (!setTorque(!torque_off_on_shutdown_, true)) {
     DXL_LOG_ERROR("Failed to set torque on deactivation to " << (torque_off_on_shutdown_ ? "ON" : "OFF"));
     return CallbackReturn::ERROR;
   }
@@ -419,7 +405,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rc
 hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::Time& time,
                                                                  const rclcpp::Duration& /*period*/)
 {
-  std::unique_lock<std::mutex> lock(set_torque_mutex_, std::try_to_lock);
+  std::unique_lock<std::mutex> lock(dynamixel_comm_mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
     // setTorque is running, skipping read
     return hardware_interface::return_type::OK;
@@ -455,7 +441,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
 hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& /*time*/,
                                                                   const rclcpp::Duration& /*period*/)
 {
-  std::unique_lock<std::mutex> lock(set_torque_mutex_, std::try_to_lock);
+  std::unique_lock<std::mutex> lock(dynamixel_comm_mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
     // setTorque is running, skip write
     return hardware_interface::return_type::OK;
@@ -472,9 +458,6 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     return hardware_interface::return_type::OK;
   }
 
-  // e-stop check - activate if requested
-  if (e_stop_request_)
-    activateEStop();
   // do not write controller commands if e-stop is active
   if (e_stopp_active_)
     return hardware_interface::return_type::OK;
@@ -677,9 +660,10 @@ bool DynamixelHardwareInterface::reboot() const
   return true;
 }
 
-bool DynamixelHardwareInterface::setTorque(const bool do_enable, int retries, const bool direct_write)
+bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_controller_unloading, int retries,
+                                           const bool direct_write)
 {
-  std::lock_guard<std::mutex> lock(set_torque_mutex_);
+  std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
 
   // Check if already in desired state
   bool all_torqued = true;
@@ -705,7 +689,7 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, int retries, co
   }
 
   // unload all controllers of the hardware interface
-  if (!unloadControllers()) {
+  if (!skip_controller_unloading && !unloadControllers()) {
     DXL_LOG_ERROR("Failed to deactivate controllers before changing torque. Still adapting torque...");
   }
   DXL_LOG_INFO((do_enable ? "Enabling" : "Disabling") << " motor torque.");
@@ -831,12 +815,12 @@ void DynamixelHardwareInterface::updateColorLED(std::string new_state)
     setColorLED(COLOR_RED);
   } else {
     // hardware interface is active
-    if (e_stopp_active_) {
-      setColorLED(COLOR_ORANGE);
-    } else if (is_torqued_) {
-      setColorLED(COLOR_BLUE);
-    } else {
+    if (!is_torqued_) {
       setColorLED(COLOR_GREEN);
+    } else if (e_stopp_active_) {
+      setColorLED(COLOR_ORANGE);
+    } else {
+      setColorLED(COLOR_BLUE);
     }
   }
 }
@@ -898,9 +882,34 @@ void DynamixelHardwareInterface::adjustTransmissionOffsetsCallback(
   response->message = "Offsets adjusted successfully";
 }
 
+bool DynamixelHardwareInterface::setEStop(bool do_enable)
+{
+  if (do_enable != e_stopp_active_) {
+    if (do_enable) {
+      if (!is_torqued_) {
+        DXL_LOG_WARN("Torqued not set, cannot activate e-stop");
+        return false;
+      }
+      // Activating e-stop
+      DXL_LOG_WARN("E-STOP ACTIVATED via topic");
+      if (!unloadControllers()) {
+        DXL_LOG_ERROR("Failed to unload controllers. Cannot activate e-stop.");
+        return false;
+      }
+      activateEStop();
+    } else {
+      DXL_LOG_WARN("E-STOP INACTIVATED via topic");
+      e_stopp_active_ = false;
+      std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+      updateColorLED();
+    }
+  }
+  return true;
+}
+
 bool DynamixelHardwareInterface::activateEStop()
 {
-  // mutex is already locked in write()
+  std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
   // switch to position mode if not already in it
   for (auto& [name, joint] : joints_) {
     const auto available_interfaces = joint.getAvailableCommandInterfaces();
@@ -915,19 +924,25 @@ bool DynamixelHardwareInterface::activateEStop()
         joint.removeActiveCommandInterface(active_interface);
       }
       joint.addActiveCommandInterface(hardware_interface::HW_IF_POSITION);
+      if (!joint.updateControlMode())
+        return false;
     }
   }
   // resetGoalStates
   if (!resetGoalStateAndVerify()) {
     DXL_LOG_WARN("Failed to reset goal state while attempting to activate the software e-stop.");
   }
-  // unload all controllers
-  if (!unloadControllers()) {
-    DXL_LOG_ERROR("Failed to unload controllers. Cannot activate e-stop.");
-    return false;
+
+  // clear active command interfaces [no controller is active - no command interfaces should be active]
+  for (auto& [name, joint] : joints_) {
+    const auto active_interfaces = joint.getActiveCommandInterfaces();
+    for (const auto& active_interface : active_interfaces) {
+      joint.removeActiveCommandInterface(active_interface);
+    }
   }
+  // Note: the motor is still in position control mode with the last goal position set
+
   e_stopp_active_ = true;
-  e_stop_request_ = false;
   updateColorLED();
   return true;
 }
