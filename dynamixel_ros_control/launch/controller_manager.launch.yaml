@@ -38,7 +38,7 @@ launch:
     exec: "spawner"
     name: "trajectory_controller_spawner"
     output: "screen"
-    args: "trajectory_controller --inactive"
+    args: "trajectory_controller"
     param:
         - from: "$(find-pkg-share dynamixel_ros_control)/config/test_controllers.yaml"
 
@@ -47,7 +47,7 @@ launch:
       exec: "spawner"
       name: "velocity_controller_spawner"
       output: "screen"
-      args: "velocity_controller"
+      args: "velocity_controller --inactive"
       param:
           - from: "$(find-pkg-share dynamixel_ros_control)/config/test_controllers.yaml"
 
