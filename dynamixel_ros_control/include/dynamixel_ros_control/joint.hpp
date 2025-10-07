@@ -71,7 +71,6 @@ public:
   std::unordered_map<std::string, double> read_goal_values_;  // read from dynamixel
   std::shared_ptr<transmission_interface::Transmission> state_transmission;
   std::shared_ptr<transmission_interface::Transmission> command_transmission;
-  double estop_position{0.0};
 
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;

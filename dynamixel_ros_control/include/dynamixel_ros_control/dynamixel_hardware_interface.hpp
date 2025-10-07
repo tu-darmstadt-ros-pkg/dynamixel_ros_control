@@ -13,7 +13,7 @@
 #include <transmission_interface/transmission.hpp>
 #include <hector_transmission_interface_msgs/srv/adjust_transmission_offsets.hpp>
 #include <controller_orchestrator/controller_orchestrator.hpp>
-#include <hardware_interface/hardware_interface/types/lifecycle_state_names.hpp>
+#include <std_msgs/msg/bool.hpp>
 namespace dynamixel_ros_control {
 
 class DynamixelHardwareInterface : public hardware_interface::SystemInterface
@@ -69,12 +69,13 @@ private:
   bool setTorque(bool do_enable, int retries = 5, bool direct_write = false);
   bool resetGoalStateAndVerify();
   bool unloadControllers() const;
-  void updateColorLED(std::string new_state="");
+  void updateColorLED(std::string new_state = "");
   void setColorLED(const int& red, const int& green, const int& blue);
   void setColorLED(const std::string& color);
   void adjustTransmissionOffsetsCallback(
       const std::shared_ptr<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Request> request,
       const std::shared_ptr<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Response> response);
+  bool activateEStop();
 
   std::unordered_map<std::string, Joint> joints_;
   DynamixelDriver driver_;
@@ -95,11 +96,17 @@ private:
   bool torque_on_startup_{false};
   bool torque_off_on_shutdown_{false};
   bool reboot_on_hardware_error_{false};
+
+  // variables
   bool is_torqued_{false};
+  std::atomic<bool> e_stopp_active_{false}; // true if e-stop is active
+  std::atomic<bool> e_stop_request_{false}; // stores request to activate e-stop
+
   // ROS interface
   rclcpp::Node::SharedPtr node_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;
   rclcpp::Service<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>::SharedPtr adjust_offset_service_;
+  rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;
   std::mutex set_torque_mutex_;

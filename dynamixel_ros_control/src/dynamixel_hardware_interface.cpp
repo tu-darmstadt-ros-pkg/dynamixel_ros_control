@@ -149,6 +149,25 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
                                                  std::placeholders::_1, std::placeholders::_2));
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
+
+  // set up e-stop subscription
+  soft_e_stop_subscription_ = node_->create_subscription<std_msgs::msg::Bool>(
+      "~/e_stop", rclcpp::SystemDefaultsQoS(), [this](const std_msgs::msg::Bool::SharedPtr msg) {
+        if (msg->data != e_stopp_active_) {
+          if (msg->data) {
+            if (!is_torqued_) {
+              DXL_LOG_WARN("Torqued not set, cannot activate e-stop");
+              return;
+            }
+            // Activating e-stop
+            DXL_LOG_WARN("E-STOP ACTIVATED via topic");
+            e_stop_request_ = true;
+          } else {
+            DXL_LOG_WARN("E-STOP INACTIVATED via topic");
+            e_stopp_active_ = true;
+          }
+        }
+      });
   // Transmissions
   if (!loadTransmissionConfiguration()) {
     return hardware_interface::CallbackReturn::ERROR;
@@ -452,6 +471,13 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     // DXL_LOG_ERROR("Write called without successful read. This should not happen.");
     return hardware_interface::return_type::OK;
   }
+
+  // e-stop check - activate if requested
+  if (e_stop_request_)
+    activateEStop();
+  // do not write controller commands if e-stop is active
+  if (e_stopp_active_)
+    return hardware_interface::return_type::OK;
 
   control_write_manager_.write();
 
@@ -789,6 +815,8 @@ void DynamixelHardwareInterface::setColorLED(const std::string& color)
     setColorLED(COLOR_GREEN_VALUES[0], COLOR_GREEN_VALUES[1], COLOR_GREEN_VALUES[2]);
   } else if (color == COLOR_BLUE) {
     setColorLED(COLOR_BLUE_VALUES[0], COLOR_BLUE_VALUES[1], COLOR_BLUE_VALUES[2]);
+  } else if (color == COLOR_ORANGE) {
+    setColorLED(COLOR_ORANGE_VALUES[0], COLOR_ORANGE_VALUES[1], COLOR_ORANGE_VALUES[2]);
   } else {
     DXL_LOG_ERROR("Unknown color: " << color);
   }
@@ -803,7 +831,9 @@ void DynamixelHardwareInterface::updateColorLED(std::string new_state)
     setColorLED(COLOR_RED);
   } else {
     // hardware interface is active
-    if (is_torqued_) {
+    if (e_stopp_active_) {
+      setColorLED(COLOR_ORANGE);
+    } else if (is_torqued_) {
       setColorLED(COLOR_BLUE);
     } else {
       setColorLED(COLOR_GREEN);
@@ -866,6 +896,40 @@ void DynamixelHardwareInterface::adjustTransmissionOffsetsCallback(
 
   response->success = true;
   response->message = "Offsets adjusted successfully";
+}
+
+bool DynamixelHardwareInterface::activateEStop()
+{
+  // mutex is already locked in write()
+  // switch to position mode if not already in it
+  for (auto& [name, joint] : joints_) {
+    const auto available_interfaces = joint.getAvailableCommandInterfaces();
+    if (std::find(available_interfaces.begin(), available_interfaces.end(), hardware_interface::HW_IF_POSITION) ==
+        available_interfaces.end()) {
+      DXL_LOG_ERROR("Joint '" << name << "' does not support position control. Cannot activate e-stop.");
+      return false;
+    }
+    if (!joint.isPositionControlled()) {
+      const auto active_interfaces = joint.getActiveCommandInterfaces();
+      for (const auto& active_interface : active_interfaces) {
+        joint.removeActiveCommandInterface(active_interface);
+      }
+      joint.addActiveCommandInterface(hardware_interface::HW_IF_POSITION);
+    }
+  }
+  // resetGoalStates
+  if (!resetGoalStateAndVerify()) {
+    DXL_LOG_WARN("Failed to reset goal state while attempting to activate the software e-stop.");
+  }
+  // unload all controllers
+  if (!unloadControllers()) {
+    DXL_LOG_ERROR("Failed to unload controllers. Cannot activate e-stop.");
+    return false;
+  }
+  e_stopp_active_ = true;
+  e_stop_request_ = false;
+  updateColorLED();
+  return true;
 }
 
 }  // namespace dynamixel_ros_control

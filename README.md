@@ -118,11 +118,20 @@ back on.
 For example a position controller would otherwise try to move the motor to the last commanded position when re-enabling
 torque.
 
+### Software E-Stop
+
+The hardware interface provides a software emergency‑stop by subscribing to the <hardware_interface_name>/soft_e_stop
+topic (std_msgs/msg/Bool). Whenever it receives a true message, all motion commands are suppressed, and the joints hold
+their current positions. Once a false message is published, normal control behavior resumes.
+
+⚠️ Note the software E-Stop can only be activated if torque is enabled and all joints have a position command interface.
+
 ### LED Status Indicators
 
 The onboard LED reflects the current state of the hardware interface:
 
 * **🔴 Red** – Hardware interface is **inactive** or **unconfigured**
+* **🟠 Orange** - The software E‑Stop is engaged. All motion commands are suppressed, ensuring the robot cannot move
 * **🔵 Blue** – Hardware interface is **active**, and motors are **torqued on** (controllers can command the joints)
 * **🟢 Green** – Hardware interface is **active**, but motors are **torqued off** (safe for manual movement)
 
