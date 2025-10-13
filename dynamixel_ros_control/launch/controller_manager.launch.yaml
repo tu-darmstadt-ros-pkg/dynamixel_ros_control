@@ -30,8 +30,8 @@ launch:
     name: "joint_state_broadcaster_spawner"
     output: "screen"
     args: "joint_state_broadcaster"
-    respawn: "true"
-    respawn_delay: 5.0
+    #respawn: "true"
+   # respawn_delay: 5.0
 
 - node:
     pkg: "controller_manager"
