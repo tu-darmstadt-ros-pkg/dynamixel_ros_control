@@ -402,11 +402,6 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     }
   }
 
-  // Reset all goal states and verify that the cmds were written correctly
-  // TODO: only necessary when switching to position mode
-  // if (!resetGoalStateAndVerify()) {
-  //   return hardware_interface::return_type::ERROR;
-  // }
   first_read_successful_ = false;  // force second reset in read
 
   mode_switch_failed_ = false;  // mark as successful
@@ -768,7 +763,7 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify()
 {
   // Read current values (positions, velocities, etc.) before enabling torque
   if (!read_manager_.read() || !read_manager_.isOk() || !isHardwareOk()) {
-    DXL_LOG_ERROR("Failed to read current positions before enabling torque. Cannot enable torque.");
+    DXL_LOG_ERROR("[resetGoalStateAndVerify] Failed to read current values from actuators.");
     return false;
   }
 
@@ -779,13 +774,13 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify()
 
   // Write goal positions (will only write for the values belonging to the active command interfaces!)
   if (!control_write_manager_.write() || !control_write_manager_.isOk() || !isHardwareOk()) {
-    DXL_LOG_ERROR("Failed to write goal positions before enabling torque. Cannot enable torque.");
+    DXL_LOG_ERROR("[resetGoalStateAndVerify] Failed to write reset goal values.");
     return false;
   }
 
   // Re-read goal values for verification
   if (!cmd_read_manager_.read() || !cmd_read_manager_.isOk()) {
-    DXL_LOG_ERROR("Failed to re-read goal positions before enabling torque. Cannot verify goal positions.");
+    DXL_LOG_ERROR("[resetGoalStateAndVerify] Failed to re-read goal.");
     return false;
   }
 
@@ -793,15 +788,16 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify()
   for (auto& [name, joint] : joints_) {
     for (const auto& interface_name : joint.getAvailableCommandInterfaces()) {
       if (joint.read_goal_values_.count(interface_name) == 0) {
-        DXL_LOG_ERROR("Cannot verify cmd values from motor " << name << "!");
+        DXL_LOG_ERROR("[resetGoalStateAndVerify]  Cannot verify cmd values from motor " << name << "!");
         return false;
       }
       const auto& interface_value = joint.read_goal_values_.at(interface_name);
       if (std::abs(interface_value - joint.getActuatorState().goal[interface_name]) > 1e-2) {
-        DXL_LOG_ERROR("Joint '" << name << "' goal " << interface_name
-                                << " does not match read goal position before enabling torque. "
-                                << "(Current: " << joint.getActuatorState().goal[interface_name]
-                                << ", Read Goal Position: " << interface_value << ")");
+        DXL_LOG_ERROR("[resetGoalStateAndVerify] Joint '"
+                      << name << "' goal " << interface_name
+                      << " does not match read goal value before enabling torque. "
+                      << "(Current: " << joint.getActuatorState().goal[interface_name]
+                      << ", Read Goal Value: " << interface_value << ")");
         return false;
       }
     }
