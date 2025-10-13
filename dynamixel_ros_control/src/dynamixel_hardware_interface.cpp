@@ -139,6 +139,11 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   set_torque_service_ = node_->create_service<std_srvs::srv::SetBool>(
       "~/set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
                              const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+        if (lifecycle_state_.label() != hardware_interface::lifecycle_state_names::ACTIVE) {
+          response->success = false;
+          response->message = "Hardware Interface must be in 'active' state to set torque";
+          return;
+        }
         DXL_LOG_INFO("Request to set torque to " << (request->data ? "ON" : "OFF") << " received.");
         response->success = setTorque(request->data);
         response->message = response->success ? "Torque set successfully" : "Failed to set torque";
@@ -152,8 +157,13 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // set up e-stop subscription
   soft_e_stop_subscription_ = node_->create_subscription<std_msgs::msg::Bool>(
-      "~/soft_e_stop", rclcpp::SystemDefaultsQoS(),
-      [this](const std_msgs::msg::Bool::SharedPtr msg) { setEStop(msg->data); });
+      "~/soft_e_stop", rclcpp::SystemDefaultsQoS(), [this](const std_msgs::msg::Bool::SharedPtr msg) {
+        if (lifecycle_state_.label() != hardware_interface::lifecycle_state_names::ACTIVE) {
+          DXL_LOG_WARN("E-Stop message received but hardware interface is not in 'active' state.");
+          return;
+        }
+        setEStop(msg->data);
+      });
   // Transmissions
   if (!loadTransmissionConfiguration()) {
     return hardware_interface::CallbackReturn::ERROR;
@@ -242,7 +252,14 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
     DXL_LOG_ERROR("Failed to set torque on activation to " << (torque_on_startup_ ? "ON" : "OFF"));
     return hardware_interface::CallbackReturn::ERROR;
   }
-  is_torqued_ = torque_on_startup_;  // TODO: check if successful
+  // make sure position control mode is active (safer than leaving it in whatever mode it was before)
+  // imagine, torque on startup but actuator from last shutdown in current mode & no controller running
+  for (auto& [name, joint] : joints_) {
+    if (!joint.readControlMode() || !joint.updateControlMode()) {
+      return CallbackReturn::ERROR;
+    }
+  }
+  is_torqued_ = torque_on_startup_;
   if (!resetGoalStateAndVerify()) {
     return CallbackReturn::ERROR;
   }
@@ -384,6 +401,14 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
       return hardware_interface::return_type::ERROR;
     }
   }
+
+  // Reset all goal states and verify that the cmds were written correctly
+  // TODO: only necessary when switching to position mode
+  // if (!resetGoalStateAndVerify()) {
+  //   return hardware_interface::return_type::ERROR;
+  // }
+  first_read_successful_ = false;  // force second reset in read
+
   mode_switch_failed_ = false;  // mark as successful
   return hardware_interface::return_type::OK;
 }

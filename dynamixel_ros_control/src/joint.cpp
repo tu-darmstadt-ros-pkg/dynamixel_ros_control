@@ -166,10 +166,25 @@ bool Joint::removeActiveCommandInterface(const std::string& interface_name)
   return true;
 }
 
+bool Joint::readControlMode()
+{
+  int32_t mode = UNDEFINED;
+  if (!dynamixel->readRegister(DXL_REGISTER_CONTROL_MODE, mode)) {
+    return false;
+  }
+  control_mode_ = static_cast<ControlMode>(mode);
+  return true;
+}
+
 bool Joint::updateControlMode()
 {
   if (active_command_interfaces_.empty()) {
-    // Do nothing if no command interface is active
+    // Switch to position mode if no interface is active
+    if (control_mode_ != POSITION && control_mode_ != EXTENDED_POSITION && control_mode_ != CURRENT_BASED_POSITION) {
+      control_mode_ = preferred_position_control_mode_;
+      DXL_LOG_DEBUG("No controller active for joint '" << name << "'. Switching to position control mode.");
+      return dynamixel->writeControlMode(preferred_position_control_mode_, true);  // at startup torque is unknown
+    }
     return true;
   }
   // determine required control mode
@@ -214,6 +229,7 @@ std::string Joint::interfaceToLimitRegisterName(const std::string& interface_nam
 void Joint::resetGoalState(const std::string& interface_name)
 {
   double& value = getActuatorState().goal.at(interface_name);  // This should exist
+  ControlMode next_control_mode = getControlModeFromInterfaces(active_command_interfaces_);
 
   // Special handling for position
   if (interface_name == hardware_interface::HW_IF_POSITION) {
@@ -227,18 +243,22 @@ void Joint::resetGoalState(const std::string& interface_name)
                       "goal field. Add a position state interface to this joint to resolve this problem.");
       value = 0;
     }
-  } else {
-    if (std::find(active_command_interfaces_.begin(), active_command_interfaces_.end(), interface_name) !=
-            active_command_interfaces_.end() ||
-        active_command_interfaces_.empty()) {
-      // if no command interface is set (or known), reset to zero ( motor might be in velocity or current mode)
-      // also reset to zero if in velocity / effort mode
+  } else if (interface_name == hardware_interface::HW_IF_VELOCITY) {
+    if (control_mode_ == VELOCITY || next_control_mode == VELOCITY) {
       value = 0.0;
     } else {
-      // Default value, e.g. as velocity limit in position mode
-      value = default_goal_values_.at(interface_name);  // This should exist
+      value = default_goal_values_.at(hardware_interface::HW_IF_VELOCITY);
+    }
+  } else if (interface_name == hardware_interface::HW_IF_EFFORT || interface_name == hardware_interface::HW_IF_CURRENT) {
+    if (control_mode_ == CURRENT || next_control_mode == CURRENT) {
+      value = 0.0;  // controller must immediately write gravity compensating value !!
+    } else {
+      value = default_goal_values_.at(interface_name);
     }
   }
+  DXL_LOG_DEBUG("Resetting goal value of interface '" << interface_name << "' for joint '" << name << "' to " << value);
+  DXL_LOG_DEBUG("Active command interfaces for joint '" << name << "': " << iterableToString(active_command_interfaces_)
+                                                        << ", control mode: " << control_mode_);
   if (command_transmission) {
     command_transmission->actuator_to_joint();  // Unfortunately, there is no interface for single interface handles
   }
