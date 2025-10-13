@@ -298,10 +298,10 @@ ControlMode Joint::getControlModeFromInterfaces(const std::vector<std::string>& 
 
     return CURRENT;
   }
-  DXL_LOG_WARN("None out of the command interfaces "
-               << hardware_interface::HW_IF_POSITION << ", " << hardware_interface::HW_IF_VELOCITY << ", "
-               << hardware_interface::HW_IF_EFFORT << " have been requested. Defaulting to "
-               << hardware_interface::HW_IF_POSITION << " mode");
+  DXL_LOG_DEBUG("None out of the command interfaces "
+                << hardware_interface::HW_IF_POSITION << ", " << hardware_interface::HW_IF_VELOCITY << ", "
+                << hardware_interface::HW_IF_EFFORT << " have been requested. Defaulting to "
+                << hardware_interface::HW_IF_POSITION << " mode");
   return POSITION;
 }
 
