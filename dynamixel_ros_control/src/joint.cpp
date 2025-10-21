@@ -271,14 +271,11 @@ void Joint::resetGoalState()
   }
 }
 
-void Joint::setupMimicJoint(const std::string& joint_name, double offset, double multiplier)
+void Joint::setupMimicJoint(const std::string& joint_name, const double offset, const double multiplier)
 {
   mimic_joints_states_[joint_name] = MimicState{};
   mimic_joints_states_[joint_name].offset = offset;
   mimic_joints_states_[joint_name].multiplier = multiplier;
-  for (const auto& interface_name : state_interfaces_) {
-    mimic_joints_states_[joint_name].current[interface_name] = 0.0;
-  }
 }
 
 void Joint::updateMimicJointStates()
