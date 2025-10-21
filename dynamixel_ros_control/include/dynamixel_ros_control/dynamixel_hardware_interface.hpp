@@ -61,6 +61,7 @@ private:
   bool setUpCmdReadManager();
   bool setUpTorqueWriteManager();
   bool setUpControlWriteManager();
+  bool setUpLEDWriteManager();
 
   bool isHardwareOk() const;
   bool reboot() const;
@@ -89,6 +90,7 @@ private:
   // Write
   SyncWriteManager control_write_manager_;
   SyncWriteManager torque_write_manager_;
+  SyncWriteManager led_write_manager_;
 
   // Parameters
   bool debug_{false};

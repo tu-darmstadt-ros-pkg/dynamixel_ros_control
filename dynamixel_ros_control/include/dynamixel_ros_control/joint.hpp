@@ -13,6 +13,13 @@ struct State
   std::unordered_map<std::string, double> goal;
 };
 
+struct LED_State
+{
+  double red{0};
+  double green{0};
+  double blue{0};
+};
+
 struct MimicState
 {
   std::unordered_map<std::string, double> current;
@@ -82,6 +89,8 @@ public:
   std::shared_ptr<transmission_interface::Transmission> state_transmission;
   std::shared_ptr<transmission_interface::Transmission> command_transmission;
   std::unordered_map<std::string, MimicState> mimic_joints_states_;  // joint_name -> (interface_name -> value)
+
+  LED_State led_state;
 
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;

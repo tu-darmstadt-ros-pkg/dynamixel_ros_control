@@ -215,7 +215,7 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
 
   // Set up sync read / write managers
   if (!setUpStateAndStatusReadManager() || !setUpTorqueWriteManager() || !setUpControlWriteManager() ||
-      !setUpCmdReadManager()) {
+      !setUpCmdReadManager() || !setUpLEDWriteManager()) {
     return hardware_interface::CallbackReturn::FAILURE;
   }
 
@@ -690,6 +690,18 @@ bool DynamixelHardwareInterface::setUpControlWriteManager()
   return control_write_manager_.init(driver_);
 }
 
+bool DynamixelHardwareInterface::setUpLEDWriteManager()
+{
+  led_write_manager_ = SyncWriteManager();
+  for (auto& [name, joint] : joints_) {
+    led_write_manager_.addRegister(*joint.dynamixel, DXL_REGISTER_LED_RED, joint.led_state.red);
+    led_write_manager_.addRegister(*joint.dynamixel, DXL_REGISTER_LED_GREEN, joint.led_state.green);
+    led_write_manager_.addRegister(*joint.dynamixel, DXL_REGISTER_LED_BLUE, joint.led_state.blue);
+  }
+
+  return led_write_manager_.init(driver_);
+}
+
 bool DynamixelHardwareInterface::isHardwareOk() const
 {
   bool ok = true;
@@ -836,11 +848,13 @@ bool DynamixelHardwareInterface::unloadControllers() const
 void DynamixelHardwareInterface::setColorLED(const int& red, const int& green, const int& blue)
 {
   for (auto& [name, joint] : joints_) {
-    if (!joint.dynamixel->writeRegister(DXL_REGISTER_LED_RED, red) ||
-        !joint.dynamixel->writeRegister(DXL_REGISTER_LED_GREEN, green) ||
-        !joint.dynamixel->writeRegister(DXL_REGISTER_LED_BLUE, blue)) {
-      DXL_LOG_ERROR("Failed to set color LED for joint '" << name << "'");
-    }
+    joint.led_state.red = red;
+    joint.led_state.green = green;
+    joint.led_state.blue = blue;
+  }
+  // assumes communication mutex is already locked
+  if (!led_write_manager_.write()) {
+    DXL_LOG_ERROR("Failed to write LED colors.");
   }
 }
 
