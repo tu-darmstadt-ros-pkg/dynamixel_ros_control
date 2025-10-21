@@ -126,6 +126,15 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     joints_.emplace(joint.name, std::move(joint));
   }
 
+  // mimic joint
+  for (const auto& mimic_joint : info_.mimic_joints) {
+    const auto& name = info_.joints[mimic_joint.joint_index].name;
+    const auto& mimicked_name = info_.joints[mimic_joint.mimicked_joint_index].name;
+    if (!joints_.count(mimicked_name)) {
+      joints_[name].setupMimicJoint(mimicked_name, mimic_joint.offset, mimic_joint.multiplier);
+    }
+  }
+
   // create and spinn a ros2 node in a separate thread
   // (making sure it gets a separate name but the same namespace as the controller manager)
   auto tmp_node = rclcpp::Node::make_shared("dynamixel_ros_control_node");
@@ -300,7 +309,19 @@ std::vector<hardware_interface::StateInterface::ConstSharedPtr> DynamixelHardwar
           joint.name, interface_name, &joint.joint_state.current[interface_name]);
       state_interfaces.emplace_back(state_interface);
     }
+
+    // mimic joints
+    for (auto& [mimic_joint_name, mimic_state] : joint.mimic_joints_states_) {
+      mimic_state.current.reserve(configured_state_interface_names.size());
+      for (const auto& interface_name : configured_state_interface_names) {
+        mimic_state.current[interface_name] = 0.0;
+        const auto state_interface = std::make_shared<hardware_interface::StateInterface>(
+            mimic_joint_name, interface_name, &mimic_state.current[interface_name]);
+        state_interfaces.emplace_back(state_interface);
+      }
+    }
   }
+
   DXL_LOG_DEBUG("State interfaces: " << iterableToString(configured_state_interface_names));
 
   // Create the transmission interface
@@ -455,6 +476,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     if (!first_read_successful_) {
       joint.resetGoalState();
     }
+    joint.updateMimicJointStates();
   }
 
   first_read_successful_ = true;

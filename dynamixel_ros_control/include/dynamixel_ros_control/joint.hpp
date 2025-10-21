@@ -13,6 +13,13 @@ struct State
   std::unordered_map<std::string, double> goal;
 };
 
+struct MimicState
+{
+  std::unordered_map<std::string, double> current;
+  double offset;
+  double multiplier;
+};
+
 class Joint
 {
 public:
@@ -47,6 +54,8 @@ public:
 
   void resetGoalState(const std::string& interface_name);
   void resetGoalState();
+  void setupMimicJoint(const std::string& joint_name, double offset, double multiplier);
+  void updateMimicJointStates();
 
   /**
    * Returns the current/goal state that is written to the dynamixel motors
@@ -72,6 +81,7 @@ public:
   std::unordered_map<std::string, double> read_goal_values_;  // read from dynamixel
   std::shared_ptr<transmission_interface::Transmission> state_transmission;
   std::shared_ptr<transmission_interface::Transmission> command_transmission;
+  std::unordered_map<std::string, MimicState> mimic_joints_states_;  // joint_name -> (interface_name -> value)
 
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;
