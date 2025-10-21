@@ -174,6 +174,29 @@ external_joint_measurements:
 '
 ```
 
+## Troubleshooting
+
+### Slow communication
+
+You can inspect read/write performance via the controller manager statistics topic. Look for the hardware interface’s
+reported read and write durations.
+If communication appears slow or irregular, check the following:
+
+* **USB latency timer**
+    * Many USB–TTL adapters buffer data by default (often 16 ms).
+    * Verify with:
+      ```bash
+      cat /sys/bus/usb-serial/devices/<ttyUSB0>/latency_timer
+      ```
+      It should show **1 ms**.
+* **Baud rate**
+    * Ensure the configured baud rate matches all motors.
+    * Higher baud rates (e.g. 3 M or 4.5 M) significantly reduce cycle times.
+
+* **Return Delay Time (per motor)**
+    * Each Dynamixel adds this delay before replying.
+    * Keep it **near 0** for fastest SyncRead performance
+
 ## Contribution
 
 Feel free to contribute to this project by opening an issue or a pull request.
