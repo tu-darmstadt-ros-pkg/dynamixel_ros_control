@@ -285,14 +285,11 @@ void Joint::updateMimicJointStates()
 {
   for (auto& [joint_name, mimic_state] : mimic_joints_states_) {
     for (auto& [interface_name, value] : mimic_state.current) {
-      switch (interface_name) {
-        case hardware_interface::HW_IF_POSITION:
-          value =
-              joint_state.current.at(hardware_interface::HW_IF_POSITION) * mimic_state.multiplier + mimic_state.offset;
-          break;
-        default:  // velocity, effort, current
-          value = joint_state.current.at(hardware_interface::HW_IF_CURRENT) * mimic_state.multiplier;
-          break;
+      if (interface_name == hardware_interface::HW_IF_POSITION) {
+        value =
+            joint_state.current.at(hardware_interface::HW_IF_POSITION) * mimic_state.multiplier + mimic_state.offset;
+      } else {  // velocity, effort, current
+        value = joint_state.current.at(interface_name) * mimic_state.multiplier;
       }
     }
   }

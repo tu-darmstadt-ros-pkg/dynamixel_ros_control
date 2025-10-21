@@ -130,8 +130,8 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
   for (const auto& mimic_joint : info_.mimic_joints) {
     const auto& name = info_.joints[mimic_joint.joint_index].name;
     const auto& mimicked_name = info_.joints[mimic_joint.mimicked_joint_index].name;
-    if (!joints_.count(mimicked_name)) {
-      joints_[name].setupMimicJoint(mimicked_name, mimic_joint.offset, mimic_joint.multiplier);
+    if (joints_.count(mimicked_name) > 0) {
+      joints_[mimicked_name].setupMimicJoint(name, mimic_joint.offset, mimic_joint.multiplier);
     }
   }
 
