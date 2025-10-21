@@ -214,8 +214,8 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
   // }
 
   // Set up sync read / write managers
-  if (!setUpStatusReadManager() || !setUpStateReadManager() || !setUpTorqueWriteManager() ||
-      !setUpControlWriteManager() || !setUpCmdReadManager()) {
+  if (!setUpStateAndStatusReadManager() || !setUpTorqueWriteManager() || !setUpControlWriteManager() ||
+      !setUpCmdReadManager()) {
     return hardware_interface::CallbackReturn::FAILURE;
   }
 
@@ -463,13 +463,12 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     // Another operation is holding dynamixel_comm_mutex_; skipping read
     return hardware_interface::return_type::OK;
   }
-  // Check for hardware errors
-  status_read_manager_.read();
+
+  read_manager_.read();
   if (!isHardwareOk()) {
     return hardware_interface::return_type::ERROR;
   }
 
-  read_manager_.read();
   if (!read_manager_.isOk()) {
     DXL_LOG_ERROR("Read manager lost connection");
     return hardware_interface::return_type::ERROR;
@@ -616,7 +615,7 @@ bool DynamixelHardwareInterface::processCommandInterfaceUpdates(const std::vecto
   return true;
 }
 
-bool DynamixelHardwareInterface::setUpStateReadManager()
+bool DynamixelHardwareInterface::setUpStateAndStatusReadManager()
 {
   read_manager_ = SyncReadManager();
   std::unordered_map<std::string, DxlValueMappingList> register_dynamixel_mappings;
@@ -628,6 +627,8 @@ bool DynamixelHardwareInterface::setUpStateReadManager()
       register_dynamixel_mappings[register_name].push_back(
           std::make_pair<Dynamixel*, DxlValue>(joint.dynamixel.get(), DxlValue(&interface_value)));
     }
+    register_dynamixel_mappings[DXL_REGISTER_HARDWARE_ERROR].push_back(
+        std::make_pair<Dynamixel*, DxlValue>(joint.dynamixel.get(), DxlValue(&joint.dynamixel->hardware_error_status)));
   }
 
   for (const auto& [register_name, dynamixel_mapping] : register_dynamixel_mappings) {
@@ -637,19 +638,6 @@ bool DynamixelHardwareInterface::setUpStateReadManager()
   return read_manager_.init(driver_);
 }
 
-bool DynamixelHardwareInterface::setUpStatusReadManager()
-{
-  status_read_manager_ = SyncReadManager();
-  DxlValueMappingList status_mapping;
-  for (auto& [name, joint] : joints_) {
-    status_read_manager_.addDynamixel(joint.dynamixel.get());
-    status_mapping.push_back(
-        std::make_pair<Dynamixel*, DxlValue>(joint.dynamixel.get(), DxlValue(&joint.dynamixel->hardware_error_status)));
-  }
-
-  status_read_manager_.addRegister(DXL_REGISTER_HARDWARE_ERROR, status_mapping);
-  return status_read_manager_.init(driver_);
-}
 bool DynamixelHardwareInterface::setUpCmdReadManager()
 {
   cmd_read_manager_ = SyncReadManager();

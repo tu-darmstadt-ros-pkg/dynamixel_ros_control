@@ -57,9 +57,8 @@ public:
 private:
   bool loadTransmissionConfiguration();
   bool processCommandInterfaceUpdates(const std::vector<std::string>& interface_updates, bool stopping);
-  bool setUpStateReadManager();
+  bool setUpStateAndStatusReadManager();
   bool setUpCmdReadManager();
-  bool setUpStatusReadManager();
   bool setUpTorqueWriteManager();
   bool setUpControlWriteManager();
 
@@ -83,7 +82,6 @@ private:
 
   // Read
   SyncReadManager read_manager_;
-  SyncReadManager status_read_manager_;
   SyncReadManager cmd_read_manager_;
   rclcpp::Time last_successful_read_time_;
   bool first_read_successful_{false};
