@@ -24,7 +24,7 @@ installed using [rosdep](http://wiki.ros.org/rosdep). Go into the dynamixel_ros_
 rosdep install --from-paths . --ignore-src -r -y
 ```
 
-Afterwards, build your workspace.
+Afterward, build your workspace.
 
 ## Getting started
 
@@ -134,6 +134,12 @@ The onboard LED reflects the current state of the hardware interface:
 * **🟠 Orange** - The software E‑Stop is engaged. All motion commands are suppressed, ensuring the robot cannot move
 * **🔵 Blue** – Hardware interface is **active**, and motors are **torqued on** (controllers can command the joints)
 * **🟢 Green** – Hardware interface is **active**, but motors are **torqued off** (safe for manual movement)
+
+### Mimic Joints
+
+If a mimicked joint is part of the controlled joints, the hardware interface automatically creates state interfaces for
+all of its mimic joints.
+Their position and velocity are computed from the mimicked joint using the URDF-defined multiplier and offset.
 
 ### Transmission Support
 
