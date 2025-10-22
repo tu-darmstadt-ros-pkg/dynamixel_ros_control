@@ -79,6 +79,11 @@ The motors are configured in the ros2_control tag of the robot description. Exam
             <state_interface name="velocity"/>
             <state_interface name="effort"/>
         </joint>
+        <joint name="mimic_joint_1"> <!-- example of a mimic joint -->
+            <state_interface name="position"/>
+            <state_interface name="velocity"/>
+            <state_interface name="effort"/>
+        </joint>
     </ros2_control>
 </xacro:macro>
 ```
@@ -137,8 +142,9 @@ The onboard LED reflects the current state of the hardware interface:
 
 ### Mimic Joints
 
-If a mimicked joint is part of the controlled joints, the hardware interface automatically creates state interfaces for
-all of its mimic joints.
+If a mimicked joint is part of the controlled joints, the hardware interface can create a state interfaces for
+all of its mimic joints. To enable this feature, add the mimic joints to the ros2_control section and add their state
+interfaces (see an example above).
 Their position and velocity are computed from the mimicked joint using the URDF-defined multiplier and offset.
 
 ### Transmission Support
