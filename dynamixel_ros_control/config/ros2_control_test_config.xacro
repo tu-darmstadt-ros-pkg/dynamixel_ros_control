@@ -25,6 +25,13 @@
                 <state_interface name="effort"/>
             </joint>
 
+            <joint name="mimic_joint">
+                <mimic>true</mimic>
+                <state_interface name="position"/>
+                <state_interface name="velocity"/>
+                <state_interface name="effort"/>
+            </joint>
+
             <transmission name="transmission1">
                 <plugin>transmission_interface/SimpleTransmission</plugin>
                 <actuator name="actuator_1" role="actuator_1"/>

@@ -107,7 +107,15 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
 
   // Load joints
   joints_.reserve(info_.joints.size());
+  std::vector<std::string> mimic_joint_names(info_.mimic_joints.size());
+  for (const auto& mimic_joint : info_.mimic_joints) {
+    mimic_joint_names.emplace_back(info_.joints[mimic_joint.joint_index].name);
+  }
   for (const auto& joint_info : info_.joints) {
+    // skip if it is a mimic joint -> either mimic attribute is set or it is listed in the mimic joints
+    if (joint_info.is_mimic == hardware_interface::MimicAttribute::TRUE ||
+        std::find(mimic_joint_names.begin(), mimic_joint_names.end(), joint_info.name) != mimic_joint_names.end())
+      continue;
     Joint joint;
     if (!joint.loadConfiguration(driver_, joint_info, state_interface_to_register, command_interface_to_register,
                                  interface_to_register_limits)) {
@@ -126,7 +134,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareInfo& hard
     joints_.emplace(joint.name, std::move(joint));
   }
 
-  // mimic joint
+  // mimic joint setup
   for (const auto& mimic_joint : info_.mimic_joints) {
     const auto& name = info_.joints[mimic_joint.joint_index].name;
     const auto& mimicked_name = info_.joints[mimic_joint.mimicked_joint_index].name;
