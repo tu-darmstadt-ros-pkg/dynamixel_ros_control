@@ -949,6 +949,7 @@ void DynamixelHardwareInterface::adjustTransmissionOffsetsCallback(
     DXL_LOG_INFO("Failed to unload controllers. Cannot adjust offsets.");
     response->success = false;
     response->message = "Failed to deactivate controllers. Cannot adjust offsets.";
+    return;
   }
 
   for (size_t i = 0; i < request->external_joint_measurements.name.size(); ++i) {
