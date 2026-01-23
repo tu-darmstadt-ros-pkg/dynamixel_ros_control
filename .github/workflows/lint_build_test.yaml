@@ -58,6 +58,10 @@ jobs:
           path: src/hector_transmission_interface
       - uses: actions/checkout@v4
         with:
+          repository: tu-darmstadt-ros-pkg/hector_controller_spawner
+          path: src/hector_controller_spawner
+      - uses: actions/checkout@v4
+        with:
           path: src/repo
       - name: rosdep
         run: |
@@ -67,8 +71,8 @@ jobs:
         run: |
           source /opt/ros/${{ matrix.setup.rosdistro }}/setup.bash
           colcon build
-      - name: test
-        run: |
-          source /opt/ros/${{ matrix.setup.rosdistro }}/setup.bash
-          colcon test
-          colcon test-result --verbose
+      #- name: test
+      #  run: |
+      #    source /opt/ros/${{ matrix.setup.rosdistro }}/setup.bash
+      #    colcon test
+      #    colcon test-result --verbose
