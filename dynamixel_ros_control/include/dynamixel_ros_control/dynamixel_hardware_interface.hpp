@@ -26,10 +26,10 @@ public:
   ~DynamixelHardwareInterface() override;
   /**
    * Load all parameters from hardware info
-   * @param hardware_info
+   * @param param
    * @return
    */
-  CallbackReturn on_init(const hardware_interface::HardwareInfo& hardware_info) override;
+  CallbackReturn on_init(const hardware_interface::HardwareComponentInterfaceParams& param) override;
   /**
    * Connect to hardware
    * @param previous_state
