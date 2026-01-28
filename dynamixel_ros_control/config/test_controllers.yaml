@@ -24,7 +24,7 @@
 
   multi_interface_controller:
     ros__parameters:
-      joint: "joint_1"
+      joint: joint_1
       interface_names:
         - position
         - velocity

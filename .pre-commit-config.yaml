@@ -15,7 +15,7 @@
 repos:
   # Standard hooks
   - repo: https://github.com/pre-commit/pre-commit-hooks
-    rev: v5.0.0
+    rev: v6.0.0
     hooks:
       - id: check-added-large-files
       - id: check-docstring-first
@@ -23,15 +23,31 @@ repos:
       - id: check-symlinks
       - id: check-xml
       - id: check-yaml
-        args: ["--allow-multiple-documents"]
+        args: [--allow-multiple-documents]
       - id: end-of-file-fixer
       - id: mixed-line-ending
       - id: trailing-whitespace
         exclude_types: [rst]
 
+  # XML Formatting
+  - repo: https://github.com/efrecon/pre-commit-hook-lxml
+    rev: v0.1.4
+    hooks:
+      - id: format-xml
+        files: \.(xml|urdf|srdf|xacro)$
+        exclude: (^|/)package\.xml$
+        args: [--write, --self-closing, nospace]
+
+  # YAML Formatting
+  - repo: https://github.com/macisamuele/language-formatters-pre-commit-hooks
+    rev: v2.15.0
+    hooks:
+      - id: pretty-format-yaml
+        args: [--autofix, --indent, '2', --offset, '2']
+
   # CPP Checks
   - repo: https://github.com/pre-commit/mirrors-clang-format
-    rev: v20.1.4
+    rev: v21.1.8
     hooks:
       - id: clang-format
         name: Clang Format
@@ -49,22 +65,22 @@ repos:
 
   # Python hooks
   - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: v0.12.7
+    rev: v0.14.14
     hooks:
       - id: ruff-check
-        args: [ --fix ]
+        args: [--fix]
       - id: ruff-format
 
   # CMake Formatting
   - repo: https://github.com/cheshirekow/cmake-format-precommit
     rev: v0.6.13
     hooks:
-    - id: cmake-format
-    - id: cmake-lint
+      - id: cmake-format
+      - id: cmake-lint
 
   # Package XML
   - repo: https://github.com/Joschi3/package_xml_validation.git
-    rev: v1.2.3
+    rev: v1.4.2
     hooks:
       - id: format-package-xml
         name: Validate and Format package.xml
@@ -79,16 +95,16 @@ repos:
   - repo: local
     hooks:
       - id: no-bug-comments
-        name: 'No Bug comments'
-        description: 'Prevent commit if Bug comments are present'
-        entry: '(?i)#\s*bug'
+        name: No Bug comments
+        description: Prevent commit if Bug comments are present
+        entry: (?i)#\s*bug
         language: pygrep
         types: [file]
 
   - repo: https://github.com/python-jsonschema/check-jsonschema
-    rev: 0.33.2
+    rev: 0.36.1
     hooks:
       - id: check-github-workflows
-        args: ["--verbose"]
+        args: [--verbose]
       - id: check-github-actions
-        args: ["--verbose"]
+        args: [--verbose]
