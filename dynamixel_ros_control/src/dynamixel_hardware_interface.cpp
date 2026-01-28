@@ -90,8 +90,11 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   getParameter(info_.hardware_parameters, "torque_off_on_shutdown", torque_off_on_shutdown_, false);
   getParameter(info_.hardware_parameters, "reboot_on_hardware_error", reboot_on_hardware_error_, false);
 
+  bool use_dummy = false;
+  getParameter(info_.hardware_parameters, "use_dummy", use_dummy, false);
+
   // Initialize driver
-  if (!driver_.init(port_name, baud_rate)) {
+  if (!driver_.init(port_name, baud_rate, use_dummy)) {
     DXL_LOG_ERROR("Failed to initialize driver");
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -116,6 +119,23 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
     if (joint_info.is_mimic == hardware_interface::MimicAttribute::TRUE ||
         std::find(mimic_joint_names.begin(), mimic_joint_names.end(), joint_info.name) != mimic_joint_names.end())
       continue;
+    if (use_dummy) {
+      // We need to know ID and Model Number to register the dummy
+      // But Joint::loadConfiguration parses the ID.
+      // We can peek the ID from hardware parameters of the joint?
+      // Actually Joint::loadConfiguration gets 'joint_info'.
+      int id_val;
+      if (getParameter(joint_info.parameters, "id", id_val)) {
+        // Model Number is harder, we might default it or read from param
+        // For now assume a default or read 'model_number' param if exists?
+        // Or can we assume H42-20-S300-R (2020) from the user request example?
+        // Let's rely on 'model_number' param if present, else default.
+        int model_number = 2020;
+        getParameter(joint_info.parameters, "model_number", model_number, 2020);
+        driver_.addDummyMotor(static_cast<uint8_t>(id_val), static_cast<uint16_t>(model_number));
+      }
+    }
+
     Joint joint;
     if (!joint.loadConfiguration(driver_, joint_info, state_interface_to_register, command_interface_to_register,
                                  interface_to_register_limits)) {

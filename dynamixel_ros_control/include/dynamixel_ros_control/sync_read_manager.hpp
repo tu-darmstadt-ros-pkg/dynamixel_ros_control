@@ -3,7 +3,8 @@
 
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/dynamixel.hpp>
-#include <dynamixel_sdk/group_sync_read.h>
+#include <dynamixel_ros_control/dynamixel.hpp>
+#include <dynamixel_ros_control/sdk_wrapper.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 namespace dynamixel_ros_control {
@@ -65,7 +66,7 @@ public:
   void setErrorThreshold(unsigned int threshold);
 
 private:
-  dynamixel::GroupSyncRead* sync_read_{nullptr};  // TODO get right of raw pointers
+  std::shared_ptr<GroupSyncRead> sync_read_{nullptr};
 
   DynamixelDriver* driver_{nullptr};
   std::set<Dynamixel*> dynamixels_;

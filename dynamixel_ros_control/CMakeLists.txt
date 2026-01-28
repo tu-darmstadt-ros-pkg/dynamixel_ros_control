@@ -75,6 +75,11 @@ ament_target_dependencies(
 
 pluginlib_export_plugin_description_file(hardware_interface
                                          dynamixel_ros_control.xml)
+if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
+  ament_add_gtest(test_mock_dynamixel test/test_mock_dynamixel.cpp)
+  target_link_libraries(test_mock_dynamixel ${PROJECT_NAME})
+endif()
 
 # Install library and include folder
 install(

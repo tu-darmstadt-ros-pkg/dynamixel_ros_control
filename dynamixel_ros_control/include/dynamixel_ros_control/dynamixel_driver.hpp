@@ -9,6 +9,7 @@
 #include <dynamixel_sdk/group_sync_write.h>
 
 #include <dynamixel_ros_control/control_table.hpp>
+#include <dynamixel_ros_control/sdk_wrapper.hpp>
 
 namespace dynamixel_ros_control {
 
@@ -19,7 +20,7 @@ class DynamixelDriver
 public:
   DynamixelDriver();
 
-  bool init(const std::string& port_name, int baud_rate);
+  bool init(const std::string& port_name, int baud_rate, bool use_dummy = false);
 
   bool connect();
 
@@ -30,11 +31,13 @@ public:
   bool reboot(uint8_t id) const;
   [[nodiscard]] std::vector<std::pair<uint8_t /*id*/, uint16_t /*model_number*/>> scan() const;
 
+  void addDummyMotor(uint8_t id, uint16_t model_number);
+
   bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value) const;
   bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out) const;
 
-  [[nodiscard]] dynamixel::GroupSyncWrite* setSyncWrite(uint16_t address, uint8_t data_length) const;
-  [[nodiscard]] dynamixel::GroupSyncRead* setSyncRead(uint16_t address, uint8_t data_length) const;
+  [[nodiscard]] std::shared_ptr<GroupSyncWrite> setSyncWrite(uint16_t address, uint8_t data_length) const;
+  [[nodiscard]] std::shared_ptr<GroupSyncRead> setSyncRead(uint16_t address, uint8_t data_length) const;
 
   bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start_index);
   bool releaseIndirectAddresses(unsigned int data_length, unsigned int address_start_index);
@@ -50,8 +53,8 @@ private:
   bool connectPort();
   bool setBaudRate(int baud_rate) const;
 
-  dynamixel::PacketHandler* packet_handler_;
-  dynamixel::PortHandler* port_handler_;
+  std::shared_ptr<PacketHandler> packet_handler_;
+  std::shared_ptr<PortHandler> port_handler_;
 
   unsigned int next_indirect_address_index_;
 
@@ -62,6 +65,7 @@ private:
   // Parameters
   std::string port_name_;
   int baud_rate_;
+  bool use_dummy_;
 };
 
 }  // namespace dynamixel_ros_control

@@ -1,6 +1,7 @@
 #include "dynamixel_ros_control/log.hpp"
 
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
+#include <dynamixel_ros_control/mock_dynamixel.hpp>
 
 #include <dynamixel_ros_control/common.hpp>
 #include <ament_index_cpp/get_package_share_directory.hpp>
@@ -10,11 +11,12 @@
 namespace dynamixel_ros_control {
 
 DynamixelDriver::DynamixelDriver()
-    : next_indirect_address_index_(0)
+    : next_indirect_address_index_(0), use_dummy_(false)
 {}
 
-bool DynamixelDriver::init(const std::string& port_name, const int baud_rate)
+bool DynamixelDriver::init(const std::string& port_name, const int baud_rate, bool use_dummy)
 {
+  use_dummy_ = use_dummy;
   port_name_ = port_name;
   setPortHandler(port_name_);
 
@@ -137,6 +139,13 @@ std::vector<std::pair<uint8_t, uint16_t>> DynamixelDriver::scan() const
   return dxl_list;
 }
 
+void DynamixelDriver::addDummyMotor(uint8_t id, uint16_t model_number)
+{
+  if (use_dummy_) {
+    MockDynamixelManager::instance().addMotor(id, model_number);
+  }
+}
+
 bool DynamixelDriver::reboot(const uint8_t id) const
 {
   uint8_t error = 0;
@@ -228,18 +237,34 @@ bool DynamixelDriver::readRegister(const uint8_t id, const uint16_t address, con
   return true;
 }
 
-dynamixel::GroupSyncWrite* DynamixelDriver::setSyncWrite(uint16_t address, uint8_t data_length) const
+std::shared_ptr<GroupSyncWrite> DynamixelDriver::setSyncWrite(uint16_t address, uint8_t data_length) const
 {
-  return new dynamixel::GroupSyncWrite(port_handler_, packet_handler_, address, data_length);
+  if (use_dummy_) {
+    return std::make_shared<MockGroupSyncWrite>(port_handler_, packet_handler_, address, data_length);
+  }
+  return std::make_shared<RealGroupSyncWrite>(port_handler_, packet_handler_, address, data_length);
 }
 
-dynamixel::GroupSyncRead* DynamixelDriver::setSyncRead(uint16_t address, uint8_t data_length) const
+std::shared_ptr<GroupSyncRead> DynamixelDriver::setSyncRead(uint16_t address, uint8_t data_length) const
 {
-  return new dynamixel::GroupSyncRead(port_handler_, packet_handler_, address, data_length);
+  if (use_dummy_) {
+    return std::make_shared<MockGroupSyncRead>(port_handler_, packet_handler_, address, data_length);
+  }
+  return std::make_shared<RealGroupSyncRead>(port_handler_, packet_handler_, address, data_length);
 }
 
 bool DynamixelDriver::requestIndirectAddresses(const unsigned int data_length, unsigned int& address_start_index)
 {
+  if (use_dummy_) {
+    // Mock indirect addresses simply by incrementing.
+    // The MockDynamixel/MockPacketHandler logic doesn't strictly enforce indirect address checking
+    // unless we implemented complex indirect address logic in the mock.
+    // For now, let's just pretend it works.
+    address_start_index = next_indirect_address_index_;
+    next_indirect_address_index_ += data_length;
+    DXL_LOG_DEBUG("[INDIRECT ADDRESS MOCK] Reserving " << address_start_index);
+    return true;
+  }
   DXL_LOG_DEBUG("[INDIRECT ADDRESS] Reserving indirect address index " << address_start_index << " with length "
                                                                        << data_length);
   address_start_index = next_indirect_address_index_;
@@ -278,7 +303,11 @@ std::string DynamixelDriver::packetErrorToString(const uint8_t error) const
 bool DynamixelDriver::setPacketHandler()
 {
   constexpr float protocol_version = 2.0;
-  packet_handler_ = dynamixel::PacketHandler::getPacketHandler(protocol_version);
+  if (use_dummy_) {
+    packet_handler_ = std::make_shared<MockPacketHandler>(protocol_version);
+  } else {
+    packet_handler_ = std::make_shared<RealPacketHandler>(protocol_version);
+  }
   if (!packet_handler_) {
     DXL_LOG_ERROR("Unsupported protocol version: " << protocol_version);
     return false;
@@ -288,7 +317,11 @@ bool DynamixelDriver::setPacketHandler()
 
 bool DynamixelDriver::setPortHandler(const std::string& port_name)
 {
-  port_handler_ = dynamixel::PortHandler::getPortHandler(port_name.c_str());
+  if (use_dummy_) {
+    port_handler_ = std::make_shared<MockPortHandler>(port_name.c_str());
+  } else {
+    port_handler_ = std::make_shared<RealPortHandler>(port_name.c_str());
+  }
   return true;
 }
 

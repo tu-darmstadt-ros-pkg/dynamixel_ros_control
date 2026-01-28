@@ -3,7 +3,8 @@
 
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/dynamixel.hpp>
-#include <dynamixel_sdk/group_sync_write.h>
+#include <dynamixel_ros_control/dynamixel.hpp>
+#include <dynamixel_ros_control/sdk_wrapper.hpp>
 #include <rclcpp/rclcpp.hpp>
 
 namespace dynamixel_ros_control {
@@ -40,7 +41,7 @@ private:
   uint8_t total_data_length_{0};
 
   DynamixelDriver* driver_{nullptr};
-  dynamixel::GroupSyncWrite* sync_write_{nullptr};
+  std::shared_ptr<GroupSyncWrite> sync_write_{nullptr};
 
   unsigned int subsequent_error_count_{0};
   unsigned int error_threshold_{25};
