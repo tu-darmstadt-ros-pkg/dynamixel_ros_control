@@ -211,3 +211,32 @@ a new control table file has to be placed
 in [dynamixel_ros_control/devices/models/](dynamixel_ros_control/devices/models/) . Make sure to use the correct
 conversion ratios from Dynamixel value counts to SI units. It is advised to use a high precision to prevent large
 rounding errors.
+
+## Test Cases
+You do not need the simple setups. You can always use the full controller setup. (I made sure to use only standard controllers and no compllicated controller chains for an easier test setup). Please
+Please add tests that test the normal usage:
+- arm position mode -> when sending a position command to the motor the motor moves to that position
+- flipper velocity mode -> when sending flipper velocity commands the four flipper move with their respective velocities goals (attention there are transmission the actuator will move twice as fast as the joint)
+- controller switch: arm position  controller can be deactivated and arm veloict controller loaded
+- same for the flipper motor
+- arm, flipper and gripper can be moved simultaneously
+
+E-Stop:
+- when setting the e-stop while the arm is moving, test that the controllers are unloaded and the arm stops moving, also the leds should be orange [€ven if a controller is reloaded it cannot move the robot intil the e-stop is deactivated
+
+Torque:
+- params set_torque_on_startup, set_torque_on_shutdown works as expected
+- set trque works as expected (deactivates controllers when torques is activated)
+- torque is not activted when initial goal position setting fails (very important test)
+- while torque is off controls can be written but are not executed
+- before the torque is re-actibated  the goal values are updated (e.g. position to current position nad depedin omn the control mode velocity is set to zero or mamimum allowed velocity)
+
+Transmission:
+- Flipper transmission offsets can be reset
+- test that controllerts are deactivated, and the joint position has the external_measurement_value after the calibration step
+
+LEDs:
+- the color is set correctly
+- blue -> actuatori is in normal mode and can move
+- grreen -> safe too touch e.g. torques off
+- red -> hardware interface is not active

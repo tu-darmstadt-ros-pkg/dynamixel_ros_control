@@ -79,6 +79,19 @@ if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   ament_add_gtest(test_mock_dynamixel test/test_mock_dynamixel.cpp)
   target_link_libraries(test_mock_dynamixel ${PROJECT_NAME})
+
+  find_package(controller_manager REQUIRED)
+  find_package(hector_controller_spawner REQUIRED)
+  find_package(hector_testing_utils REQUIRED)
+  find_package(realtime_tools REQUIRED)
+
+  add_definitions(-DTEST_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/config")
+
+  ament_add_gtest(test_hardware_interface test/test_hardware_interface.cpp)
+  target_link_libraries(test_hardware_interface ${PROJECT_NAME})
+  ament_target_dependencies(
+    test_hardware_interface controller_manager hector_controller_spawner
+    hector_testing_utils realtime_tools)
 endif()
 
 # Install library and include folder

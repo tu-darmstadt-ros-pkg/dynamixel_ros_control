@@ -1,0 +1,119 @@
+/**:
+
+  controller_manager:
+    ros__parameters:
+      update_rate: 50 # Hz
+
+      joint_state_broadcaster:
+        type: joint_state_broadcaster/JointStateBroadcaster
+
+      # Flipper Controllers
+      flipper_position_controller:
+        type: position_controllers/JointGroupPositionController
+      flipper_velocity_controller:
+        type: velocity_controllers/JointGroupVelocityController
+      flipper_trajectory_controller:
+        type: joint_trajectory_controller/JointTrajectoryController
+
+      # Arm Controllers
+      arm_position_controller:
+        type: position_controllers/JointGroupPositionController
+      arm_velocity_controller:
+        type: velocity_controllers/JointGroupVelocityController
+      arm_trajectory_controller:
+        type: joint_trajectory_controller/JointTrajectoryController
+
+      # Gripper Controllers
+      gripper_position_controller:
+        type: position_controllers/JointGroupPositionController
+      gripper_trajectory_controller:
+        type: joint_trajectory_controller/JointTrajectoryController
+
+  # --- Joint State Broadcaster ---
+  joint_state_broadcaster:
+    ros__parameters: {}
+
+  # --- Flipper Configurations ---
+  flipper_position_controller:
+    ros__parameters:
+      joints:
+        - flipper_fl_joint
+        - flipper_fr_joint
+        - flipper_bl_joint
+        - flipper_br_joint
+
+  flipper_velocity_controller:
+    ros__parameters:
+      joints:
+        - flipper_fl_joint
+        - flipper_fr_joint
+        - flipper_bl_joint
+        - flipper_br_joint
+
+  flipper_trajectory_controller:
+    ros__parameters:
+      joints:
+        - flipper_fl_joint
+        - flipper_fr_joint
+        - flipper_bl_joint
+        - flipper_br_joint
+      command_interfaces:
+        - position
+      state_interfaces:
+        - position
+        - velocity
+
+  # --- Arm Configurations ---
+  arm_position_controller:
+    ros__parameters:
+      joints:
+        - arm_joint_1
+        - arm_joint_2
+        - arm_joint_3
+        - arm_joint_4
+        - arm_joint_5
+        - arm_joint_6
+        - arm_joint_7
+
+  arm_velocity_controller:
+    ros__parameters:
+      joints:
+        - arm_joint_1
+        - arm_joint_2
+        - arm_joint_3
+        - arm_joint_4
+        - arm_joint_5
+        - arm_joint_6
+        - arm_joint_7
+
+  arm_trajectory_controller:
+    ros__parameters:
+      joints:
+        - arm_joint_1
+        - arm_joint_2
+        - arm_joint_3
+        - arm_joint_4
+        - arm_joint_5
+        - arm_joint_6
+        - arm_joint_7
+      command_interfaces:
+        - position
+      state_interfaces:
+        - position
+        - velocity
+
+  # --- Gripper Configurations ---
+  gripper_position_controller:
+    ros__parameters:
+      joints:
+        - gripper_servo_joint
+
+  gripper_trajectory_controller:
+    ros__parameters:
+      joints:
+        - gripper_servo_joint
+      command_interfaces:
+        - position
+      state_interfaces:
+        - position
+        - velocity
