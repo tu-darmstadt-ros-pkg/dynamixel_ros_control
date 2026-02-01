@@ -992,13 +992,26 @@ bool DynamixelHardwareInterface::setEStop(bool do_enable)
       // unload controllers (not possible if hardware interface is not configured)
       if (lifecycle_state_.label() != hardware_interface::lifecycle_state_names::UNCONFIGURED) {
         if (!deactivateControllers()) {
-          DXL_LOG_ERROR("Failed to unload controllers. Cannot activate e-stop.");
-          return false;
+          DXL_LOG_WARN("Failed to deactivate controllers during e-stop activation. Proceeding with e-stop anyway.");
         }
       }
       std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
       activateEStop();
     } else {
+      // Before deactivating e-stop, check if controllers are still active.
+      // If controller deactivation failed during e-stop activation, controllers may still be active.
+      // Attempt to deactivate them now; if that fails, e-stop must remain active.
+      if (lifecycle_state_.label() != hardware_interface::lifecycle_state_names::UNCONFIGURED) {
+        auto active_controllers = controller_orchestrator_->getActiveControllerOfHardwareInterface(get_name());
+        if (!active_controllers.empty()) {
+          DXL_LOG_WARN("Controllers still active during e-stop deactivation: "
+                       << iterableToString(active_controllers) << ". Attempting to deactivate them now.");
+          if (!deactivateControllers()) {
+            DXL_LOG_ERROR("Failed to deactivate controllers. E-stop will remain active for safety.");
+            return false;
+          }
+        }
+      }
       DXL_LOG_WARN("E-STOP INACTIVATED via topic");
       e_stop_active_ = false;
       std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
