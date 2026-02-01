@@ -161,6 +161,12 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 |-----------|-------------|
 | `EStop_StopsMovement` | E-stop halts all motors, deactivates controllers, sets orange LED |
 | `EStop_MultipleCommandsBlocked` | E-stop blocks all command types (position, velocity) |
+| `EStop_VelocityControllerSwitchesToPositionMode` | Activating e-stop with velocity controller switches motors to position mode |
+| `EStop_GoalPositionWriteFailurePreventsActivation` | E-stop activation proceeds even if goal position write fails (motor positions remain stable) |
+| `EStop_ReactivationMaintainsPositionModeUntilControllerLoaded` | After e-stop release, motors stay in position mode until controller activates |
+| `EStop_CannotActivateWhenTorqueOff` | E-stop cannot be activated when torque is disabled |
+| `EStop_DeactivationRetriesControllerDeactivation` | E-stop deactivation retries controller deactivation if controllers are still active |
+| `EStop_RemainsActiveWhenControllerDeactivationFails` | E-stop remains active if controller deactivation fails during release |
 
 ### Torque Control Tests
 
@@ -219,6 +225,14 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 |-----------|-------------|
 | `RapidControllerSwitch_StressTest` | Rapidly switch controllers without crashes |
 | `RebootService_ResetsMotors` | Reboot service resets motor state |
+
+### Lifecycle Tests
+
+| Test Name | Description |
+|-----------|-------------|
+| `Lifecycle_TorqueServiceAvailableWhenActive` | Torque service is available when hardware interface is active |
+| `Lifecycle_CalibrationServiceAvailableWhenActive` | Calibration offset adjustment service is available when active |
+| `Lifecycle_EStopTopicSubscribedWhenActive` | E-stop topic subscription is active when hardware interface is active |
 
 ### Edge Case Tests
 
