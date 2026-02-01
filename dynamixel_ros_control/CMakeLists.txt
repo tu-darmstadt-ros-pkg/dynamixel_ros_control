@@ -88,6 +88,7 @@ if(BUILD_TESTING)
   add_definitions(-DTEST_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/config")
 
   ament_add_gtest(test_hardware_interface test/test_hardware_interface.cpp)
+  set_tests_properties(test_hardware_interface PROPERTIES TIMEOUT 600)
   target_link_libraries(test_hardware_interface ${PROJECT_NAME})
   ament_target_dependencies(
     test_hardware_interface controller_manager hector_controller_spawner

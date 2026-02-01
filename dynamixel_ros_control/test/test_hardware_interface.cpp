@@ -23,6 +23,8 @@
 // Include MockDynamixel for simulation control
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
 
+#include <cstdlib>
+#include <filesystem>
 #include <fstream>
 #include <thread>
 #include <chrono>
@@ -86,6 +88,15 @@ class HardwareInterfaceTest : public HectorTestFixture
 protected:
   void SetUp() override
   {
+    // Create temporary HOME directory to isolate tests from persistent calibration files
+    // The AdjustableOffsetTransmission stores offsets in ~/.ros/dynamic_offset_transmissions/
+    // Without isolation, pre-existing offsets can cause motors to travel large distances
+    // at startup, leading to measurement errors in timing-sensitive tests.
+    char temp_dir[] = "/tmp/dynamixel_test_home_XXXXXX";
+    test_home_dir_ = mkdtemp(temp_dir);
+    original_home_ = std::getenv("HOME");
+    setenv("HOME", test_home_dir_.c_str(), 1);
+
     HectorTestFixture::SetUp();
 
     // Config paths
@@ -160,6 +171,14 @@ protected:
     dynamixel_ros_control::MockDynamixelManager::instance().reset();
 
     HectorTestFixture::TearDown();
+
+    // Restore original HOME and clean up temporary directory
+    if (!original_home_.empty()) {
+      setenv("HOME", original_home_.c_str(), 1);
+    }
+    if (!test_home_dir_.empty()) {
+      std::filesystem::remove_all(test_home_dir_);
+    }
   }
 
   void start_update_loop(bool use_sim_time, int thread_priority)
@@ -355,6 +374,8 @@ protected:
   std::string controllers_yaml_;
   std::string spawner_yaml_;
   std::string urdf_path_;
+  std::string test_home_dir_;
+  std::string original_home_;
 
   std::atomic<bool> cm_running_{false};
   std::shared_ptr<rclcpp::Executor> cm_executor_;
@@ -1960,7 +1981,7 @@ TEST_F(HardwareInterfaceTest, CombinedState_CalibrationWhileEStopActive)
   if (service_available) {
     auto request = std::make_shared<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Request>();
     sensor_msgs::msg::JointState ext_measurement;
-    ext_measurement.name = {"flipper_front_left_joint"};
+    ext_measurement.name = {"flipper_fl_joint"};
     ext_measurement.position = {0.5};
     request->external_joint_measurements = ext_measurement;
 
@@ -2029,7 +2050,7 @@ TEST_F(HardwareInterfaceTest, CombinedState_CalibrationWhileTorqueOff)
 
   auto cal_request = std::make_shared<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Request>();
   sensor_msgs::msg::JointState ext_measurement;
-  ext_measurement.name = {"flipper_front_left_joint"};
+  ext_measurement.name = {"flipper_fl_joint"};
   ext_measurement.position = {0.5};
   cal_request->external_joint_measurements = ext_measurement;
 
