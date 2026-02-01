@@ -20,7 +20,6 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(dynamixel_sdk REQUIRED)
 find_package(yaml-cpp REQUIRED)
-# find_package(dynamixel_ros_control_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -81,7 +80,6 @@ if(BUILD_TESTING)
   target_link_libraries(test_mock_dynamixel ${PROJECT_NAME})
 
   find_package(controller_manager REQUIRED)
-  find_package(hector_controller_spawner REQUIRED)
   find_package(hector_testing_utils REQUIRED)
   find_package(realtime_tools REQUIRED)
 
@@ -90,9 +88,8 @@ if(BUILD_TESTING)
   ament_add_gtest(test_hardware_interface test/test_hardware_interface.cpp)
   set_tests_properties(test_hardware_interface PROPERTIES TIMEOUT 600)
   target_link_libraries(test_hardware_interface ${PROJECT_NAME})
-  ament_target_dependencies(
-    test_hardware_interface controller_manager hector_controller_spawner
-    hector_testing_utils realtime_tools)
+  ament_target_dependencies(test_hardware_interface controller_manager
+                            hector_testing_utils realtime_tools)
 endif()
 
 # Install library and include folder

@@ -8,7 +8,6 @@
 #include <controller_manager_msgs/srv/list_hardware_interfaces.hpp>
 #include <controller_manager_msgs/srv/set_hardware_component_state.hpp>
 #include <hardware_interface/introspection.hpp>
-#include <hector_controller_spawner/hector_controller_spawner.hpp>
 #include <hector_testing_utils/hector_testing_utils.hpp>
 #include <hector_transmission_interface_msgs/srv/adjust_transmission_offsets.hpp>
 #include <rclcpp/rclcpp.hpp>

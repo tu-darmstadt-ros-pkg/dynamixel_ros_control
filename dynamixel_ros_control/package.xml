@@ -33,9 +33,12 @@
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>controller_manager</test_depend>
-  <test_depend>hector_controller_spawner</test_depend>
   <test_depend>hector_testing_utils</test_depend>
+  <test_depend>joint_state_broadcaster</test_depend>
+  <test_depend>joint_trajectory_controller</test_depend>
+  <test_depend>position_controllers</test_depend>
   <test_depend>realtime_tools</test_depend>
+  <test_depend>velocity_controllers</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

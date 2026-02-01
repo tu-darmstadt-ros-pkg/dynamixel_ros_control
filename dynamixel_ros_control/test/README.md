@@ -264,6 +264,19 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "NormalUsage
 colcon test --packages-select dynamixel_ros_control --ctest-args -V
 ```
 
+### Generate Coverage Report
+```bash
+# Prerequisites: sudo apt install lcov
+
+# Generate HTML coverage report
+./src/dynamixel_ros_control/dynamixel_ros_control/scripts/coverage.sh
+
+# Generate and open in browser
+./src/dynamixel_ros_control/dynamixel_ros_control/scripts/coverage.sh --open
+```
+
+The coverage report is generated at `build/dynamixel_ros_control/coverage/html/index.html`.
+
 ## Test Fixture Setup
 
 The `HardwareInterfaceTest` fixture (inherits from `HectorTestFixture`) handles:
