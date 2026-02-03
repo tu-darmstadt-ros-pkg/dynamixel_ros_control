@@ -8,12 +8,12 @@
 
 namespace dynamixel_ros_control {
 
-constexpr int COLOR_RED_VALUES[] = {255, 0, 0};
+constexpr int COLOR_PINK_VALUES[] = {255, 175, 193};
 constexpr int COLOR_GREEN_VALUES[] = {0, 255, 0};
 constexpr int COLOR_BLUE_VALUES[] = {0, 0, 255};
 constexpr int COLOR_ORANGE_VALUES[] = {255, 165, 0};
 
-constexpr char COLOR_RED[] = "red";
+constexpr char COLOR_PINK[] = "pink";
 constexpr char COLOR_GREEN[] = "green";
 constexpr char COLOR_BLUE[] = "blue";
 constexpr char COLOR_ORANGE[] = "orange";

@@ -67,7 +67,7 @@ constexpr uint8_t FLIPPER_BL_ID = 3;
 constexpr uint8_t FLIPPER_BR_ID = 4;
 
 // LED colors from common.hpp
-constexpr uint8_t COLOR_RED_R = 255, COLOR_RED_G = 0, COLOR_RED_B = 0;
+constexpr uint8_t COLOR_PINK_R = 255, COLOR_PINK_G = 175, COLOR_PINK_B = 193;
 constexpr uint8_t COLOR_GREEN_R = 0, COLOR_GREEN_G = 255, COLOR_GREEN_B = 0;
 constexpr uint8_t COLOR_BLUE_R = 0, COLOR_BLUE_G = 0, COLOR_BLUE_B = 255;
 constexpr uint8_t COLOR_ORANGE_R = 255, COLOR_ORANGE_G = 165, COLOR_ORANGE_B = 0;

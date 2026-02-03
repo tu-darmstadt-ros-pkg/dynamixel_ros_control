@@ -189,6 +189,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
       });
 
   // reboot service - allows to reboot actuators if they are in an error state
+  // After reboot, the desired torque state is restored and LEDs are updated automatically
   reboot_service_ = node_->create_service<std_srvs::srv::Trigger>(
       "~/reboot", [this](const std::shared_ptr<std_srvs::srv::Trigger::Request> request,
                          const std::shared_ptr<std_srvs::srv::Trigger::Response> response) {
@@ -787,20 +788,36 @@ bool DynamixelHardwareInterface::isHardwareOk() const
 
 bool DynamixelHardwareInterface::reboot()
 {
-  // lock communication mutex (avoid simultaneous access with read / write)
-  std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
-  for (auto& [name, joint] : joints_) {
-    if (joint.dynamixel->hardware_error_status != OK && !joint.dynamixel->reboot()) {
-      DXL_LOG_ERROR("Dynamixel '" << name << "' reboot failed.");
-      return false;
+  {
+    // lock communication mutex (avoid simultaneous access with read / write)
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    for (auto& [name, joint] : joints_) {
+      if (joint.dynamixel->hardware_error_status != OK && !joint.dynamixel->reboot()) {
+        DXL_LOG_ERROR("Dynamixel '" << name << "' reboot failed.");
+        return false;
+      }
     }
   }
+
+  // Restore desired torque state after reboot (motors default to torque off after reboot)
+  DXL_LOG_INFO("Restoring torque state to " << (desired_torque_state_ ? "ON" : "OFF") << " after reboot.");
+  if (!setTorque(desired_torque_state_, true)) {
+    DXL_LOG_ERROR("Failed to restore torque state after reboot.");
+    return false;
+  }
+
+  // Ensure LEDs reflect the current state
+  updateColorLED();
+
   return true;
 }
 
 bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_controller_unloading, int retries,
                                            const bool direct_write)
 {
+  // Track the user's desired torque state (for restoration after reboot)
+  desired_torque_state_ = do_enable;
+
   // check if torque change is necessary
   {
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
@@ -947,8 +964,8 @@ void DynamixelHardwareInterface::setColorLED(const int& red, const int& green, c
 void DynamixelHardwareInterface::setColorLED(const std::string& color)
 {
   DXL_LOG_INFO("Setting color LED '" << color << "'");
-  if (color == COLOR_RED) {
-    setColorLED(COLOR_RED_VALUES[0], COLOR_RED_VALUES[1], COLOR_RED_VALUES[2]);
+  if (color == COLOR_PINK) {
+    setColorLED(COLOR_PINK_VALUES[0], COLOR_PINK_VALUES[1], COLOR_PINK_VALUES[2]);
   } else if (color == COLOR_GREEN) {
     setColorLED(COLOR_GREEN_VALUES[0], COLOR_GREEN_VALUES[1], COLOR_GREEN_VALUES[2]);
   } else if (color == COLOR_BLUE) {
@@ -966,15 +983,15 @@ void DynamixelHardwareInterface::updateColorLED(std::string new_state)
     new_state = lifecycle_state_.label();
   if (new_state == hardware_interface::lifecycle_state_names::UNCONFIGURED ||
       new_state == hardware_interface::lifecycle_state_names::INACTIVE) {
-    setColorLED(COLOR_RED);
+    setColorLED(COLOR_PINK);  // Pink = inactive/unconfigured
   } else {
     // hardware interface is active
     if (!is_torqued_) {
-      setColorLED(COLOR_GREEN);
+      setColorLED(COLOR_GREEN);  // Green = torque off (safe to touch)
     } else if (e_stop_active_) {
-      setColorLED(COLOR_ORANGE);
+      setColorLED(COLOR_ORANGE);  // Orange = E-Stop active
     } else {
-      setColorLED(COLOR_BLUE);
+      setColorLED(COLOR_BLUE);  // Blue = active and torque on
     }
   }
 }

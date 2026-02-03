@@ -259,6 +259,221 @@ TEST_F(HardwareInterfaceTest, RebootService_ResetsMotors)
   }
 }
 
+TEST_F(HardwareInterfaceTest, RebootService_OnlyRebootsFaultyMotors)
+{
+  // Test that reboot is only called for motors with hardware errors, not healthy ones
+
+  // 1. Create reboot service client
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
+
+  // 2. Reset reboot counters for all motors
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    motor->resetRebootCount();
+  }
+  auto gripper_motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID);
+  gripper_motor->resetRebootCount();
+
+  // 3. Set hardware error on only motor 1 and motor 3
+  auto motor1 = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  auto motor3 = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_3_ID);
+  motor1->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_OVERHEATING);
+  motor3->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_INPUT_VOLTAGE);
+
+  // Wait for at least one read cycle to update hardware_error_status in the Dynamixel class
+  std::this_thread::sleep_for(300ms);
+
+  // 4. Call reboot service
+  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 10s;
+  options.response_timeout = 10s;
+  auto resp =
+      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+
+  ASSERT_NE(resp, nullptr) << "Reboot service call failed";
+  EXPECT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
+
+  std::this_thread::sleep_for(500ms);
+
+  // 5. Verify ONLY faulty motors were rebooted
+  EXPECT_EQ(motor1->getRebootCount(), 1) << "Motor 1 (with error) should have been rebooted once";
+  EXPECT_EQ(motor3->getRebootCount(), 1) << "Motor 3 (with error) should have been rebooted once";
+
+  // Other arm motors should NOT have been rebooted
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    if (id == ARM_JOINT_1_ID || id == ARM_JOINT_3_ID)
+      continue;
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    EXPECT_EQ(motor->getRebootCount(), 0) << "Motor " << (int) id << " (healthy) should NOT have been rebooted";
+  }
+
+  // Gripper should not have been rebooted either
+  EXPECT_EQ(gripper_motor->getRebootCount(), 0) << "Gripper (healthy) should NOT have been rebooted";
+
+  // 6. Verify hardware errors were cleared
+  EXPECT_EQ(motor1->getHardwareError(), 0) << "Motor 1 hardware error should be cleared after reboot";
+  EXPECT_EQ(motor3->getHardwareError(), 0) << "Motor 3 hardware error should be cleared after reboot";
+}
+
+TEST_F(HardwareInterfaceTest, RebootService_RestoresTorqueOnAndBlueLED)
+{
+  // Test that reboot restores torque ON state and sets LED to blue when torque was enabled
+
+  // 1. Setup: torque is ON by default (torque_on_startup: true)
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
+
+  // 2. Verify torque is initially on
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    uint16_t torque_addr = motor->getAddress("torque_enable");
+    ASSERT_EQ(motor->read1Byte(torque_addr), 1) << "Motor " << (int) id << " torque should be ON initially";
+  }
+
+  // 3. Reset reboot counter and set hardware error on motor 1
+  auto motor1 = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  motor1->resetRebootCount();
+  motor1->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_OVERHEATING);
+
+  // Wait for at least one read cycle to update hardware_error_status in the Dynamixel class
+  std::this_thread::sleep_for(300ms);
+
+  // 4. Call reboot service
+  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 10s;
+  options.response_timeout = 10s;
+  auto resp =
+      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+
+  ASSERT_NE(resp, nullptr) << "Reboot service call failed";
+  EXPECT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
+
+  std::this_thread::sleep_for(500ms);
+
+  // 5. Verify torque is restored to ON for all motors
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    uint16_t torque_addr = motor->getAddress("torque_enable");
+    EXPECT_EQ(motor->read1Byte(torque_addr), 1) << "Motor " << (int) id << " torque should be restored to ON";
+  }
+
+  // 6. Verify LED is blue (torque on state)
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    EXPECT_EQ(motor->getLedRed(), COLOR_BLUE_R) << "Motor " << (int) id << " LED should be blue (R)";
+    EXPECT_EQ(motor->getLedGreen(), COLOR_BLUE_G) << "Motor " << (int) id << " LED should be blue (G)";
+    EXPECT_EQ(motor->getLedBlue(), COLOR_BLUE_B) << "Motor " << (int) id << " LED should be blue (B)";
+  }
+}
+
+TEST_F(HardwareInterfaceTest, RebootService_RestoresTorqueOffAndGreenLED)
+{
+  // Test that reboot restores torque OFF state and sets LED to green when torque was disabled
+
+  // 1. Setup clients
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
+  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s)) << "Torque service not available";
+
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 10s;
+  options.response_timeout = 10s;
+
+  // 2. Disable torque first
+  auto torque_request = std::make_shared<std_srvs::srv::SetBool::Request>();
+  torque_request->data = false;
+  auto torque_resp = hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), torque_request,
+                                                                                *executor_, options);
+  ASSERT_NE(torque_resp, nullptr);
+  ASSERT_TRUE(torque_resp->success) << "Should be able to disable torque";
+
+  std::this_thread::sleep_for(300ms);
+
+  // 3. Verify torque is now off
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    uint16_t torque_addr = motor->getAddress("torque_enable");
+    ASSERT_EQ(motor->read1Byte(torque_addr), 0) << "Motor " << (int) id << " torque should be OFF";
+  }
+
+  // 4. Set hardware error on motor 1 and call reboot
+  auto motor1 = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  motor1->resetRebootCount();
+  motor1->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_OVERLOAD);
+
+  // Wait for at least one read cycle to update hardware_error_status in the Dynamixel class
+  std::this_thread::sleep_for(300ms);
+
+  auto reboot_request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  auto resp = hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), reboot_request,
+                                                                         *executor_, options);
+
+  ASSERT_NE(resp, nullptr) << "Reboot service call failed";
+  EXPECT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
+
+  std::this_thread::sleep_for(500ms);
+
+  // 5. Verify torque is still OFF (restored to user's desired state)
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    uint16_t torque_addr = motor->getAddress("torque_enable");
+    EXPECT_EQ(motor->read1Byte(torque_addr), 0) << "Motor " << (int) id << " torque should remain OFF after reboot";
+  }
+
+  // 6. Verify LED is green (torque off state)
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    EXPECT_EQ(motor->getLedRed(), COLOR_GREEN_R) << "Motor " << (int) id << " LED should be green (R)";
+    EXPECT_EQ(motor->getLedGreen(), COLOR_GREEN_G) << "Motor " << (int) id << " LED should be green (G)";
+    EXPECT_EQ(motor->getLedBlue(), COLOR_GREEN_B) << "Motor " << (int) id << " LED should be green (B)";
+  }
+}
+
+TEST_F(HardwareInterfaceTest, RebootService_NoRebootWhenNoErrors)
+{
+  // Test that when no motors have hardware errors, no reboots occur but LEDs are still updated
+
+  // 1. Create reboot service client
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
+
+  // 2. Reset reboot counters for all motors (no hardware errors set)
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    motor->resetRebootCount();
+    ASSERT_EQ(motor->getHardwareError(), 0) << "Motor " << (int) id << " should have no hardware error";
+  }
+
+  // 3. Call reboot service
+  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 10s;
+  options.response_timeout = 10s;
+  auto resp =
+      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+
+  ASSERT_NE(resp, nullptr) << "Reboot service call failed";
+  EXPECT_TRUE(resp->success) << "Reboot should succeed (no errors to fix): " << resp->message;
+
+  std::this_thread::sleep_for(500ms);
+
+  // 4. Verify NO motors were rebooted
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    EXPECT_EQ(motor->getRebootCount(), 0) << "Motor " << (int) id << " should NOT have been rebooted (no error)";
+  }
+
+  // 5. Verify LED is still correct (blue since torque is on)
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    EXPECT_EQ(motor->getLedBlue(), COLOR_BLUE_B) << "Motor " << (int) id << " LED should be blue";
+  }
+}
+
 }  // namespace dynamixel_ros_control::test
 
 int main(int argc, char** argv)

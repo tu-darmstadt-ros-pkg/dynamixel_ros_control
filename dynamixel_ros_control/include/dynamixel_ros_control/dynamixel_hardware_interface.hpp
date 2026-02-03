@@ -102,6 +102,7 @@ private:
 
   // variables
   bool is_torqued_{false};
+  bool desired_torque_state_{false};        // tracks the user's desired torque state (for restoration after reboot)
   std::atomic<bool> e_stop_active_{false};  // true if e-stop is active
   bool mode_switch_failed_{false};
 

@@ -29,7 +29,8 @@
         <state_interface name="effort"/>
       </joint>
       <transmission name="transmission1">
-        <plugin>transmission_interface/SimpleTransmission</plugin>
+        <!--<plugin>transmission_interface/SimpleTransmission</plugin>-->
+        <plugin>hector_transmission_interface/AdjustableOffsetTransmission</plugin>
         <actuator name="actuator_1" role="actuator_1"/>
         <joint name="joint_1" role="joint_1">
           <mechanical_reduction>2.0</mechanical_reduction>

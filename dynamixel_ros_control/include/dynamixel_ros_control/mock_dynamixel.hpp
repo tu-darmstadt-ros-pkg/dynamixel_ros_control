@@ -322,6 +322,22 @@ public:
     return hardware_error_;
   }
 
+  // Reboot tracking
+  int getRebootCount() const
+  {
+    return reboot_count_;
+  }
+
+  void incrementRebootCount()
+  {
+    reboot_count_++;
+  }
+
+  void resetRebootCount()
+  {
+    reboot_count_ = 0;
+  }
+
   void setCommunicationError(bool enabled)
   {
     comm_error_enabled_ = enabled;
@@ -697,6 +713,7 @@ private:
   // Error state
   uint8_t hardware_error_ = 0;
   bool comm_error_enabled_ = false;
+  int reboot_count_ = 0;  // Tracks how many times this motor has been rebooted
 
   // Indirect addressing configuration
   uint16_t indirect_address_start_ = 0;
@@ -884,6 +901,7 @@ public:
     if (motor->hasCommunicationError())
       return COMM_RX_TIMEOUT;
 
+    motor->incrementRebootCount();
     motor->clearHardwareError();
     if (error)
       *error = 0;

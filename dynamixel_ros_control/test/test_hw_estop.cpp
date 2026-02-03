@@ -621,16 +621,16 @@ TEST_F(HardwareInterfaceTest, EStop_RemainsActiveWhenControllerDeactivationFails
 
   // 8. The key verification: the system didn't crash and is in a safe state.
   // Either e-stop is still active (orange LED) or hardware interface was
-  // deactivated (red LED). Both are safe states.
+  // deactivated (pink LED). Both are safe states.
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    // LED should be either orange (e-stop still active) or red (HW deactivated)
+    // LED should be either orange (e-stop still active) or pink (HW deactivated)
     bool is_orange = (motor->getLedRed() == COLOR_ORANGE_R && motor->getLedGreen() == COLOR_ORANGE_G &&
                       motor->getLedBlue() == COLOR_ORANGE_B);
-    bool is_red = (motor->getLedRed() == COLOR_RED_R && motor->getLedGreen() == COLOR_RED_G &&
-                   motor->getLedBlue() == COLOR_RED_B);
-    EXPECT_TRUE(is_orange || is_red) << "Motor " << (int) id
-                                     << " should be in safe state (orange=e-stop or red=HW deactivated)";
+    bool is_pink = (motor->getLedRed() == COLOR_PINK_R && motor->getLedGreen() == COLOR_PINK_G &&
+                    motor->getLedBlue() == COLOR_PINK_B);
+    EXPECT_TRUE(is_orange || is_pink) << "Motor " << (int) id
+                                      << " should be in safe state (orange=e-stop or pink=HW deactivated)";
   }
 }
 
