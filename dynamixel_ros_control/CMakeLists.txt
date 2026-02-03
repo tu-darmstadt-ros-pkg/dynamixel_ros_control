@@ -142,6 +142,12 @@ if(BUILD_TESTING)
   set_tests_properties(test_hw_lifecycle PROPERTIES TIMEOUT 60)
   target_link_libraries(test_hw_lifecycle ${PROJECT_NAME})
   ament_target_dependencies(test_hw_lifecycle ${HW_TEST_DEPS})
+
+  # Test: Hardware error handling (red LED, e-stop activation, reboot)
+  ament_add_gtest(test_hw_hardware_error test/test_hw_hardware_error.cpp)
+  set_tests_properties(test_hw_hardware_error PROPERTIES TIMEOUT 180)
+  target_link_libraries(test_hw_hardware_error ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_hardware_error ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder

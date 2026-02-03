@@ -68,6 +68,7 @@ private:
   bool setUpLEDWriteManager();
 
   bool isHardwareOk() const;
+  std::vector<std::string> getJointsWithHardwareError() const;
   bool reboot();
 
   bool setTorque(bool do_enable, bool skip_controller_unloading = false, int retries = 5, bool direct_write = false);
@@ -77,6 +78,8 @@ private:
   void updateColorLED(std::string new_state = "");
   void setColorLED(const int& red, const int& green, const int& blue);
   void setColorLED(const std::string& color);
+  void setJointLED(const std::string& joint_name, const std::string& color);
+  void updateErrorLEDs();
   bool activateEStop();
 
   std::unordered_map<std::string, Joint> joints_;

@@ -1,5 +1,5 @@
 # dynamixel_ros_control
-
+![Lint](https://github.com/tu-darmstadt-ros-pkg/dynamixel_ros_control/actions/workflows/lint_build_test.yaml/badge.svg)
 _dynamixel_ros_control_ is a [ROS2](https://www.ros.org/) driver
 for [Robotis Dynamixel](http://www.robotis.us/dynamixel/) actuators. It is based on
 the  [ros2_control](https://control.ros.org/rolling/index.html) framework and implements a hardware interface.
@@ -139,6 +139,7 @@ The onboard LED reflects the current state of the hardware interface:
 * **🟠 Orange** - The software E‑Stop is engaged. All motion commands are suppressed, ensuring the robot cannot move
 * **🔵 Blue** – Hardware interface is **active**, and motors are **torqued on** (controllers can command the joints)
 * **🟢 Green** – Hardware interface is **active**, but motors are **torqued off** (safe for manual movement)
+* **🔴 Red** - Indicates that the actuator is in an hardware error state
 
 ### Mimic Joints
 

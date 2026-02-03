@@ -511,18 +511,43 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_error from " << previous_state.label());
+
   if (isHardwareOk()) {
     return CallbackReturn::SUCCESS;
   }
-  // Hardware reports error
-  if (!reboot_on_hardware_error_) {
-    return CallbackReturn::FAILURE;
+
+  // Hardware error detected - set red LEDs for affected motors and activate e-stop
+  auto joints_with_error = getJointsWithHardwareError();
+  DXL_LOG_ERROR("Hardware error detected in joints: " << iterableToString(joints_with_error));
+
+  {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    // Set red LED for motors with hardware errors
+    updateErrorLEDs();
+    if (!led_write_manager_.write()) {
+      DXL_LOG_WARN("Failed to write error LED colors");
+    }
   }
 
-  get_clock()->sleep_for(rclcpp::Duration(3.0, 0));
-  if (!reboot()) {
-    return CallbackReturn::FAILURE;
+  // Activate e-stop to prevent other actuators from moving
+  // This is safer than returning FAILURE which requires controller_manager restart
+  if (!activateEStop()) {
+    DXL_LOG_ERROR("Failed to activate e-stop during hardware error handling");
   }
+
+  // Attempt reboot if configured
+  if (reboot_on_hardware_error_) {
+    DXL_LOG_INFO("Attempting automatic reboot of motors with hardware errors...");
+    get_clock()->sleep_for(rclcpp::Duration(1, 0));
+    if (reboot()) {
+      DXL_LOG_INFO("Reboot successful, hardware error cleared");
+    } else {
+      DXL_LOG_ERROR("Reboot failed, hardware remains in error state");
+    }
+  }
+
+  // Return SUCCESS to keep the hardware interface running
+  // The e-stop ensures safety while allowing recovery attempts
   return CallbackReturn::SUCCESS;
 }
 
@@ -786,6 +811,17 @@ bool DynamixelHardwareInterface::isHardwareOk() const
   return ok;
 }
 
+std::vector<std::string> DynamixelHardwareInterface::getJointsWithHardwareError() const
+{
+  std::vector<std::string> joints_with_error;
+  for (const auto& [name, joint] : joints_) {
+    if (joint.dynamixel->hardware_error_status != OK) {
+      joints_with_error.push_back(name);
+    }
+  }
+  return joints_with_error;
+}
+
 bool DynamixelHardwareInterface::reboot()
 {
   {
@@ -796,6 +832,37 @@ bool DynamixelHardwareInterface::reboot()
         DXL_LOG_ERROR("Dynamixel '" << name << "' reboot failed.");
         return false;
       }
+    }
+  }
+
+  // Wait for motors to come back online after reboot
+  // Dynamixel motors need time to restart after a reboot command
+  get_clock()->sleep_for(rclcpp::Duration(0, 500000000));  // 500ms
+
+  // Refresh hardware status by performing a read
+  {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    if (!read_manager_.read() || !read_manager_.isOk()) {
+      DXL_LOG_WARN("Failed to read hardware status after reboot, retrying...");
+      get_clock()->sleep_for(rclcpp::Duration(0, 500000000));  // Additional 500ms
+      if (!read_manager_.read() || !read_manager_.isOk()) {
+        DXL_LOG_ERROR("Failed to read hardware status after reboot.");
+        return false;
+      }
+    }
+  }
+
+  // Verify hardware is OK after reboot
+  if (!isHardwareOk()) {
+    DXL_LOG_ERROR("Hardware still reports errors after reboot.");
+    return false;
+  }
+
+  // Release e-stop since hardware error has been resolved
+  if (e_stop_active_) {
+    DXL_LOG_INFO("Releasing e-stop after successful reboot.");
+    if (!setEStop(false)) {
+      DXL_LOG_WARN("Failed to release e-stop after reboot.");
     }
   }
 
@@ -955,10 +1022,7 @@ void DynamixelHardwareInterface::setColorLED(const int& red, const int& green, c
     joint.led_state.green = green;
     joint.led_state.blue = blue;
   }
-  // assumes communication mutex is already locked
-  if (!led_write_manager_.write()) {
-    DXL_LOG_ERROR("Failed to write LED colors.");
-  }
+  // Note: Does NOT write to hardware - caller should handle write after all LED changes
 }
 
 void DynamixelHardwareInterface::setColorLED(const std::string& color)
@@ -972,9 +1036,60 @@ void DynamixelHardwareInterface::setColorLED(const std::string& color)
     setColorLED(COLOR_BLUE_VALUES[0], COLOR_BLUE_VALUES[1], COLOR_BLUE_VALUES[2]);
   } else if (color == COLOR_ORANGE) {
     setColorLED(COLOR_ORANGE_VALUES[0], COLOR_ORANGE_VALUES[1], COLOR_ORANGE_VALUES[2]);
+  } else if (color == COLOR_RED) {
+    setColorLED(COLOR_RED_VALUES[0], COLOR_RED_VALUES[1], COLOR_RED_VALUES[2]);
   } else {
     DXL_LOG_ERROR("Unknown color: " << color);
   }
+}
+
+void DynamixelHardwareInterface::setJointLED(const std::string& joint_name, const std::string& color)
+{
+  auto it = joints_.find(joint_name);
+  if (it == joints_.end()) {
+    DXL_LOG_ERROR("Joint '" << joint_name << "' not found when setting LED");
+    return;
+  }
+
+  int r = 0, g = 0, b = 0;
+  if (color == COLOR_PINK) {
+    r = COLOR_PINK_VALUES[0];
+    g = COLOR_PINK_VALUES[1];
+    b = COLOR_PINK_VALUES[2];
+  } else if (color == COLOR_GREEN) {
+    r = COLOR_GREEN_VALUES[0];
+    g = COLOR_GREEN_VALUES[1];
+    b = COLOR_GREEN_VALUES[2];
+  } else if (color == COLOR_BLUE) {
+    r = COLOR_BLUE_VALUES[0];
+    g = COLOR_BLUE_VALUES[1];
+    b = COLOR_BLUE_VALUES[2];
+  } else if (color == COLOR_ORANGE) {
+    r = COLOR_ORANGE_VALUES[0];
+    g = COLOR_ORANGE_VALUES[1];
+    b = COLOR_ORANGE_VALUES[2];
+  } else if (color == COLOR_RED) {
+    r = COLOR_RED_VALUES[0];
+    g = COLOR_RED_VALUES[1];
+    b = COLOR_RED_VALUES[2];
+  } else {
+    DXL_LOG_ERROR("Unknown color: " << color);
+    return;
+  }
+
+  it->second.led_state.red = r;
+  it->second.led_state.green = g;
+  it->second.led_state.blue = b;
+}
+
+void DynamixelHardwareInterface::updateErrorLEDs()
+{
+  // Set red LED for joints with hardware errors
+  for (const auto& joint_name : getJointsWithHardwareError()) {
+    setJointLED(joint_name, COLOR_RED);
+  }
+  // Note: Does NOT call led_write_manager_.write() - caller must do this
+  // or call this before updateColorLED() which will write all LEDs
 }
 
 void DynamixelHardwareInterface::updateColorLED(std::string new_state)
@@ -993,6 +1108,12 @@ void DynamixelHardwareInterface::updateColorLED(std::string new_state)
     } else {
       setColorLED(COLOR_BLUE);  // Blue = active and torque on
     }
+  }
+  // Override with red for joints that have hardware errors
+  updateErrorLEDs();
+  // Write all LED changes to hardware
+  if (!led_write_manager_.write()) {
+    DXL_LOG_ERROR("Failed to write LED colors.");
   }
 }
 

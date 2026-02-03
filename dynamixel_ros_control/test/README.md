@@ -39,6 +39,7 @@ All mock motors currently simulate **PH Series (model 2020)** behavior:
   - Blue: Active and torque enabled (normal operation)
   - Green: Torque disabled (safe to touch)
   - Orange: E-stop active (emergency stop engaged)
+  - Red: Hardware error detected on this motor
   - Pink: Hardware interface inactive or unconfigured
 
 ### Test Configuration
@@ -131,16 +132,25 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "MockDynamix
 | `IndirectAddressingMultiByteContiguous` | Indirect addressing contiguous bytes |
 | `IndirectAddressingScattered` | Indirect addressing scattered bytes |
 
-### `test_hardware_interface.cpp`
+### Hardware Interface Integration Tests
 
-Integration tests for the hardware interface with the ROS 2 controller manager. Run with:
+Integration tests for the hardware interface with the ROS 2 controller manager. The tests are organized into multiple files by category.
+
+Run all hardware interface tests with:
 ```bash
-colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInterfaceTest"
+colcon test --packages-select dynamixel_ros_control --ctest-args -R "test_hw_"
 ```
 
-## Test Case Overview
+Run a specific test file:
+```bash
+colcon test --packages-select dynamixel_ros_control --ctest-args -R "test_hw_estop"
+```
 
-### Normal Usage Tests
+## Test Files and Test Cases
+
+### `test_hw_normal_usage.cpp`
+
+Normal operation and basic functionality tests.
 
 | Test Name | Description |
 |-----------|-------------|
@@ -148,14 +158,15 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `NormalUsage_FlipperVelocityMode` | Load flipper velocity controller, verify transmission ratios applied |
 | `NormalUsage_ControllerSwitch_ArmPositionToVelocity` | Switch from position to velocity controller mid-operation |
 | `NormalUsage_SimultaneousMovement` | Arm, flipper, and gripper move independently and simultaneously |
-
-### Gripper Tests
-
-| Test Name | Description |
-|-----------|-------------|
+| `RapidControllerSwitch_StressTest` | Rapidly switch controllers without crashes |
 | `Gripper_PositionControl` | Position control of gripper servo (ID 18) |
+| `MotorLimits_PositionLimitRespected` | Motors stop at configured position limits |
+| `StateInterface_PositionVelocityConsistent` | Position and velocity state interfaces are consistent |
+| `SimultaneousOperations_ArmAndFlipperIndependent` | Arm and flipper interfaces operate independently |
 
-### E-Stop Safety Tests
+### `test_hw_estop.cpp`
+
+E-stop (emergency stop) safety feature tests.
 
 | Test Name | Description |
 |-----------|-------------|
@@ -168,7 +179,9 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `EStop_DeactivationRetriesControllerDeactivation` | E-stop deactivation retries controller deactivation if controllers are still active |
 | `EStop_RemainsActiveWhenControllerDeactivationFails` | E-stop remains active if controller deactivation fails during release |
 
-### Torque Control Tests
+### `test_hw_torque.cpp`
+
+Torque enable/disable functionality tests.
 
 | Test Name | Description |
 |-----------|-------------|
@@ -180,14 +193,9 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `Torque_GoalVelocityZeroBeforeReEnable` | Motors stop moving after velocity controller is deactivated via torque disable |
 | `Torque_DeactivatesControllersOnDisable` | Disabling torque deactivates active controllers |
 
-### Safety Tests
+### `test_hw_led.cpp`
 
-| Test Name | Description |
-|-----------|-------------|
-| `Safety_TorqueEnableFailsWhenGoalWriteFails` | Torque enable fails if goal position write fails (prevents jerky motion) |
-| `Safety_NoMovementOnFailedTorqueEnable` | No motor movement occurs on failed torque enable |
-
-### LED Status Tests
+LED status indication tests.
 
 | Test Name | Description |
 |-----------|-------------|
@@ -196,8 +204,11 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `LED_OrangeWhenEStopActive` | Orange LED when e-stop engaged |
 | `LED_PinkWhenHardwareInterfaceInactive` | Pink LED when hardware interface is deactivated (inactive state) |
 | `LED_BluAfterReactivation` | LED returns to blue after hardware interface reactivation |
+| `MockMotor_VerifyPhysicsSimulation` | Verify mock motor physics simulation accuracy |
 
-### Transmission Tests
+### `test_hw_transmission.cpp`
+
+Transmission ratio and calibration offset tests.
 
 | Test Name | Description |
 |-----------|-------------|
@@ -207,38 +218,46 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `TransmissionOffset_JointPositionMatchesExternalMeasurement` | **CRITICAL**: Joint position equals external measurement value after offset calibration |
 | `TransmissionOffset_ResetToZero` | Transmission offsets can be reset to zero |
 
-### Communication Error Tests
+### `test_hw_communication_error.cpp`
+
+Communication error handling and reboot service tests.
 
 | Test Name | Description |
 |-----------|-------------|
 | `CommunicationError_TemporaryErrorRecovery` | System recovers after transient communication error |
 | `CommunicationError_GlobalErrorBlocksOperation` | Global communication error blocks all operations |
-
-### Motor Physics and Limits Tests
-
-| Test Name | Description |
-|-----------|-------------|
-| `MockMotor_VerifyPhysicsSimulation` | Verify mock motor physics simulation accuracy |
-| `MotorLimits_PositionLimitRespected` | Motors stop at configured position limits |
-
-### State Interface Tests
-
-| Test Name | Description |
-|-----------|-------------|
-| `StateInterface_PositionVelocityConsistent` | Position and velocity state interfaces are consistent |
-
-### Controller Management Tests
-
-| Test Name | Description |
-|-----------|-------------|
-| `RapidControllerSwitch_StressTest` | Rapidly switch controllers without crashes |
+| `EdgeCase_ControllerActivationWithCommunicationErrors` | Controller activation behavior under communication errors |
 | `RebootService_ResetsMotors` | Reboot service resets motor state |
 | `RebootService_OnlyRebootsFaultyMotors` | Reboot is only called for motors with hardware errors |
-| `RebootService_RestoresTorqueOnAndBlueLED` | Reboot restores torque ON state and sets LED to blue |
-| `RebootService_RestoresTorqueOffAndGreenLED` | Reboot restores torque OFF state and sets LED to green |
+| `RebootService_RestoresTorqueOnAndBlueLED` | Reboot restores torque ON state (LED pink due to HW deactivation after error) |
+| `RebootService_RestoresTorqueOffAndGreenLED` | Reboot restores torque OFF state (LED pink due to HW deactivation after error) |
 | `RebootService_NoRebootWhenNoErrors` | No reboots occur when no motors have hardware errors |
 
-### Lifecycle Tests
+### `test_hw_hardware_error.cpp`
+
+Hardware error detection, LED indication, and recovery tests.
+
+| Test Name | Description |
+|-----------|-------------|
+| `HardwareError_LEDTurnsRedOnError` | Motor with hardware error gets red LED, others get orange (e-stop) |
+| `HardwareError_EStopActivatedOnError` | E-stop is automatically activated when hardware error detected |
+| `HardwareError_RebootServiceClearsErrorAndReleasesEStop` | Reboot service clears hardware error and releases e-stop |
+| `HardwareError_MultipleMotorsWithErrors` | Multiple motors with errors all get red LEDs |
+| `HardwareError_HardwareInterfaceDoesNotCrash` | Hardware interface continues running after error (on_error returns SUCCESS) |
+| `HardwareError_RebootOnlyAffectedMotors` | Reboot only reboots motors with hardware errors, not all motors |
+
+### `test_hw_safety.cpp`
+
+Safety-critical behavior tests.
+
+| Test Name | Description |
+|-----------|-------------|
+| `Safety_TorqueEnableFailsWhenGoalWriteFails` | Torque enable fails if goal position write fails (prevents jerky motion) |
+| `Safety_NoMovementOnFailedTorqueEnable` | No motor movement occurs on failed torque enable |
+
+### `test_hw_lifecycle.cpp`
+
+Hardware interface lifecycle and service availability tests.
 
 | Test Name | Description |
 |-----------|-------------|
@@ -246,14 +265,9 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `Lifecycle_CalibrationServiceAvailableWhenActive` | Calibration offset adjustment service is available when active |
 | `Lifecycle_EStopTopicSubscribedWhenActive` | E-stop topic subscription is active when hardware interface is active |
 
-### Edge Case Tests
+### `test_hw_combined_state.cpp`
 
-| Test Name | Description |
-|-----------|-------------|
-| `EdgeCase_ControllerActivationWithCommunicationErrors` | Controller activation behavior under communication errors |
-| `SimultaneousOperations_ArmAndFlipperIndependent` | Arm and flipper interfaces operate independently |
-
-### Combined State Tests
+Tests for combined/interacting states (e-stop + torque, calibration during special states).
 
 | Test Name | Description |
 |-----------|-------------|
@@ -276,13 +290,19 @@ colcon test-result --verbose
 # Mock Dynamixel unit tests
 colcon test --packages-select dynamixel_ros_control --ctest-args -R "MockDynamixelTest"
 
-# Hardware Interface integration tests
-colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInterfaceTest"
+# All Hardware Interface integration tests
+colcon test --packages-select dynamixel_ros_control --ctest-args -R "test_hw_"
+
+# Specific test file (e.g., hardware error tests)
+colcon test --packages-select dynamixel_ros_control --ctest-args -R "test_hw_hardware_error"
+
+# E-stop tests only
+colcon test --packages-select dynamixel_ros_control --ctest-args -R "test_hw_estop"
 ```
 
 ### Run Specific Test
 ```bash
-colcon test --packages-select dynamixel_ros_control --ctest-args -R "NormalUsage_ArmPositionMode"
+colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareError_LEDTurnsRedOnError"
 ```
 
 ### Run with Verbose Output
