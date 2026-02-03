@@ -33,7 +33,7 @@ TEST_F(HardwareInterfaceTest, EStop_StopsMovement)
   std::vector<double> positions_before;
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before.push_back(motor->getCurrentPosition());
+    positions_before.push_back(motor->getJointPosition());
   }
 
   // 2. Trigger E-Stop
@@ -121,7 +121,7 @@ TEST_F(HardwareInterfaceTest, EStop_MultipleCommandsBlocked)
   std::vector<double> positions_at_estop;
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_at_estop.push_back(motor->getCurrentPosition());
+    positions_at_estop.push_back(motor->getJointPosition());
   }
 
   // 4. Verify LED is orange
@@ -145,7 +145,7 @@ TEST_F(HardwareInterfaceTest, EStop_MultipleCommandsBlocked)
   // 6. Verify motors haven't moved significantly (e-stop still active)
   for (size_t i = 0; i < 7; ++i) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    EXPECT_NEAR(motor->getCurrentPosition(), positions_at_estop[i], 0.15)
+    EXPECT_NEAR(motor->getJointPosition(), positions_at_estop[i], 0.15)
         << "Motor " << (ARM_JOINT_1_ID + i) << " should not move during e-stop";
   }
 
@@ -205,7 +205,7 @@ TEST_F(HardwareInterfaceTest, EStop_VelocityControllerSwitchesToPositionMode)
   std::map<uint8_t, double> positions_before_estop;
   for (uint8_t id : flipper_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before_estop[id] = motor->getCurrentPosition();
+    positions_before_estop[id] = motor->getJointPosition();
   }
 
   // 3. Trigger E-Stop
@@ -236,7 +236,7 @@ TEST_F(HardwareInterfaceTest, EStop_VelocityControllerSwitchesToPositionMode)
   std::this_thread::sleep_for(500ms);  // Allow physics to settle
   for (uint8_t id : flipper_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    double position_change = std::abs(motor->getCurrentPosition() - positions_before_estop[id]);
+    double position_change = std::abs(motor->getJointPosition() - positions_before_estop[id]);
     // Allow some tolerance for stopping distance
     EXPECT_LT(position_change, 0.5) << "Flipper " << (int) id << " should have stopped near e-stop position";
   }
@@ -289,7 +289,7 @@ TEST_F(HardwareInterfaceTest, EStop_GoalPositionWriteFailurePreventsActivation)
                                   ARM_JOINT_5_ID, ARM_JOINT_6_ID, ARM_JOINT_7_ID};
   for (uint8_t id : arm_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before_estop[id] = motor->getCurrentPosition();
+    positions_before_estop[id] = motor->getJointPosition();
   }
 
   // 2. Inject global communication error (simulates goal position write failure)
@@ -317,7 +317,7 @@ TEST_F(HardwareInterfaceTest, EStop_GoalPositionWriteFailurePreventsActivation)
   // Even though commands weren't being written, motors should hold their position.
   for (uint8_t id : arm_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    double position_change = std::abs(motor->getCurrentPosition() - positions_before_estop[id]);
+    double position_change = std::abs(motor->getJointPosition() - positions_before_estop[id]);
     EXPECT_LT(position_change, 0.2) << "Motor " << (int) id
                                     << " should not move significantly during comm error + e-stop";
   }
@@ -369,7 +369,7 @@ TEST_F(HardwareInterfaceTest, EStop_ReactivationMaintainsPositionModeUntilContro
                                   ARM_JOINT_5_ID, ARM_JOINT_6_ID, ARM_JOINT_7_ID};
   for (uint8_t id : arm_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_during_estop[id] = motor->getCurrentPosition();
+    positions_during_estop[id] = motor->getJointPosition();
   }
 
   // 3. Release E-Stop
@@ -382,7 +382,7 @@ TEST_F(HardwareInterfaceTest, EStop_ReactivationMaintainsPositionModeUntilContro
   // Allow small tolerance for physics simulation settling
   for (uint8_t id : arm_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    double position_change = std::abs(motor->getCurrentPosition() - positions_during_estop[id]);
+    double position_change = std::abs(motor->getJointPosition() - positions_during_estop[id]);
     EXPECT_LT(position_change, 0.15) << "Motor " << (int) id
                                      << " should maintain position after e-stop release (no controller active)";
   }
@@ -412,7 +412,7 @@ TEST_F(HardwareInterfaceTest, EStop_ReactivationMaintainsPositionModeUntilContro
   // Verify motors moved to new position
   for (uint8_t id : arm_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    EXPECT_NEAR(motor->getCurrentPosition(), 0.8, 0.15)
+    EXPECT_NEAR(motor->getJointPosition(), 0.8, 0.15)
         << "Motor " << (int) id << " should reach new target after controller reload";
   }
 }

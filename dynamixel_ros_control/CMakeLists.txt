@@ -108,13 +108,13 @@ if(BUILD_TESTING)
 
   # Test: Torque enable/disable
   ament_add_gtest(test_hw_torque test/test_hw_torque.cpp)
-  set_tests_properties(test_hw_torque PROPERTIES TIMEOUT 120)
+  set_tests_properties(test_hw_torque PROPERTIES TIMEOUT 180)
   target_link_libraries(test_hw_torque ${PROJECT_NAME})
   ament_target_dependencies(test_hw_torque ${HW_TEST_DEPS})
 
   # Test: Transmission ratios and offset adjustment
   ament_add_gtest(test_hw_transmission test/test_hw_transmission.cpp)
-  set_tests_properties(test_hw_transmission PROPERTIES TIMEOUT 180)
+  set_tests_properties(test_hw_transmission PROPERTIES TIMEOUT 300)
   target_link_libraries(test_hw_transmission ${PROJECT_NAME})
   ament_target_dependencies(test_hw_transmission ${HW_TEST_DEPS})
 

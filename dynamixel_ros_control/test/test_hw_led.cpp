@@ -114,6 +114,112 @@ TEST_F(HardwareInterfaceTest, MockMotor_VerifyPhysicsSimulation)
   EXPECT_GT(motor->getCurrentPosition(), 0.0) << "Motor should have moved toward positive goal";
 }
 
+TEST_F(HardwareInterfaceTest, LED_PinkWhenHardwareInterfaceInactive)
+{
+  // Test that LED is pink when hardware interface is deactivated (inactive state)
+  // Pink indicates the hardware interface is not active (safe but not operational)
+
+  // 1. Create set_hardware_component_state client
+  auto hw_state_client =
+      tester_node_->create_test_client<SetHardwareComponentState>("/controller_manager/set_hardware_component_state");
+  ASSERT_TRUE(hw_state_client->wait_for_service(*executor_, 5s))
+      << "set_hardware_component_state service not available";
+
+  // 2. Verify initial state - LED should be blue (active, torque on)
+  std::this_thread::sleep_for(300ms);
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    ASSERT_NE(motor, nullptr);
+    EXPECT_EQ(motor->getLedBlue(), COLOR_BLUE_B) << "Motor " << (int) id << " LED should be blue initially";
+  }
+
+  // 3. Deactivate the hardware interface
+  auto request = std::make_shared<SetHardwareComponentState::Request>();
+  request->name = "athena_arm_interface";
+  request->target_state.id = lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE;
+  request->target_state.label = "inactive";
+
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 10s;
+  options.response_timeout = 10s;
+  auto resp = hector_testing_utils::call_service<SetHardwareComponentState>(hw_state_client->get(), request, *executor_,
+                                                                            options);
+
+  ASSERT_NE(resp, nullptr) << "Service call failed";
+  EXPECT_TRUE(resp->ok) << "Hardware interface deactivation should succeed";
+
+  // 4. Wait for LED update
+  std::this_thread::sleep_for(500ms);
+
+  // 5. Verify LED is pink (inactive state)
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    EXPECT_EQ(motor->getLedRed(), COLOR_PINK_R)
+        << "Motor " << (int) id << " LED should be pink (R) when HW interface is inactive";
+    EXPECT_EQ(motor->getLedGreen(), COLOR_PINK_G)
+        << "Motor " << (int) id << " LED should be pink (G) when HW interface is inactive";
+    EXPECT_EQ(motor->getLedBlue(), COLOR_PINK_B)
+        << "Motor " << (int) id << " LED should be pink (B) when HW interface is inactive";
+  }
+}
+
+TEST_F(HardwareInterfaceTest, LED_BluAfterReactivation)
+{
+  // Test that LED returns to blue after hardware interface is reactivated
+
+  // 1. Create clients
+  auto hw_state_client =
+      tester_node_->create_test_client<SetHardwareComponentState>("/controller_manager/set_hardware_component_state");
+  ASSERT_TRUE(hw_state_client->wait_for_service(*executor_, 5s));
+
+  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
+
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 10s;
+  options.response_timeout = 10s;
+
+  // 2. Deactivate the hardware interface
+  auto deactivate_request = std::make_shared<SetHardwareComponentState::Request>();
+  deactivate_request->name = "athena_arm_interface";
+  deactivate_request->target_state.id = lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE;
+  deactivate_request->target_state.label = "inactive";
+
+  auto resp = hector_testing_utils::call_service<SetHardwareComponentState>(hw_state_client->get(), deactivate_request,
+                                                                            *executor_, options);
+  ASSERT_NE(resp, nullptr);
+  ASSERT_TRUE(resp->ok) << "Deactivation should succeed";
+
+  std::this_thread::sleep_for(300ms);
+
+  // Verify LED is pink
+  auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  EXPECT_EQ(motor->getLedRed(), COLOR_PINK_R) << "LED should be pink when inactive";
+
+  // 3. Reactivate the hardware interface
+  auto activate_request = std::make_shared<SetHardwareComponentState::Request>();
+  activate_request->name = "athena_arm_interface";
+  activate_request->target_state.id = lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE;
+  activate_request->target_state.label = "active";
+
+  resp = hector_testing_utils::call_service<SetHardwareComponentState>(hw_state_client->get(), activate_request,
+                                                                       *executor_, options);
+  ASSERT_NE(resp, nullptr);
+  EXPECT_TRUE(resp->ok) << "Reactivation should succeed";
+
+  std::this_thread::sleep_for(500ms);
+
+  // 4. Verify LED is blue (active state with torque on - torque_on_startup: true)
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    EXPECT_EQ(motor->getLedRed(), COLOR_BLUE_R) << "Motor " << (int) id << " LED should be blue (R) after reactivation";
+    EXPECT_EQ(motor->getLedGreen(), COLOR_BLUE_G)
+        << "Motor " << (int) id << " LED should be blue (G) after reactivation";
+    EXPECT_EQ(motor->getLedBlue(), COLOR_BLUE_B)
+        << "Motor " << (int) id << " LED should be blue (B) after reactivation";
+  }
+}
+
 }  // namespace dynamixel_ros_control::test
 
 int main(int argc, char** argv)

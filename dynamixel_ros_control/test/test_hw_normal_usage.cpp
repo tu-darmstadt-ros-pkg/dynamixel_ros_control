@@ -44,7 +44,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_ArmPositionMode)
   // 5. Verify motors reached target position
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    double current_pos = motor->getCurrentPosition();
+    double current_pos = motor->getJointPosition();
     EXPECT_NEAR(current_pos, target_position, 0.1) << "Motor ID " << (int) id << " did not reach target position. "
                                                    << "Expected: " << target_position << ", Got: " << current_pos;
   }
@@ -66,7 +66,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_FlipperVelocityMode)
   std::map<uint8_t, double> initial_positions;
   for (uint8_t id : flipper_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    initial_positions[id] = motor->getCurrentPosition();
+    initial_positions[id] = motor->getJointPosition();
   }
 
   // 4. Send velocity command
@@ -101,7 +101,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_FlipperVelocityMode)
 
   for (uint8_t id : flipper_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    double current_pos = motor->getCurrentPosition();
+    double current_pos = motor->getJointPosition();
     double position_change = current_pos - initial_positions[id];
 
     // Verify position changed in expected direction
@@ -170,7 +170,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_ControllerSwitch_ArmPositionToVelocity
   std::vector<double> positions_before;
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before.push_back(motor->getCurrentPosition());
+    positions_before.push_back(motor->getJointPosition());
   }
 
   vel_pub->publish(vel_cmd);
@@ -179,7 +179,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_ControllerSwitch_ArmPositionToVelocity
   // Verify positions changed (motors are moving)
   for (size_t i = 0; i < 7; ++i) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    double pos_change = motor->getCurrentPosition() - positions_before[i];
+    double pos_change = motor->getJointPosition() - positions_before[i];
     EXPECT_GT(pos_change, 0.1) << "Motor " << (ARM_JOINT_1_ID + i) << " should have moved in velocity mode";
   }
 }
@@ -213,14 +213,13 @@ TEST_F(HardwareInterfaceTest, NormalUsage_SimultaneousMovement)
   // 3. Record initial states
   std::vector<double> arm_initial, flipper_initial;
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    arm_initial.push_back(dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id)->getCurrentPosition());
+    arm_initial.push_back(dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id)->getJointPosition());
   }
   for (uint8_t id : {FLIPPER_FL_ID, FLIPPER_FR_ID, FLIPPER_BL_ID, FLIPPER_BR_ID}) {
-    flipper_initial.push_back(
-        dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id)->getCurrentPosition());
+    flipper_initial.push_back(dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id)->getJointPosition());
   }
   double gripper_initial =
-      dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID)->getCurrentPosition();
+      dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID)->getJointPosition();
 
   // 4. Send commands to all
   std_msgs::msg::Float64MultiArray arm_cmd, flipper_cmd, gripper_cmd;
@@ -238,18 +237,18 @@ TEST_F(HardwareInterfaceTest, NormalUsage_SimultaneousMovement)
   // 6. Verify all moved
   for (size_t i = 0; i < 7; ++i) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    EXPECT_NE(motor->getCurrentPosition(), arm_initial[i]) << "Arm joint " << i << " should have moved";
+    EXPECT_NE(motor->getJointPosition(), arm_initial[i]) << "Arm joint " << i << " should have moved";
   }
 
   size_t idx = 0;
   for (uint8_t id : {FLIPPER_FL_ID, FLIPPER_FR_ID, FLIPPER_BL_ID, FLIPPER_BR_ID}) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    EXPECT_NE(motor->getCurrentPosition(), flipper_initial[idx]) << "Flipper " << (int) id << " should have moved";
+    EXPECT_NE(motor->getJointPosition(), flipper_initial[idx]) << "Flipper " << (int) id << " should have moved";
     idx++;
   }
 
   auto gripper_motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID);
-  EXPECT_NE(gripper_motor->getCurrentPosition(), gripper_initial) << "Gripper should have moved";
+  EXPECT_NE(gripper_motor->getJointPosition(), gripper_initial) << "Gripper should have moved";
 }
 
 TEST_F(HardwareInterfaceTest, RapidControllerSwitch_StressTest)
@@ -315,7 +314,7 @@ TEST_F(HardwareInterfaceTest, Gripper_PositionControl)
   auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID);
   ASSERT_NE(motor, nullptr) << "Gripper motor not found";
 
-  double initial_pos = motor->getCurrentPosition();
+  double initial_pos = motor->getJointPosition();
 
   // Send position command
   auto pub =
@@ -336,7 +335,7 @@ TEST_F(HardwareInterfaceTest, Gripper_PositionControl)
   std::this_thread::sleep_for(2s);
 
   // Verify gripper moved
-  double final_pos = motor->getCurrentPosition();
+  double final_pos = motor->getJointPosition();
   EXPECT_NEAR(final_pos, target, 0.2) << "Gripper should have moved to target. Initial: " << initial_pos
                                       << ", Final: " << final_pos;
 }
@@ -371,8 +370,7 @@ TEST_F(HardwareInterfaceTest, MotorLimits_PositionLimitRespected)
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
     ASSERT_NE(motor, nullptr) << "Motor " << (int) id << " should still exist";
     // Motor should have moved in positive direction
-    EXPECT_GT(motor->getCurrentPosition(), 0.0)
-        << "Motor " << (int) id << " should have moved toward positive position";
+    EXPECT_GT(motor->getJointPosition(), 0.0) << "Motor " << (int) id << " should have moved toward positive position";
   }
 }
 
@@ -402,11 +400,11 @@ TEST_F(HardwareInterfaceTest, StateInterface_PositionVelocityConsistent)
   std::this_thread::sleep_for(std::chrono::duration<double>(dt));
 
   auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
-  double pos1 = motor->getCurrentPosition();
+  double pos1 = motor->getJointPosition();
 
   std::this_thread::sleep_for(std::chrono::duration<double>(dt));
 
-  double pos2 = motor->getCurrentPosition();
+  double pos2 = motor->getJointPosition();
 
   // Velocity should be approximately (pos2 - pos1) / dt
   double approx_velocity = (pos2 - pos1) / dt;
@@ -452,7 +450,7 @@ TEST_F(HardwareInterfaceTest, SimultaneousOperations_ArmAndFlipperIndependent)
   std::map<uint8_t, double> flipper_positions_before;
   for (uint8_t id : flipper_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    flipper_positions_before[id] = motor->getCurrentPosition();
+    flipper_positions_before[id] = motor->getJointPosition();
   }
 
   // 3. Disable torque on ARM only (simulating arm-specific issue)
@@ -481,7 +479,7 @@ TEST_F(HardwareInterfaceTest, SimultaneousOperations_ArmAndFlipperIndependent)
   bool flipper_moved = false;
   for (uint8_t id : flipper_ids) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    if (std::abs(motor->getCurrentPosition() - flipper_positions_before[id]) > 0.1) {
+    if (std::abs(motor->getJointPosition() - flipper_positions_before[id]) > 0.1) {
       flipper_moved = true;
       break;
     }

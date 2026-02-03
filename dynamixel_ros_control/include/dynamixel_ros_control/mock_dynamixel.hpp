@@ -362,9 +362,17 @@ public:
   }
 
   // Physics state access (for testing)
+  // Returns the actuator position (internal position without homing offset)
   double getCurrentPosition() const
   {
     return current_position_;
+  }
+  // Returns the joint position (actuator position + homing offset, as reported by Present_Position register)
+  double getJointPosition() const
+  {
+    int32_t homing_offset_ticks = (homing_offset_addr_ > 0) ? read4ByteSigned(homing_offset_addr_) : 0;
+    double homing_offset_rad = static_cast<double>(homing_offset_ticks) * rad_per_tick_;
+    return current_position_ + homing_offset_rad;
   }
   double getCurrentVelocity() const
   {
@@ -501,8 +509,11 @@ private:
       return;
 
     // Get goal position in radians
+    // Goal Position register includes homing offset, so we need to subtract it
+    // to get the actual target position (same as present_position behavior)
     int32_t goal_ticks = read4ByteSigned(goal_position_addr_);
-    double goal_pos = static_cast<double>(goal_ticks) * rad_per_tick_;
+    int32_t homing_offset_ticks = (homing_offset_addr_ > 0) ? read4ByteSigned(homing_offset_addr_) : 0;
+    double goal_pos = static_cast<double>(goal_ticks - homing_offset_ticks) * rad_per_tick_;
 
     // Enforce position limits only in Position mode (not Extended Position mode)
     // Only apply limits if they have been explicitly set (i.e., not both 0)

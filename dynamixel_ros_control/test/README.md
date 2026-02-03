@@ -39,7 +39,7 @@ All mock motors currently simulate **PH Series (model 2020)** behavior:
   - Blue: Active and torque enabled (normal operation)
   - Green: Torque disabled (safe to touch)
   - Orange: E-stop active (emergency stop engaged)
-  - Red: Hardware error or inactive
+  - Pink: Hardware interface inactive or unconfigured
 
 ### Test Configuration
 
@@ -175,6 +175,10 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `Torque_DisableTorqueChangesLEDToGreen` | Disabling torque sets LED green (safe to touch) |
 | `Torque_EnableTorqueChangesLEDToBlue` | Enabling torque sets LED blue (active) |
 | `Torque_CommandsNotExecutedWhenTorqueOff` | Motors don't move when torque is disabled |
+| `Torque_OnStartupVerification` | Verifies torque_on_startup parameter enables torque on hardware activation |
+| `Torque_GoalPositionUpdatedBeforeReEnable` | Motors stay at previous goal position after torque cycle (goal persists in motor) |
+| `Torque_GoalVelocityZeroBeforeReEnable` | Motors stop moving after velocity controller is deactivated via torque disable |
+| `Torque_DeactivatesControllersOnDisable` | Disabling torque deactivates active controllers |
 
 ### Safety Tests
 
@@ -190,6 +194,8 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `LED_BlueWhenActiveAndTorqueOn` | Blue LED when hardware active and torque enabled |
 | `LED_GreenWhenTorqueOff` | Green LED when torque disabled |
 | `LED_OrangeWhenEStopActive` | Orange LED when e-stop engaged |
+| `LED_PinkWhenHardwareInterfaceInactive` | Pink LED when hardware interface is deactivated (inactive state) |
+| `LED_BluAfterReactivation` | LED returns to blue after hardware interface reactivation |
 
 ### Transmission Tests
 
@@ -198,6 +204,8 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 | `Transmission_FlipperVelocityReduction` | Flipper velocity scaled by transmission ratio (±2.0x) |
 | `Transmission_FlipperPositionReduction` | Flipper position scaled by transmission ratio |
 | `TransmissionOffset_AdjustFlipperOffset` | Runtime calibration offset adjustment via service |
+| `TransmissionOffset_JointPositionMatchesExternalMeasurement` | **CRITICAL**: Joint position equals external measurement value after offset calibration |
+| `TransmissionOffset_ResetToZero` | Transmission offsets can be reset to zero |
 
 ### Communication Error Tests
 
@@ -225,6 +233,10 @@ colcon test --packages-select dynamixel_ros_control --ctest-args -R "HardwareInt
 |-----------|-------------|
 | `RapidControllerSwitch_StressTest` | Rapidly switch controllers without crashes |
 | `RebootService_ResetsMotors` | Reboot service resets motor state |
+| `RebootService_OnlyRebootsFaultyMotors` | Reboot is only called for motors with hardware errors |
+| `RebootService_RestoresTorqueOnAndBlueLED` | Reboot restores torque ON state and sets LED to blue |
+| `RebootService_RestoresTorqueOffAndGreenLED` | Reboot restores torque OFF state and sets LED to green |
+| `RebootService_NoRebootWhenNoErrors` | No reboots occur when no motors have hardware errors |
 
 ### Lifecycle Tests
 

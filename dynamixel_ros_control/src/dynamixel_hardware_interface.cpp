@@ -905,7 +905,7 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify(const std::vector<std::
     joints_[name].resetGoalState();
   }
 
-  // Write goal positions (will only write for the values belonging to the active command interfaces!)
+  // Write goal values
   if (!control_write_manager_.write() || !control_write_manager_.isOk() || !isHardwareOk()) {
     DXL_LOG_ERROR("[resetGoalStateAndVerify] Failed to write reset goal values.");
     return false;

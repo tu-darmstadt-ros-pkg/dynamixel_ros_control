@@ -773,12 +773,14 @@ TEST_F(MockDynamixelTest, HomingOffsetAppliedToPresentPosition)
   EXPECT_EQ(motor->getHomingOffset(), homing_offset);
 
   // Enable torque and set a goal position
+  // Goal Position is in the same coordinate system as Present Position (includes homing offset)
+  // So to keep the motor at raw position 0, we need to set Goal = homing_offset
   motor->write1Byte(ADDR_OPERATING_MODE, 3);
   motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-  motor->write4Byte(560, 10000);             // profile_velocity
-  motor->write4Byte(ADDR_GOAL_POSITION, 0);  // Goal is 0
+  motor->write4Byte(560, 10000);                         // profile_velocity
+  motor->write4Byte(ADDR_GOAL_POSITION, homing_offset);  // Goal = homing_offset to stay at raw 0
 
-  // Motor's actual position is 0, but present_position should include homing offset
+  // Motor's actual position is 0, and present_position = actual + homing_offset
   motor->update(0.01);
 
   // Present position = actual position + homing offset
@@ -800,8 +802,10 @@ TEST_F(MockDynamixelTest, HomingOffsetNegative)
   EXPECT_EQ(motor->getHomingOffset(), homing_offset);
 
   // Simulate one update to write present values
+  // Set goal = homing_offset to keep motor at raw position 0
   motor->write1Byte(ADDR_OPERATING_MODE, 3);
   motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
+  motor->write4Byte(ADDR_GOAL_POSITION, homing_offset);  // Goal = homing_offset to stay at raw 0
   motor->update(0.001);
 
   // Present position should be actual (0) + homing_offset (-5000) = -5000

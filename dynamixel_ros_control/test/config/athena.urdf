@@ -1651,6 +1651,7 @@
       <param name="registers.led_blue">255</param>
       <param name="position_control_mode">current_based_position</param>
       <command_interface name="position"/>
+      <command_interface name="velocity"/>
       <command_interface name="current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
