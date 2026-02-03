@@ -7,6 +7,7 @@
 
 namespace dynamixel_ros_control {
 
+/// @brief Dynamixel operating modes (protocol 2.0).
 enum ControlMode
 {
   CURRENT = 0,
@@ -18,17 +19,19 @@ enum ControlMode
   UNDEFINED = 255
 };
 
+/// @brief Hardware error status flags (can be combined).
 enum HardwareErrorStatus
 {
   OK = 0,
-  VOLTAGE_ERROR = 1,            // 2^0
-  HALL_SENSOR_ERROR = 2,        // 2^1
-  OVERHEATING_ERROR = 4,        // 2^2
-  MOTOR_ENCODER_ERROR = 8,      // 2^3
-  ELECTRICAL_SHOCK_ERROR = 16,  // 2^4
-  OVERLOAD_ERROR = 32,          // 2^5
+  VOLTAGE_ERROR = 1,
+  HALL_SENSOR_ERROR = 2,
+  OVERHEATING_ERROR = 4,
+  MOTOR_ENCODER_ERROR = 8,
+  ELECTRICAL_SHOCK_ERROR = 16,
+  OVERLOAD_ERROR = 32,
 };
 
+// Common register names
 constexpr char DXL_REGISTER_CMD_TORQUE[] = "torque_enable";
 constexpr char DXL_REGISTER_CMD_POSITION[] = "goal_position";
 constexpr char DXL_REGISTER_CMD_VELOCITY[] = "goal_velocity";
@@ -44,23 +47,31 @@ constexpr char DXL_REGISTER_LED_RED[] = "led_red";
 constexpr char DXL_REGISTER_LED_GREEN[] = "led_green";
 constexpr char DXL_REGISTER_LED_BLUE[] = "led_blue";
 
+/// @brief Convert string to ControlMode enum.
 ControlMode stringToControlMode(const std::string& str);
 
+/**
+ * @brief Represents a single Dynamixel motor.
+ *
+ * Provides high-level access to motor registers with automatic unit conversion.
+ * Values are converted between Dynamixel counts and SI units (radians, rad/s, etc.)
+ * based on the motor's control table.
+ */
 class Dynamixel
 {
 public:
   Dynamixel(uint8_t id, DynamixelDriver& driver);
 
-  /**
-   * Ping motor and load control table
-   * @return
-   */
+  /// @brief Ping the motor and load its control table based on model number.
   bool connect();
 
+  /// @brief Check if the motor responds to ping.
   [[nodiscard]] bool ping() const;
+
+  /// @brief Reboot the motor (clears hardware errors, resets torque to off).
   bool reboot() const;
 
-  // Register access
+  // Register access (with automatic unit conversion)
   bool writeRegister(const std::string& register_name, const std::string& value) const;
   bool writeRegister(const std::string& register_name, double value) const;
   bool writeRegister(const std::string& register_name, bool value) const;
@@ -72,16 +83,10 @@ public:
   bool readRegister(const std::string& register_name, int32_t& value_out) const;
   bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const;
 
-  /**
-   * @brief Reads a register first. If the read value matches the desired value,
-   * no write operation is performed. Otherwise, the desired value is written.
-   * @param address Target address
-   * @param data_length Data length to write
-   * @param value Data to write
-   * @return True, if the address contains the desired value
-   */
+  /// @brief Read register first; only write if value differs. Reduces bus traffic.
   bool readWriteRegister(uint16_t address, uint8_t data_length, int32_t value) const;
 
+  /// @brief Template version of readWriteRegister for named registers.
   template <typename T>
   bool readWriteRegister(std::string register_name, T value) const
   {
@@ -97,27 +102,38 @@ public:
     return true;
   }
 
+  /// @brief Write control mode register (optionally disabling torque first).
   bool writeControlMode(ControlMode mode, bool disable_torque = false) const;
 
-  // Value conversion functions
+  // Unit conversion
   [[nodiscard]] double dxlValueToUnit(const std::string& register_name, int32_t value) const;
   [[nodiscard]] bool dxlValueToBool(const std::string& register_name, int32_t value) const;
   [[nodiscard]] int32_t unitToDxlValue(const std::string& register_name, double unit_value) const;
   [[nodiscard]] int32_t boolToDxlValue(const std::string& register_name, bool b) const;
 
+  /// @brief Check if a register exists in this motor's control table.
   [[nodiscard]] bool registerAvailable(const std::string& register_name) const;
+
+  /// @brief Get control table item for a register.
   [[nodiscard]] const ControlTableItem& getItem(const std::string& name) const;
+
   [[nodiscard]] uint8_t getId() const;
   [[nodiscard]] unsigned int getIdInt() const;
   [[nodiscard]] uint16_t getModelNumber() const;
 
+  /// @brief Configure indirect addressing for a register.
   bool setIndirectAddress(unsigned int indirect_address_index, const std::string& register_name,
                           uint16_t& indirect_data_address) const;
 
+  /// @brief Get human-readable description of current hardware error.
   [[nodiscard]] std::string getHardwareErrorStatusString() const;
-  int32_t hardware_error_status{OK};
 
+  int32_t hardware_error_status{OK};  ///< Last read hardware error status.
+
+  /// @brief Set initial register values to write on connect.
   void setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values);
+
+  /// @brief Get configured initial register values.
   const std::unordered_map<std::string, std::string>& getInitialRegisterValues() const;
 
 private:
@@ -131,7 +147,7 @@ private:
   uint8_t id_;
   uint16_t model_number_{0};
 
-  std::unordered_map<std::string, std::string> initial_values_;  // register to value
+  std::unordered_map<std::string, std::string> initial_values_;
 };
 
 }  // namespace dynamixel_ros_control

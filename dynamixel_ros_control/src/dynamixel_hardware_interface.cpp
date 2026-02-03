@@ -120,17 +120,10 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
         std::find(mimic_joint_names.begin(), mimic_joint_names.end(), joint_info.name) != mimic_joint_names.end())
       continue;
     if (use_dummy) {
-      // We need to know ID and Model Number to register the dummy
-      // But Joint::loadConfiguration parses the ID.
-      // We can peek the ID from hardware parameters of the joint?
-      // Actually Joint::loadConfiguration gets 'joint_info'.
+      // Register mock motor before joint configuration (needs ID and model number)
       int id_val;
       if (getParameter(joint_info.parameters, "id", id_val)) {
-        // Model Number is harder, we might default it or read from param
-        // For now assume a default or read 'model_number' param if exists?
-        // Or can we assume H42-20-S300-R (2020) from the user request example?
-        // Let's rely on 'model_number' param if present, else default.
-        int model_number = 2020;
+        int model_number = 2020;  // Default to PH series
         getParameter(joint_info.parameters, "model_number", model_number, 2020);
         driver_.addDummyMotor(static_cast<uint8_t>(id_val), static_cast<uint16_t>(model_number));
       }
@@ -467,7 +460,7 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     return hardware_interface::return_type::ERROR;
   }
 
-  // extract all joints that need to be reset // TODO: refactor
+  // TODO: refactor - extract all joints that need to be reset
   std::vector<std::string> joints_to_reset;
   for (const auto& full_interface_name : start_interfaces) {
     std::string joint_name;
@@ -502,9 +495,9 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     }
   }
 
-  first_read_successful_ = false;  // force second reset in read // TODO: perform 2nd reset here
+  first_read_successful_ = false;  // TODO: perform 2nd reset here instead of in read()
 
-  mode_switch_failed_ = false;  // mark as successful
+  mode_switch_failed_ = false;
   return hardware_interface::return_type::OK;
 }
 

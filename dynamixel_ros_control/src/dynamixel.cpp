@@ -145,7 +145,7 @@ bool Dynamixel::readRegister(const std::string& register_name, int32_t& value_ou
 {
   const ControlTableItem* item;
   try {
-    item = &getItem(register_name);  // TODO why is this different?
+    item = &getItem(register_name);
   }
   catch (const std::out_of_range&) {
     return false;
@@ -270,9 +270,9 @@ const std::unordered_map<std::string, std::string>& Dynamixel::getInitialRegiste
 void Dynamixel::indirectIndexToAddresses(const unsigned int indirect_address_index, uint16_t& indirect_address,
                                          uint16_t& indirect_data_address) const
 {
-  const IndirectAddressInfo* info;
+  const IndirectAddressInfo* info = nullptr;
   unsigned int total_count = 0;
-  unsigned int local_index;  // TODO ensure initialization
+  unsigned int local_index = 0;
   for (const IndirectAddressInfo& i : control_table_->getIndirectAddressInfo()) {
     total_count += i.count;
     if (indirect_address_index < total_count) {

@@ -67,7 +67,7 @@ bool DynamixelDriver::loadSeriesMapping()
     return false;
   }
   for (YAML::const_iterator it = config.begin(); it != config.end(); ++it) {
-    // TODO check if types are valid
+    // TODO: check if types are valid
     auto model_number = it->first.as<uint16_t>();
     auto series = it->second.as<std::string>();
     model_number_to_series_.emplace(model_number, series);
@@ -79,7 +79,7 @@ ControlTable* DynamixelDriver::readControlTable(std::string series)
 {
   ControlTable table;
   auto [entry, success] = series_to_control_table_.emplace(series, table);
-  ControlTable* table_ptr = &entry->second;  // TODO avoid raw pointer!
+  ControlTable* table_ptr = &entry->second;  // TODO: avoid raw pointer
   const std::string path = package_path_ + "/devices/models/" + series + ".yaml";
   if (!entry->second.loadFromYaml(path)) {
     DXL_LOG_ERROR("Failed to read control table for '" << series << "'");

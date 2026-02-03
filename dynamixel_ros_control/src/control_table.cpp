@@ -109,7 +109,7 @@ bool ControlTable::loadControlTable(const YAML::Node& node)
   for (const std::string& entry_str : control_table_entries) {
     ControlTableItem entry;
     if (entry.loadFromString(entry_str)) {
-      control_table_.emplace(entry.name(), entry);  // TODO prevent copy?
+      control_table_.emplace(entry.name(), entry);  // TODO: prevent copy
     } else {
       DXL_LOG_ERROR("Failed to load control table entry '" << entry_str << "'.");
       success = false;

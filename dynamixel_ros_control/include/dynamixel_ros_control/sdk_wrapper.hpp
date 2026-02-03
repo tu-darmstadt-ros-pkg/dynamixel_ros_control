@@ -44,23 +44,17 @@ public:
 class RealPortHandler : public PortHandler
 {
 public:
-  RealPortHandler(const char* port_name)
+  explicit RealPortHandler(const char* port_name)
   {
     handler_ = dynamixel::PortHandler::getPortHandler(port_name);
   }
 
-  // Allow constructing from existing raw pointer (takes ownership)
   explicit RealPortHandler(dynamixel::PortHandler* handler)
       : handler_(handler)
   {}
 
   ~RealPortHandler() override
   {
-    // The SDK's getPortHandler returns a singleton/managed pointer,
-    // but usually in C++ wrapper we might not want to delete it if the SDK manages it.
-    // However, typical usage is user deletes it.
-    // Let's assume we manage it if we created it via factory.
-    // Actually, SDK factory returns `new PortHandlerLinux`.
     if (handler_)
       delete handler_;
   }
@@ -137,19 +131,17 @@ public:
 };
 
 /**
- * @brief Real implementation of PacketHandler
+ * @brief Real implementation of PacketHandler using dynamixel_sdk
  */
 class RealPacketHandler : public PacketHandler
 {
 public:
-  RealPacketHandler(float protocol_version)
+  explicit RealPacketHandler(float protocol_version)
   {
     handler_ = dynamixel::PacketHandler::getPacketHandler(protocol_version);
   }
 
-  // Not deleting handler_ in destructor as getPacketHandler returns a static instance usually?
-  // Actually SDK code: `return packetHandler;` where packetHandler is a static pointer.
-  // So we SHOULD NOT delete it.
+  // SDK's getPacketHandler returns a static instance, so we must not delete it
   ~RealPacketHandler() override = default;
 
   int ping(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t* model_number, uint8_t* error) override
