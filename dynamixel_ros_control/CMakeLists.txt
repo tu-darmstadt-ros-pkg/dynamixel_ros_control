@@ -85,11 +85,63 @@ if(BUILD_TESTING)
 
   add_definitions(-DTEST_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/config")
 
-  ament_add_gtest(test_hardware_interface test/test_hardware_interface.cpp)
-  set_tests_properties(test_hardware_interface PROPERTIES TIMEOUT 600)
-  target_link_libraries(test_hardware_interface ${PROJECT_NAME})
-  ament_target_dependencies(test_hardware_interface controller_manager
-                            hector_testing_utils realtime_tools)
+  # Hardware interface test common dependencies
+  set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools)
+
+  # Test: Normal usage (controller switching, movement, gripper, etc.)
+  ament_add_gtest(test_hw_normal_usage test/test_hw_normal_usage.cpp)
+  set_tests_properties(test_hw_normal_usage PROPERTIES TIMEOUT 300)
+  target_link_libraries(test_hw_normal_usage ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_normal_usage ${HW_TEST_DEPS})
+
+  # Test: LED colors
+  ament_add_gtest(test_hw_led test/test_hw_led.cpp)
+  set_tests_properties(test_hw_led PROPERTIES TIMEOUT 120)
+  target_link_libraries(test_hw_led ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_led ${HW_TEST_DEPS})
+
+  # Test: E-Stop functionality
+  ament_add_gtest(test_hw_estop test/test_hw_estop.cpp)
+  set_tests_properties(test_hw_estop PROPERTIES TIMEOUT 300)
+  target_link_libraries(test_hw_estop ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_estop ${HW_TEST_DEPS})
+
+  # Test: Torque enable/disable
+  ament_add_gtest(test_hw_torque test/test_hw_torque.cpp)
+  set_tests_properties(test_hw_torque PROPERTIES TIMEOUT 120)
+  target_link_libraries(test_hw_torque ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_torque ${HW_TEST_DEPS})
+
+  # Test: Transmission ratios and offset adjustment
+  ament_add_gtest(test_hw_transmission test/test_hw_transmission.cpp)
+  set_tests_properties(test_hw_transmission PROPERTIES TIMEOUT 180)
+  target_link_libraries(test_hw_transmission ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_transmission ${HW_TEST_DEPS})
+
+  # Test: Communication error handling and recovery
+  ament_add_gtest(test_hw_communication_error
+                  test/test_hw_communication_error.cpp)
+  set_tests_properties(test_hw_communication_error PROPERTIES TIMEOUT 180)
+  target_link_libraries(test_hw_communication_error ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_communication_error ${HW_TEST_DEPS})
+
+  # Test: Combined state transitions (E-Stop + Torque + Calibration)
+  ament_add_gtest(test_hw_combined_state test/test_hw_combined_state.cpp)
+  set_tests_properties(test_hw_combined_state PROPERTIES TIMEOUT 240)
+  target_link_libraries(test_hw_combined_state ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_combined_state ${HW_TEST_DEPS})
+
+  # Test: Critical safety (torque enable with goal verification)
+  ament_add_gtest(test_hw_safety test/test_hw_safety.cpp)
+  set_tests_properties(test_hw_safety PROPERTIES TIMEOUT 120)
+  target_link_libraries(test_hw_safety ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_safety ${HW_TEST_DEPS})
+
+  # Test: Lifecycle (service availability)
+  ament_add_gtest(test_hw_lifecycle test/test_hw_lifecycle.cpp)
+  set_tests_properties(test_hw_lifecycle PROPERTIES TIMEOUT 60)
+  target_link_libraries(test_hw_lifecycle ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_lifecycle ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder
