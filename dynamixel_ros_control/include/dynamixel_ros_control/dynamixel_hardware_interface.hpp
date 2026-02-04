@@ -130,7 +130,6 @@ private:
   bool debug_{false};
   bool torque_on_startup_{false};
   bool torque_off_on_shutdown_{false};
-  bool reboot_on_hardware_error_{false};
 
   // Runtime state
   std::atomic<bool> is_torqued_{false};     ///< Current torque state of motors.

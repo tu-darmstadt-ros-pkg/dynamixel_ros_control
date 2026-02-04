@@ -88,7 +88,6 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_init");
   getParameter(info_.hardware_parameters, "torque_on_startup", torque_on_startup_, false);
   getParameter(info_.hardware_parameters, "torque_off_on_shutdown", torque_off_on_shutdown_, false);
-  getParameter(info_.hardware_parameters, "reboot_on_hardware_error", reboot_on_hardware_error_, false);
 
   bool use_dummy = false;
   getParameter(info_.hardware_parameters, "use_dummy", use_dummy, false);
@@ -529,19 +528,11 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rc
     DXL_LOG_ERROR("Failed to activate e-stop during hardware error handling");
   }
 
-  // Attempt reboot if configured
-  if (reboot_on_hardware_error_) {
-    DXL_LOG_INFO("Attempting automatic reboot of motors with hardware errors...");
-    get_clock()->sleep_for(rclcpp::Duration(0, ERROR_RECOVERY_WAIT_NS));
-    if (reboot()) {
-      DXL_LOG_INFO("Reboot successful, hardware error cleared");
-    } else {
-      DXL_LOG_ERROR("Reboot failed, hardware remains in error state");
-    }
-  }
+  // Note: Automatic reboot is not performed here to avoid blocking the controller manager.
+  // Use the reboot service to manually recover from hardware errors.
 
   // Return SUCCESS to keep the hardware interface running
-  // The e-stop ensures safety while allowing recovery attempts
+  // The e-stop ensures safety while allowing recovery attempts via the reboot service
   return CallbackReturn::SUCCESS;
 }
 

@@ -121,7 +121,6 @@ The motors are configured in the ros2_control tag of the robot description. Exam
             <param name="baud_rate">57600</param>                    <!-- baud rate of the dynamixel motors -->
             <param name="torque_on_startup">true</param>             <!-- enable motor torque on startup -->
             <param name="torque_off_on_shutdown">false</param>       <!-- disable motor torque on shutdown -->
-            <param name="reboot_on_hardware_error">false</param>     <!-- automatically reboot motors on hardware error -->
         </hardware>
 
         <joint name="joint_1">
@@ -224,8 +223,6 @@ The reboot service:
 * Verifies the hardware error is cleared
 * Releases the E-Stop if successful
 * Restores the previous torque state
-
-You can also enable automatic reboot on hardware error via the `reboot_on_hardware_error` parameter.
 
 ### Mimic Joints
 

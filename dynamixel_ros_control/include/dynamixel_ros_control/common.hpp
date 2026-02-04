@@ -10,8 +10,7 @@
 namespace dynamixel_ros_control {
 
 // Timing constants for motor communication
-constexpr int64_t REBOOT_WAIT_NS = 500'000'000;            // 500ms - Wait for motor to restart after reboot
-constexpr int64_t ERROR_RECOVERY_WAIT_NS = 1'000'000'000;  // 1s - Wait before auto-reboot on error
+constexpr int64_t REBOOT_WAIT_NS = 500'000'000;  // 500ms - Wait for motor to restart after reboot
 
 // Default model number for dummy/mock motors (Dynamixel PH series)
 constexpr uint16_t DEFAULT_MOCK_MODEL_NUMBER = 2020;
