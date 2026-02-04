@@ -318,9 +318,9 @@ TEST_F(MockDynamixelTest, SyncReadMultipleMotors)
   driver.addDummyMotor(3, MODEL_PH);
 
   // Write distinct positions to each
-  driver.writeRegister(1, ADDR_GOAL_POSITION, 4, 1000);
-  driver.writeRegister(2, ADDR_GOAL_POSITION, 4, 2000);
-  driver.writeRegister(3, ADDR_GOAL_POSITION, 4, 3000);
+  ASSERT_TRUE(driver.writeRegister(1, ADDR_GOAL_POSITION, 4, 1000));
+  ASSERT_TRUE(driver.writeRegister(2, ADDR_GOAL_POSITION, 4, 2000));
+  ASSERT_TRUE(driver.writeRegister(3, ADDR_GOAL_POSITION, 4, 3000));
 
   // Create sync read for goal_position
   auto sync_read = driver.setSyncRead(ADDR_GOAL_POSITION, 4);
@@ -362,8 +362,8 @@ TEST_F(MockDynamixelTest, SyncWriteMultipleMotors)
 
   // Verify both motors have torque enabled
   int32_t val1, val2;
-  driver.readRegister(1, ADDR_TORQUE_ENABLE, 1, val1);
-  driver.readRegister(2, ADDR_TORQUE_ENABLE, 1, val2);
+  ASSERT_TRUE(driver.readRegister(1, ADDR_TORQUE_ENABLE, 1, val1));
+  ASSERT_TRUE(driver.readRegister(2, ADDR_TORQUE_ENABLE, 1, val2));
 
   EXPECT_EQ(val1, 1);
   EXPECT_EQ(val2, 1);

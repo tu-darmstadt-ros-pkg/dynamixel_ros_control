@@ -110,7 +110,8 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
 
   // Load joints
   joints_.reserve(info_.joints.size());
-  std::vector<std::string> mimic_joint_names(info_.mimic_joints.size());
+  std::vector<std::string> mimic_joint_names;
+  mimic_joint_names.reserve(info_.mimic_joints.size());
   for (const auto& mimic_joint : info_.mimic_joints) {
     mimic_joint_names.emplace_back(info_.joints[mimic_joint.joint_index].name);
   }
@@ -123,8 +124,8 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
       // Register mock motor before joint configuration (needs ID and model number)
       int id_val;
       if (getParameter(joint_info.parameters, "id", id_val)) {
-        int model_number = 2020;  // Default to PH series
-        getParameter(joint_info.parameters, "model_number", model_number, 2020);
+        int model_number = DEFAULT_MOCK_MODEL_NUMBER;
+        getParameter(joint_info.parameters, "model_number", model_number, static_cast<int>(DEFAULT_MOCK_MODEL_NUMBER));
         driver_.addDummyMotor(static_cast<uint8_t>(id_val), static_cast<uint16_t>(model_number));
       }
     }
@@ -531,7 +532,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_error(const rc
   // Attempt reboot if configured
   if (reboot_on_hardware_error_) {
     DXL_LOG_INFO("Attempting automatic reboot of motors with hardware errors...");
-    get_clock()->sleep_for(rclcpp::Duration(1, 0));
+    get_clock()->sleep_for(rclcpp::Duration(0, ERROR_RECOVERY_WAIT_NS));
     if (reboot()) {
       DXL_LOG_INFO("Reboot successful, hardware error cleared");
     } else {
@@ -553,13 +554,11 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::OK;
   }
 
-  read_manager_.read();
-  if (!isHardwareOk()) {
+  if (!read_manager_.read() || !read_manager_.isOk()) {
+    DXL_LOG_ERROR("Read manager lost connection");
     return hardware_interface::return_type::ERROR;
   }
-
-  if (!read_manager_.isOk()) {
-    DXL_LOG_ERROR("Read manager lost connection");
+  if (!isHardwareOk()) {
     return hardware_interface::return_type::ERROR;
   }
 
@@ -615,9 +614,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   if (e_stop_active_)
     return hardware_interface::return_type::OK;
 
-  control_write_manager_.write();
-
-  if (!control_write_manager_.isOk()) {
+  if (!control_write_manager_.write() || !control_write_manager_.isOk()) {
     DXL_LOG_ERROR("Write manager lost connection");
     return hardware_interface::return_type::ERROR;
   }
@@ -721,7 +718,10 @@ bool DynamixelHardwareInterface::setUpStateAndStatusReadManager()
   }
 
   for (const auto& [register_name, dynamixel_mapping] : register_dynamixel_mappings) {
-    read_manager_.addRegister(register_name, dynamixel_mapping);
+    if (!read_manager_.addRegister(register_name, dynamixel_mapping)) {
+      DXL_LOG_ERROR("Failed to add register '" << register_name << "' to state/status read manager");
+      return false;
+    }
   }
 
   return read_manager_.init(driver_);
@@ -734,8 +734,8 @@ bool DynamixelHardwareInterface::setUpCmdReadManager()
   for (auto& [name, joint] : joints_) {
     cmd_read_manager_.addDynamixel(joint.dynamixel.get());
     for (auto& cmd_interface : joint.getAvailableCommandInterfaces()) {
-      DXL_LOG_WARN("SetupCmdReadManager: Registering command interface '" << cmd_interface << "' for joint '"
-                                                                          << joint.name << "'");
+      DXL_LOG_DEBUG("SetupCmdReadManager: Registering command interface '" << cmd_interface << "' for joint '"
+                                                                           << joint.name << "'");
       joint.read_goal_values_[cmd_interface] = std::numeric_limits<double>::quiet_NaN();  // Initialize read goal values
       std::string register_name = joint.commandInterfaceToRegisterName(cmd_interface);
       register_dynamixel_mappings[register_name].push_back(std::make_pair<Dynamixel*, DxlValue>(
@@ -744,7 +744,10 @@ bool DynamixelHardwareInterface::setUpCmdReadManager()
   }
 
   for (const auto& [register_name, dynamixel_mapping] : register_dynamixel_mappings) {
-    cmd_read_manager_.addRegister(register_name, dynamixel_mapping);
+    if (!cmd_read_manager_.addRegister(register_name, dynamixel_mapping)) {
+      DXL_LOG_ERROR("Failed to add register '" << register_name << "' to command read manager");
+      return false;
+    }
   }
 
   return cmd_read_manager_.init(driver_);
@@ -830,14 +833,14 @@ bool DynamixelHardwareInterface::reboot()
 
   // Wait for motors to come back online after reboot
   // Dynamixel motors need time to restart after a reboot command
-  get_clock()->sleep_for(rclcpp::Duration(0, 500000000));  // 500ms
+  get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
 
   // Refresh hardware status by performing a read
   {
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
     if (!read_manager_.read() || !read_manager_.isOk()) {
       DXL_LOG_WARN("Failed to read hardware status after reboot, retrying...");
-      get_clock()->sleep_for(rclcpp::Duration(0, 500000000));  // Additional 500ms
+      get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
       if (!read_manager_.read() || !read_manager_.isOk()) {
         DXL_LOG_ERROR("Failed to read hardware status after reboot.");
         return false;
@@ -1165,9 +1168,11 @@ bool DynamixelHardwareInterface::activateEStop()
     if (!joint.isPositionControlled()) {
       const auto active_interfaces = joint.getActiveCommandInterfaces();
       for (const auto& active_interface : active_interfaces) {
-        joint.removeActiveCommandInterface(active_interface);
+        (void) joint.removeActiveCommandInterface(active_interface);  // Intentionally ignore, clearing all
       }
-      joint.addActiveCommandInterface(hardware_interface::HW_IF_POSITION);
+      if (!joint.addActiveCommandInterface(hardware_interface::HW_IF_POSITION)) {
+        DXL_LOG_WARN("Failed to add position interface during e-stop activation");
+      }
       if (!joint.updateControlMode())
         return false;
     }
@@ -1181,7 +1186,7 @@ bool DynamixelHardwareInterface::activateEStop()
   for (auto& [name, joint] : joints_) {
     const auto active_interfaces = joint.getActiveCommandInterfaces();
     for (const auto& active_interface : active_interfaces) {
-      joint.removeActiveCommandInterface(active_interface);
+      (void) joint.removeActiveCommandInterface(active_interface);  // Intentionally ignore, clearing all
     }
   }
   // Note: the motor is still in position control mode with the last goal position set

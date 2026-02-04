@@ -32,11 +32,12 @@ class Joint
 public:
   Joint() = default;
 
-  bool loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info,
-                         const std::unordered_map<std::string, std::string>& state_interface_to_register,
-                         const std::unordered_map<std::string, std::string>& command_interface_to_register,
-                         const std::unordered_map<std::string, std::string>& interface_to_register_limits);
-  bool connect();
+  [[nodiscard]] bool
+  loadConfiguration(DynamixelDriver& driver, const hardware_interface::ComponentInfo& info,
+                    const std::unordered_map<std::string, std::string>& state_interface_to_register,
+                    const std::unordered_map<std::string, std::string>& command_interface_to_register,
+                    const std::unordered_map<std::string, std::string>& interface_to_register_limits);
+  [[nodiscard]] bool connect();
   void reset();
 
   [[nodiscard]] ControlMode getControlMode() const;
@@ -48,11 +49,11 @@ public:
   [[nodiscard]] const std::vector<std::string>& getAvailableCommandInterfaces() const;
 
   [[nodiscard]] const std::vector<std::string>& getActiveCommandInterfaces() const;
-  bool addActiveCommandInterface(const std::string& interface_name);
-  bool removeActiveCommandInterface(const std::string& interface_name);
-  bool updateControlMode();
-  bool readControlMode();
-  bool controlModeChanged() const;
+  [[nodiscard]] bool addActiveCommandInterface(const std::string& interface_name);
+  [[nodiscard]] bool removeActiveCommandInterface(const std::string& interface_name);
+  [[nodiscard]] bool updateControlMode();
+  [[nodiscard]] bool readControlMode();
+  [[nodiscard]] bool controlModeChanged() const;
   void resetControlModeChanged();
 
   std::string stateInterfaceToRegisterName(const std::string& interface_name) const;

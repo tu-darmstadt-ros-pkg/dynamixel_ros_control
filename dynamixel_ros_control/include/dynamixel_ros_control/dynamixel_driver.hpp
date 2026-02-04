@@ -29,22 +29,22 @@ public:
   DynamixelDriver();
 
   /// @brief Initialize driver with port settings. Call connect() afterwards.
-  bool init(const std::string& port_name, int baud_rate, bool use_dummy = false);
+  [[nodiscard]] bool init(const std::string& port_name, int baud_rate, bool use_dummy = false);
 
   /// @brief Open the serial port and establish communication.
-  bool connect();
+  [[nodiscard]] bool connect();
 
   /// @brief Load and cache the control table for a motor model.
-  ControlTable* loadControlTable(uint16_t model_number);
+  [[nodiscard]] ControlTable* loadControlTable(uint16_t model_number);
 
   /// @brief Ping a motor to check if it's connected.
   [[nodiscard]] bool ping(uint8_t id) const;
 
   /// @brief Ping a motor and retrieve its model number.
-  bool ping(uint8_t id, uint16_t& model_number) const;
+  [[nodiscard]] bool ping(uint8_t id, uint16_t& model_number) const;
 
   /// @brief Reboot a motor (clears hardware errors).
-  bool reboot(uint8_t id) const;
+  [[nodiscard]] bool reboot(uint8_t id) const;
 
   /// @brief Scan the bus for all connected motors.
   [[nodiscard]] std::vector<std::pair<uint8_t /*id*/, uint16_t /*model_number*/>> scan() const;
@@ -53,10 +53,10 @@ public:
   void addDummyMotor(uint8_t id, uint16_t model_number);
 
   /// @brief Write a value to a motor register.
-  bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value) const;
+  [[nodiscard]] bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value) const;
 
   /// @brief Read a value from a motor register.
-  bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out) const;
+  [[nodiscard]] bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out) const;
 
   /// @brief Create a GroupSyncWrite for efficient bulk writes.
   [[nodiscard]] std::shared_ptr<GroupSyncWrite> setSyncWrite(uint16_t address, uint8_t data_length) const;
@@ -65,10 +65,10 @@ public:
   [[nodiscard]] std::shared_ptr<GroupSyncRead> setSyncRead(uint16_t address, uint8_t data_length) const;
 
   /// @brief Allocate indirect addresses for optimized bulk communication.
-  bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start_index);
+  [[nodiscard]] bool requestIndirectAddresses(unsigned int data_length, unsigned int& address_start_index);
 
   /// @brief Release previously allocated indirect addresses.
-  bool releaseIndirectAddresses(unsigned int data_length, unsigned int address_start_index);
+  [[nodiscard]] bool releaseIndirectAddresses(unsigned int data_length, unsigned int address_start_index);
 
   /// @brief Convert SDK communication result code to human-readable string.
   [[nodiscard]] std::string communicationErrorToString(int comm_result) const;

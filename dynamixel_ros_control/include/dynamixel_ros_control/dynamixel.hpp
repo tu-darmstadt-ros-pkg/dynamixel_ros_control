@@ -63,32 +63,32 @@ public:
   Dynamixel(uint8_t id, DynamixelDriver& driver);
 
   /// @brief Ping the motor and load its control table based on model number.
-  bool connect();
+  [[nodiscard]] bool connect();
 
   /// @brief Check if the motor responds to ping.
   [[nodiscard]] bool ping() const;
 
   /// @brief Reboot the motor (clears hardware errors, resets torque to off).
-  bool reboot() const;
+  [[nodiscard]] bool reboot() const;
 
   // Register access (with automatic unit conversion)
-  bool writeRegister(const std::string& register_name, const std::string& value) const;
-  bool writeRegister(const std::string& register_name, double value) const;
-  bool writeRegister(const std::string& register_name, bool value) const;
-  bool writeRegister(const std::string& register_name, int32_t value) const;
-  bool writeRegister(uint16_t address, uint8_t data_length, int32_t value) const;
+  [[nodiscard]] bool writeRegister(const std::string& register_name, const std::string& value) const;
+  [[nodiscard]] bool writeRegister(const std::string& register_name, double value) const;
+  [[nodiscard]] bool writeRegister(const std::string& register_name, bool value) const;
+  [[nodiscard]] bool writeRegister(const std::string& register_name, int32_t value) const;
+  [[nodiscard]] bool writeRegister(uint16_t address, uint8_t data_length, int32_t value) const;
 
-  bool readRegister(const std::string& register_name, double& value_out) const;
-  bool readRegister(const std::string& register_name, bool& value_out) const;
-  bool readRegister(const std::string& register_name, int32_t& value_out) const;
-  bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const;
+  [[nodiscard]] bool readRegister(const std::string& register_name, double& value_out) const;
+  [[nodiscard]] bool readRegister(const std::string& register_name, bool& value_out) const;
+  [[nodiscard]] bool readRegister(const std::string& register_name, int32_t& value_out) const;
+  [[nodiscard]] bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const;
 
   /// @brief Read register first; only write if value differs. Reduces bus traffic.
-  bool readWriteRegister(uint16_t address, uint8_t data_length, int32_t value) const;
+  [[nodiscard]] bool readWriteRegister(uint16_t address, uint8_t data_length, int32_t value) const;
 
   /// @brief Template version of readWriteRegister for named registers.
   template <typename T>
-  bool readWriteRegister(std::string register_name, T value) const
+  [[nodiscard]] bool readWriteRegister(std::string register_name, T value) const
   {
     T register_value;
     if (!readRegister(register_name, register_value)) {
@@ -103,7 +103,7 @@ public:
   }
 
   /// @brief Write control mode register (optionally disabling torque first).
-  bool writeControlMode(ControlMode mode, bool disable_torque = false) const;
+  [[nodiscard]] bool writeControlMode(ControlMode mode, bool disable_torque = false) const;
 
   // Unit conversion
   [[nodiscard]] double dxlValueToUnit(const std::string& register_name, int32_t value) const;
@@ -122,8 +122,8 @@ public:
   [[nodiscard]] uint16_t getModelNumber() const;
 
   /// @brief Configure indirect addressing for a register.
-  bool setIndirectAddress(unsigned int indirect_address_index, const std::string& register_name,
-                          uint16_t& indirect_data_address) const;
+  [[nodiscard]] bool setIndirectAddress(unsigned int indirect_address_index, const std::string& register_name,
+                                        uint16_t& indirect_data_address) const;
 
   /// @brief Get human-readable description of current hardware error.
   [[nodiscard]] std::string getHardwareErrorStatusString() const;

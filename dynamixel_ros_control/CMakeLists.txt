@@ -148,6 +148,12 @@ if(BUILD_TESTING)
   set_tests_properties(test_hw_hardware_error PROPERTIES TIMEOUT 180)
   target_link_libraries(test_hw_hardware_error ${PROJECT_NAME})
   ament_target_dependencies(test_hw_hardware_error ${HW_TEST_DEPS})
+
+  # Test: Mimic joints (gripper finger joints following servo)
+  ament_add_gtest(test_hw_mimic test/test_hw_mimic.cpp)
+  set_tests_properties(test_hw_mimic PROPERTIES TIMEOUT 180)
+  target_link_libraries(test_hw_mimic ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_mimic ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder

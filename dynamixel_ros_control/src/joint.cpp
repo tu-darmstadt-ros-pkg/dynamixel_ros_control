@@ -74,7 +74,9 @@ bool Joint::connect()
   if (!dynamixel->connect()) {
     return false;
   }
-  dynamixel->readRegister(DXL_REGISTER_CMD_TORQUE, torque);
+  if (!dynamixel->readRegister(DXL_REGISTER_CMD_TORQUE, torque)) {
+    return false;
+  }
   if (!initDefaultGoalValues()) {
     return false;
   }

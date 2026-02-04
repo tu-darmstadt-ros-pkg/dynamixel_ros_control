@@ -26,9 +26,9 @@ public:
   void addRegister(Dynamixel& dxl, const std::string& register_name, double& value, double offset = 0.0);
   void addRegister(Dynamixel& dxl, const std::string& register_name, bool& value);
 
-  bool init(DynamixelDriver& driver);
+  [[nodiscard]] bool init(DynamixelDriver& driver);
   [[nodiscard]] bool release() const;
-  bool write();
+  [[nodiscard]] bool write();
 
   [[nodiscard]] bool isOk() const;
   void setErrorThreshold(unsigned int threshold);

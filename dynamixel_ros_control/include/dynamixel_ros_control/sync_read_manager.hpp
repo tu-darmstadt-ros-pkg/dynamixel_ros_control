@@ -50,17 +50,17 @@ public:
    * @param dxl Pointer to dynamixel
    */
   void addDynamixel(Dynamixel* dxl);
-  bool addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs,
-                   std::vector<double> offsets = {});
+  [[nodiscard]] bool addRegister(std::string register_name, const DxlValueMappingList& dxl_value_pairs,
+                                 std::vector<double> offsets = {});
 
   /**
    * @brief init To be called by dynamixel driver.
    * Writes the indirect addresses and sets up the sync read
    * @return
    */
-  bool init(DynamixelDriver& driver);
-  bool read();
-  bool read(rclcpp::Time& packet_receive_time);
+  [[nodiscard]] bool init(DynamixelDriver& driver);
+  [[nodiscard]] bool read();
+  [[nodiscard]] bool read(rclcpp::Time& packet_receive_time);
 
   [[nodiscard]] bool isOk() const;
   void setErrorThreshold(unsigned int threshold);

@@ -1,5 +1,6 @@
 #include "dynamixel_ros_control/log.hpp"
 
+#include <cstring>
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
 
@@ -77,41 +78,39 @@ bool DynamixelDriver::loadSeriesMapping()
 
 ControlTable* DynamixelDriver::readControlTable(std::string series)
 {
-  ControlTable table;
-  auto [entry, success] = series_to_control_table_.emplace(series, table);
-  ControlTable* table_ptr = &entry->second;  // TODO: avoid raw pointer
+  // Emplace empty table first, then load into it (avoids copy)
+  auto [entry, inserted] = series_to_control_table_.try_emplace(series);
+  if (!inserted) {
+    // Already existed - return cached pointer
+    return &entry->second;
+  }
+
   const std::string path = package_path_ + "/devices/models/" + series + ".yaml";
   if (!entry->second.loadFromYaml(path)) {
     DXL_LOG_ERROR("Failed to read control table for '" << series << "'");
+    series_to_control_table_.erase(entry);
     return nullptr;
   }
-  return table_ptr;
+  return &entry->second;
 }
 
 ControlTable* DynamixelDriver::loadControlTable(const uint16_t model_number)
 {
-  std::string series;
-  try {
-    series = model_number_to_series_.at(model_number);
-  }
-  catch (const std::out_of_range&) {
-    DXL_LOG_FATAL("Could not find series of model number " << model_number);
-    return nullptr;
+  // Look up series name for model number
+  if (auto it = model_number_to_series_.find(model_number); it != model_number_to_series_.end()) {
+    const auto& series = it->second;
+
+    // Check if control table is already cached
+    if (auto table_it = series_to_control_table_.find(series); table_it != series_to_control_table_.end()) {
+      return &table_it->second;
+    }
+
+    // Load and cache the control table
+    return readControlTable(series);
   }
 
-  // Check if control table was loaded already
-  ControlTable* control_table;
-  try {
-    control_table = &series_to_control_table_.at(series);
-  }
-  catch (const std::out_of_range&) {
-    control_table = nullptr;
-  }
-  if (!control_table) {
-    // Read it
-    control_table = readControlTable(series);
-  }
-  return control_table;
+  DXL_LOG_FATAL("Could not find series of model number " << model_number);
+  return nullptr;
 }
 
 bool DynamixelDriver::ping(const uint8_t id) const
@@ -171,16 +170,15 @@ bool DynamixelDriver::writeRegister(const uint8_t id, const uint16_t address, co
   int comm_result = COMM_TX_FAIL;
 
   if (data_length == 1) {
-    auto value_8bit = static_cast<int8_t>(value);
-    comm_result =
-        packet_handler_->write1ByteTxRx(port_handler_, id, address, *reinterpret_cast<uint8_t*>(&value_8bit), &error);
+    auto value_8bit = static_cast<uint8_t>(value & 0xFF);
+    comm_result = packet_handler_->write1ByteTxRx(port_handler_, id, address, value_8bit, &error);
   } else if (data_length == 2) {
-    auto value_16bit = static_cast<int16_t>(value);
-    comm_result =
-        packet_handler_->write2ByteTxRx(port_handler_, id, address, *reinterpret_cast<uint16_t*>(&value_16bit), &error);
+    auto value_16bit = static_cast<uint16_t>(value & 0xFFFF);
+    comm_result = packet_handler_->write2ByteTxRx(port_handler_, id, address, value_16bit, &error);
   } else if (data_length == 4) {
-    comm_result =
-        packet_handler_->write4ByteTxRx(port_handler_, id, address, *reinterpret_cast<uint32_t*>(&value), &error);
+    uint32_t unsigned_value;
+    std::memcpy(&unsigned_value, &value, sizeof(uint32_t));
+    comm_result = packet_handler_->write4ByteTxRx(port_handler_, id, address, unsigned_value, &error);
   }
 
   if (comm_result != COMM_SUCCESS) {
@@ -212,10 +210,11 @@ bool DynamixelDriver::readRegister(const uint8_t id, const uint16_t address, con
   } else if (data_length == 2) {
     uint16_t data;
     comm_result = packet_handler_->read2ByteTxRx(port_handler_, id, address, &data, &error);
-    value_out = data;
+    value_out = static_cast<int16_t>(data);  // Sign extension for signed 16-bit values
   } else if (data_length == 4) {
-    comm_result =
-        packet_handler_->read4ByteTxRx(port_handler_, id, address, reinterpret_cast<uint32_t*>(&value_out), &error);
+    uint32_t data;
+    comm_result = packet_handler_->read4ByteTxRx(port_handler_, id, address, &data, &error);
+    std::memcpy(&value_out, &data, sizeof(int32_t));
   } else {
     DXL_LOG_ERROR("Unsupported data length: " << data_length);
     return false;

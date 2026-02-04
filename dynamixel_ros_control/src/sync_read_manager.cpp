@@ -1,5 +1,6 @@
 #include "dynamixel_ros_control/log.hpp"
 
+#include <cstring>
 #include <dynamixel_ros_control/sync_read_manager.hpp>
 
 namespace dynamixel_ros_control {
@@ -157,13 +158,17 @@ bool SyncReadManager::read(rclcpp::Time& packet_receive_time)
       const double offset = entry.offsets[i];
       if (sync_read_->isAvailable(dxl->getId(), register_data_address, register_data_length)) {
         uint32_t data = sync_read_->getData(dxl->getId(), register_data_address, register_data_length);
-        int32_t dxl_value;
+        int32_t dxl_value = 0;
         if (register_data_length == 4) {
-          dxl_value = static_cast<int32_t>(data);
+          std::memcpy(&dxl_value, &data, sizeof(int32_t));
         } else if (register_data_length == 2) {
-          dxl_value = *reinterpret_cast<int16_t*>(&data);
+          int16_t tmp;
+          std::memcpy(&tmp, &data, sizeof(int16_t));
+          dxl_value = tmp;  // Sign extension
         } else if (register_data_length == 1) {
-          dxl_value = *reinterpret_cast<int8_t*>(&data);
+          int8_t tmp;
+          std::memcpy(&tmp, &data, sizeof(int8_t));
+          dxl_value = tmp;  // Sign extension
         } else {
           DXL_LOG_ERROR("Unsupported data length: " << register_data_length);
           dxl_value = static_cast<int32_t>(data);
