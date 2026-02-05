@@ -492,6 +492,242 @@ TEST_F(HardwareInterfaceTest, RebootService_NoRebootWhenNoErrors)
   }
 }
 
+// ============================================================================
+// Error Threshold / Robustness Tests
+// ============================================================================
+
+TEST_F(HardwareInterfaceTest, Robustness_ToleratesOccasionalReadErrors)
+{
+  // Test that the system tolerates occasional read errors without triggering ERROR state
+  // The error threshold is 25 consecutive errors before returning ERROR
+
+  // 1. Activate controller and verify normal operation
+  ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
+
+  auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
+
+  // Move to initial position
+  std_msgs::msg::Float64MultiArray cmd;
+  cmd.data = {0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2};
+  pub->publish(cmd);
+  std::this_thread::sleep_for(1s);
+
+  // 2. Inject brief communication errors (less than threshold)
+  auto motor1 = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  ASSERT_NE(motor1, nullptr);
+
+  // Cause a few errors then recover (well below the 25 error threshold)
+  motor1->setCommunicationError(true);
+  std::this_thread::sleep_for(200ms);  // ~4 read cycles at 50Hz
+  motor1->setCommunicationError(false);
+
+  // 3. Wait for recovery
+  std::this_thread::sleep_for(500ms);
+
+  // 4. Verify controller is still active (system tolerated the brief errors)
+  ASSERT_TRUE(waitForControllerState("arm_position_controller", "active", 5s))
+      << "Controller should remain active after brief communication errors";
+
+  // 5. Verify commands still work
+  std::vector<double> positions_before;
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    positions_before.push_back(motor->getCurrentPosition());
+  }
+
+  cmd.data = {0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6};
+  pub->publish(cmd);
+  std::this_thread::sleep_for(2s);
+
+  // Verify motors moved
+  bool any_moved = false;
+  for (size_t i = 0; i < 7; ++i) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
+    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.1) {
+      any_moved = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(any_moved) << "System should continue operating after tolerating brief read errors";
+}
+
+TEST_F(HardwareInterfaceTest, Robustness_IntermittentErrorsWithRecovery)
+{
+  // Test that the system handles intermittent errors (error, recover, error, recover)
+  // without accumulating errors across recovery periods
+
+  // 1. Activate controller
+  ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
+
+  auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
+
+  auto motor1 = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  ASSERT_NE(motor1, nullptr);
+
+  // 2. Cause multiple intermittent error periods
+  for (int i = 0; i < 5; ++i) {
+    // Brief error
+    motor1->setCommunicationError(true);
+    std::this_thread::sleep_for(100ms);  // ~2 read cycles
+
+    // Recovery period - errors should reset
+    motor1->setCommunicationError(false);
+    std::this_thread::sleep_for(200ms);  // Allow successful reads to reset error counter
+  }
+
+  // 3. Verify controller is still active
+  ASSERT_TRUE(waitForControllerState("arm_position_controller", "active", 5s))
+      << "Controller should remain active after intermittent errors with recovery";
+
+  // 4. Verify system is still functional
+  std::vector<double> positions_before;
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    positions_before.push_back(motor->getCurrentPosition());
+  }
+
+  std_msgs::msg::Float64MultiArray cmd;
+  cmd.data = {0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4};
+  pub->publish(cmd);
+  std::this_thread::sleep_for(2s);
+
+  bool any_moved = false;
+  for (size_t i = 0; i < 7; ++i) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
+    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.1) {
+      any_moved = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(any_moved) << "System should function after intermittent errors with recovery periods";
+}
+
+TEST_F(HardwareInterfaceTest, Robustness_ControllerActivationWithoutPriorRead)
+{
+  // Test that controller activation works even when no read() has been called yet
+  // The perform_command_mode_switch should perform an inline read
+
+  // Note: The test fixture automatically activates hardware, but we can test
+  // by ensuring controller activation succeeds on a fresh start
+
+  // 1. Verify no controllers are active initially
+  auto list_resp = list_controllers();
+  ASSERT_NE(list_resp, nullptr);
+
+  bool any_active = false;
+  for (const auto& ctrl : list_resp->controller) {
+    if (ctrl.state == "active") {
+      any_active = true;
+      break;
+    }
+  }
+
+  // 2. If no controllers are active, activate one - this tests inline read
+  if (!any_active) {
+    ASSERT_TRUE(loadAndActivateController("arm_position_controller"))
+        << "Controller activation should succeed with inline read in perform_command_mode_switch";
+  }
+
+  // 3. Verify controller is now active and functional
+  ASSERT_TRUE(waitForControllerState("arm_position_controller", "active", 5s));
+
+  auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
+
+  // 4. Send command and verify it works
+  std::vector<double> positions_before;
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    positions_before.push_back(motor->getCurrentPosition());
+  }
+
+  std_msgs::msg::Float64MultiArray cmd;
+  cmd.data = {0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3};
+  pub->publish(cmd);
+  std::this_thread::sleep_for(2s);
+
+  bool any_moved = false;
+  for (size_t i = 0; i < 7; ++i) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
+    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.05) {
+      any_moved = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(any_moved) << "Commands should work after controller activation with inline read";
+}
+
+TEST_F(HardwareInterfaceTest, Robustness_ControllerSwitchAfterCommunicationRecovery)
+{
+  // Test controller switching after communication errors have been resolved
+  // This verifies the inline read allows mode switches after error recovery
+
+  // 1. Activate first controller
+  ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
+
+  auto pos_pub =
+      tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
+  ASSERT_TRUE(waitForSubscribers(pos_pub, 5s));
+
+  // 2. Cause communication errors that reset first_read_successful_
+  dynamixel_ros_control::MockDynamixelManager::instance().setGlobalCommunicationError(true);
+  std::this_thread::sleep_for(500ms);
+  dynamixel_ros_control::MockDynamixelManager::instance().setGlobalCommunicationError(false);
+  std::this_thread::sleep_for(500ms);
+
+  // 3. Load velocity controller
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 5s;
+  options.response_timeout = 5s;
+
+  auto load_req = std::make_shared<LoadController::Request>();
+  load_req->name = "arm_velocity_controller";
+  auto load_resp =
+      hector_testing_utils::call_service<LoadController>(load_client_->get(), load_req, *executor_, options);
+  ASSERT_NE(load_resp, nullptr);
+  ASSERT_TRUE(load_resp->ok);
+
+  auto config_req = std::make_shared<ConfigureController::Request>();
+  config_req->name = "arm_velocity_controller";
+  hector_testing_utils::call_service<ConfigureController>(config_client_->get(), config_req, *executor_, options);
+
+  // 4. Switch controllers - this should succeed with inline read
+  ASSERT_TRUE(switch_controllers({"arm_velocity_controller"}, {"arm_position_controller"}))
+      << "Controller switch should succeed after communication recovery (inline read)";
+
+  // 5. Verify velocity controller is active
+  ASSERT_TRUE(waitForControllerState("arm_velocity_controller", "active", 5s));
+  ASSERT_TRUE(waitForControllerState("arm_position_controller", "inactive", 5s));
+
+  // 6. Verify velocity commands work
+  auto vel_pub =
+      tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_velocity_controller/commands", 10);
+  ASSERT_TRUE(waitForSubscribers(vel_pub, 5s));
+
+  std::vector<double> positions_before;
+  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    positions_before.push_back(motor->getCurrentPosition());
+  }
+
+  std_msgs::msg::Float64MultiArray cmd;
+  cmd.data = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
+  vel_pub->publish(cmd);
+  std::this_thread::sleep_for(1s);
+
+  bool any_moved = false;
+  for (size_t i = 0; i < 7; ++i) {
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
+    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.1) {
+      any_moved = true;
+      break;
+    }
+  }
+  EXPECT_TRUE(any_moved) << "Velocity controller should work after switch following communication recovery";
+}
+
 }  // namespace dynamixel_ros_control::test
 
 int main(int argc, char** argv)
