@@ -63,6 +63,10 @@ public:
   [[nodiscard]] bool read(rclcpp::Time& packet_receive_time);
 
   [[nodiscard]] bool isOk() const;
+  [[nodiscard]] unsigned int getErrorCount() const
+  {
+    return subsequent_error_count_;
+  }
   void setErrorThreshold(unsigned int threshold);
 
 private:

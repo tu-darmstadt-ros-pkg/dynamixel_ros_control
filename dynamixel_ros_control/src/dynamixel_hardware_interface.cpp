@@ -447,9 +447,20 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
   DXL_LOG_DEBUG("start_interfaces: " << iterableToString(start_interfaces));
   DXL_LOG_DEBUG("stop_interfaces: " << iterableToString(stop_interfaces));
 
+  // Ensure we have current state before switching modes
   if (!first_read_successful_) {
-    DXL_LOG_ERROR("No successful read() before a controller is loaded.");
-    return hardware_interface::return_type::ERROR;
+    DXL_LOG_INFO("Performing initial read before controller activation.");
+    if (!read_manager_.read() || !read_manager_.isOk()) {
+      DXL_LOG_ERROR("Failed to read current state before controller activation.");
+      return hardware_interface::return_type::ERROR;
+    }
+    for (auto& [name, joint] : joints_) {
+      if (joint.state_transmission) {
+        joint.state_transmission->actuator_to_joint();
+      }
+      joint.resetGoalState();
+    }
+    first_read_successful_ = true;
   }
 
   // Start & stop interfaces
@@ -545,10 +556,17 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::OK;
   }
 
-  if (!read_manager_.read() || !read_manager_.isOk()) {
-    DXL_LOG_ERROR("Read manager lost connection");
+  if (!read_manager_.read()) {
+    // Single read failure - log but don't return error yet
+    DXL_LOG_WARN("Read failed, consecutive errors: " << read_manager_.getErrorCount());
+  }
+
+  // Only return error after exceeding the consecutive error threshold
+  if (!read_manager_.isOk()) {
+    DXL_LOG_ERROR("Read manager lost connection after " << read_manager_.getErrorCount() << " consecutive errors");
     return hardware_interface::return_type::ERROR;
   }
+
   if (!isHardwareOk()) {
     return hardware_interface::return_type::ERROR;
   }
