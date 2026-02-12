@@ -306,7 +306,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
     }
   }
   is_torqued_ = torque_on_startup_;
-  if (!resetGoalStateAndVerify(joint_names_)) {
+  if (!resetGoalStateAndVerify(joint_names_, max_reset_and_verify_retries_)) {
     return CallbackReturn::ERROR;
   }
   updateColorLED(hardware_interface::lifecycle_state_names::ACTIVE);
@@ -493,7 +493,7 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
   }
 
   // Reset all goal states and verify that the cmds were written correctly
-  if (!resetGoalStateAndVerify(joints_to_reset)) {
+  if (!resetGoalStateAndVerify(joints_to_reset, max_reset_and_verify_retries_)) {
     DXL_LOG_ERROR("Failed to reset goal states during command mode switch.");
     return hardware_interface::return_type::ERROR;
   }
@@ -623,8 +623,15 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   if (e_stop_active_)
     return hardware_interface::return_type::OK;
 
-  if (!control_write_manager_.write() || !control_write_manager_.isOk()) {
-    DXL_LOG_ERROR("Write manager lost connection");
+  if (!control_write_manager_.write()) {
+    // Single write failure - log but don't return error yet
+    DXL_LOG_WARN("Write failed, consecutive errors: " << control_write_manager_.getErrorCount());
+  }
+
+  // Only return error after exceeding the consecutive error threshold
+  if (!control_write_manager_.isOk()) {
+    DXL_LOG_ERROR("Write manager lost connection after " << control_write_manager_.getErrorCount()
+                                                         << " consecutive errors");
     return hardware_interface::return_type::ERROR;
   }
   return hardware_interface::return_type::OK;
@@ -924,7 +931,7 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_contr
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
     if (do_enable) {
       // reset goal state before enabling torque && verify that goal positions are set correctly
-      if (!resetGoalStateAndVerify(joint_names_))
+      if (!resetGoalStateAndVerify(joint_names_, max_reset_and_verify_retries_))
         return false;
     }
     bool success = false;
@@ -954,6 +961,19 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_contr
       updateColorLED();
       return true;
     }
+  }
+  return false;
+}
+
+bool DynamixelHardwareInterface::resetGoalStateAndVerify(const std::vector<std::string>& joints, const int retries)
+{
+  int counter = 0;
+  while (counter < retries) {
+    if (resetGoalStateAndVerify(joints))
+      return true;
+    counter++;
+    DXL_LOG_WARN("Failed to reset goal state and verify for all joints. Retrying... (" << counter << " of " << retries
+                                                                                       << ")");
   }
   return false;
 }
@@ -1187,7 +1207,7 @@ bool DynamixelHardwareInterface::activateEStop()
     }
   }
   // resetGoalStates
-  if (!resetGoalStateAndVerify(joint_names_)) {
+  if (!resetGoalStateAndVerify(joint_names_, max_reset_and_verify_retries_)) {
     DXL_LOG_WARN("Failed to reset goal state while attempting to activate the software e-stop.");
   }
 

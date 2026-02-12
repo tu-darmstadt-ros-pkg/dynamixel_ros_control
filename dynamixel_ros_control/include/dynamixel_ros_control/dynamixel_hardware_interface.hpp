@@ -98,6 +98,8 @@ private:
   /// @brief Reset goal positions to current positions and verify they were written correctly.
   bool resetGoalStateAndVerify(const std::vector<std::string>& joints);
 
+  bool resetGoalStateAndVerify(const std::vector<std::string>& joints, int retries);
+
   /// @brief Deactivate all controllers using this hardware interface.
   bool deactivateControllers() const;
 
@@ -136,6 +138,8 @@ private:
   bool desired_torque_state_{false};        ///< User's desired torque state (restored after reboot).
   std::atomic<bool> e_stop_active_{false};  ///< True if software E-Stop is engaged.
   bool mode_switch_failed_{false};          ///< True if control mode switch failed.
+
+  constexpr static int max_reset_and_verify_retries_ = 5;  ///< Max retries for resetting goal state and verifying.
 
   // ROS interfaces
   rclcpp::Node::SharedPtr node_;
