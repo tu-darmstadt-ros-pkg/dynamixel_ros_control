@@ -285,8 +285,8 @@ TEST_F(MockDynamixelTest, CurrentModeBasic)
   motor->write1Byte(ADDR_OPERATING_MODE, 0);
   motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
 
-  // Write goal current (use goal_torque address from PH.yaml = 550)
-  uint16_t goal_current_addr = motor->getAddress("goal_torque");
+  // Write goal current (use goal_current address from PH.yaml = 550)
+  uint16_t goal_current_addr = motor->getAddress("goal_current");
   if (goal_current_addr == 0) {
     goal_current_addr = 550;  // Fallback to PH series address
   }

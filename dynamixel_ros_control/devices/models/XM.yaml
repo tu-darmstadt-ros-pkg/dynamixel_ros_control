@@ -2,7 +2,7 @@
 unit_conversions: # dxl value to unit ratio
   rad: 0.001533980787885641
   rad_per_s: 0.02398082392
-  Nm: 0.006675773
+  # Nm: 0.006675773  # Unused: goal_current and present_current use A, not Nm
   rad_per_s2: 1.123489409
   celsius: 1.0
   V: 0.1
@@ -51,7 +51,7 @@ control_table:
   - 90  | feedforward_1st_gain     | 2      | RW     | RAM    |
   - 98  | bus_watchdog             | 1      | RW     | RAM    |
   - 100 | goal_pwm                 | 2      | RW     | RAM    |
-  - 102 | goal_torque              | 2      | RW     | RAM    | Nm
+  - 102 | goal_current             | 2      | RW     | RAM    | A
   - 104 | goal_velocity            | 4      | RW     | RAM    | rad_per_s
   - 108 | profile_acceleration     | 4      | RW     | RAM    |
   - 112 | profile_velocity         | 4      | RW     | RAM    |
@@ -60,7 +60,7 @@ control_table:
   - 122 | moving                   | 1      | R      | RAM    | bool
   - 123 | moving_status            | 1      | R      | RAM    |
   - 124 | present_pwm              | 2      | R      | RAM    |
-  - 126 | present_current          | 2      | R      | RAM    | Nm
+  - 126 | present_current          | 2      | R      | RAM    | A
   - 128 | present_velocity         | 4      | R      | RAM    | rad_per_s
   - 132 | present_position         | 4      | R      | RAM    | rad
   - 136 | velocity_trajectory      | 4      | R      | RAM    |

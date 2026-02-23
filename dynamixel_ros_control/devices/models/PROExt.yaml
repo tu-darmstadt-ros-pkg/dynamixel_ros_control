@@ -25,7 +25,7 @@ control_table:
   - 22  | max_voltage_limit        | 2      | RW     | EEPROM | V
   - 24  | min_voltage_limit        | 2      | RW     | EEPROM | V
   - 26  | acceleration_limit       | 4      | RW     | EEPROM | rad_per_s2
-  - 30  | torque_limit             | 2      | RW     | EEPROM | A
+  - 30  | current_limit            | 2      | RW     | EEPROM | A  # NOTE: Official Dynamixel name is "torque_limit" but register represents current
   - 32  | velocity_limit           | 4      | RW     | EEPROM | rad_per_s
   - 36  | max_position_limit       | 4      | RW     | EEPROM | rad
   - 40  | min_position_limit       | 4      | RW     | EEPROM | rad
@@ -43,7 +43,7 @@ control_table:
   - 594 | position_p_gain          | 2      | RW     | RAM    |
   - 596 | goal_position            | 4      | RW     | RAM    | rad
   - 600 | goal_velocity            | 4      | RW     | RAM    | rad_per_s
-  - 604 | goal_torque              | 2      | RW     | RAM    | A
+  - 604 | goal_current             | 2      | RW     | RAM    | A  # NOTE: Official Dynamixel name is "goal_torque" but register represents current
   - 606 | goal_acceleration        | 4      | RW     | RAM    | rad_per_s2
   - 610 | moving                   | 1      | R      | RAM    | bool
   - 611 | present_position         | 4      | R      | RAM    | rad

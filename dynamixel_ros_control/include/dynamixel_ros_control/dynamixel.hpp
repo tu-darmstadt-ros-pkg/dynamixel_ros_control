@@ -35,7 +35,7 @@ enum HardwareErrorStatus
 constexpr char DXL_REGISTER_CMD_TORQUE[] = "torque_enable";
 constexpr char DXL_REGISTER_CMD_POSITION[] = "goal_position";
 constexpr char DXL_REGISTER_CMD_VELOCITY[] = "goal_velocity";
-constexpr char DXL_REGISTER_CMD_EFFORT[] = "goal_torque";
+constexpr char DXL_REGISTER_CMD_EFFORT[] = "goal_current";  // All models use current (A), never real torque
 constexpr char DXL_REGISTER_CONTROL_MODE[] = "operating_mode";
 
 constexpr char DXL_REGISTER_POSITION[] = "present_position";
