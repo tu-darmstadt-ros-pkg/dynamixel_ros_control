@@ -1,4 +1,4 @@
-# XM series
+# MX2 series
 unit_conversions: # dxl value to unit ratio
   rad: 0.001533936
   rad_per_s: 0.023980117
@@ -60,7 +60,7 @@ control_table:
   - 122 | moving                   | 1      | R      | RAM    |
   - 123 | moving_status            | 1      | R      | RAM    |
   - 124 | present_pwm              | 2      | R      | RAM    |
-  - 126 | present_current          | 2      | R      | RAM    | A
+  - 126 | present_load             | 2      | R      | RAM    | load
   - 128 | present_velocity         | 4      | R      | RAM    | rad_per_s
   - 132 | present_position         | 4      | R      | RAM    | rad
   - 136 | velocity_trajectory      | 4      | R      | RAM    |
