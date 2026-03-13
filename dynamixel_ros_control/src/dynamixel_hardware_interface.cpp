@@ -88,6 +88,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_init");
   getParameter(info_.hardware_parameters, "torque_on_startup", torque_on_startup_, false);
   getParameter(info_.hardware_parameters, "torque_off_on_shutdown", torque_off_on_shutdown_, false);
+  getParameter(info_.hardware_parameters, "publish_goal_joint_states", publish_goal_joint_states_, false);
 
   bool use_dummy = false;
   getParameter(info_.hardware_parameters, "use_dummy", use_dummy, false);
@@ -204,6 +205,25 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
 
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
+
+  // setup goal state publisher
+  if (publish_goal_joint_states_) {
+    goal_state_pub_ =
+        node_->create_publisher<sensor_msgs::msg::JointState>("~/goal_joint_states", rclcpp::SystemDefaultsQoS());
+    realtime_goal_state_pub_ =
+        std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(goal_state_pub_);
+    auto& goal_msg = realtime_goal_state_pub_->msg_;
+    goal_msg.name.reserve(joint_names_.size());
+    goal_msg.position.reserve(joint_names_.size());
+    goal_msg.velocity.reserve(joint_names_.size());
+    goal_msg.effort.reserve(joint_names_.size());
+    for (const auto& name : joint_names_) {
+      goal_msg.name.push_back(name);
+      goal_msg.position.push_back(std::numeric_limits<double>::quiet_NaN());
+      goal_msg.velocity.push_back(std::numeric_limits<double>::quiet_NaN());
+      goal_msg.effort.push_back(std::numeric_limits<double>::quiet_NaN());
+    }
+  }
 
   // set up e-stop subscription
   std::string topic = ns != "/" ? ns + "/soft_e_stop" : "/soft_e_stop";
@@ -644,6 +664,24 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
                                                          << " consecutive errors");
     return hardware_interface::return_type::ERROR;
   }
+
+  // Publish goal joint states
+  if (realtime_goal_state_pub_ && realtime_goal_state_pub_->trylock()) {
+    auto& msg = realtime_goal_state_pub_->msg_;
+    msg.header.stamp = get_clock()->now();
+    for (size_t i = 0; i < joint_names_.size(); ++i) {
+      const auto& joint = joints_.at(joint_names_[i]);
+      const auto& goal = joint.joint_state.goal;
+      auto pos_it = goal.find(hardware_interface::HW_IF_POSITION);
+      msg.position[i] = (pos_it != goal.end()) ? pos_it->second : std::numeric_limits<double>::quiet_NaN();
+      auto vel_it = goal.find(hardware_interface::HW_IF_VELOCITY);
+      msg.velocity[i] = (vel_it != goal.end()) ? vel_it->second : std::numeric_limits<double>::quiet_NaN();
+      auto eff_it = goal.find(hardware_interface::HW_IF_EFFORT);
+      msg.effort[i] = (eff_it != goal.end()) ? eff_it->second : std::numeric_limits<double>::quiet_NaN();
+    }
+    realtime_goal_state_pub_->unlockAndPublish();
+  }
+
   return hardware_interface::return_type::OK;
 }
 

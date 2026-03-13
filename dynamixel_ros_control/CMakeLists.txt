@@ -27,6 +27,8 @@ find_package(transmission_interface REQUIRED)
 find_package(hector_transmission_interface REQUIRED)
 find_package(hector_transmission_interface_msgs REQUIRED)
 find_package(controller_orchestrator REQUIRED)
+find_package(realtime_tools REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 set(HEADERS
     include/${PROJECT_NAME}/common.hpp
@@ -70,7 +72,9 @@ ament_target_dependencies(
   transmission_interface
   hector_transmission_interface
   hector_transmission_interface_msgs
-  controller_orchestrator)
+  controller_orchestrator
+  realtime_tools
+  sensor_msgs)
 
 pluginlib_export_plugin_description_file(hardware_interface
                                          dynamixel_ros_control.xml)
