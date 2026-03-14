@@ -20,6 +20,7 @@
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
+#include <dynamixel_ros_control_msgs/srv/set_torque.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
@@ -409,24 +410,28 @@ protected:
   }
 
   // Helper to create torque service client
-  std::shared_ptr<hector_testing_utils::TestClient<std_srvs::srv::SetBool>>
+  std::shared_ptr<hector_testing_utils::TestClient<dynamixel_ros_control_msgs::srv::SetTorque>>
   createTorqueClient(const std::string& interface_name = "athena_arm_interface")
   {
-    auto client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/" + interface_name + "/set_torque");
+    auto client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/" + interface_name +
+                                                                                               "/set_torque");
     EXPECT_TRUE(client->wait_for_service(*executor_, 5s)) << "Torque service not available";
     return client;
   }
 
   // Helper to set torque state
-  bool setTorque(const std::shared_ptr<hector_testing_utils::TestClient<std_srvs::srv::SetBool>>& client, bool enable)
+  bool
+  setTorque(const std::shared_ptr<hector_testing_utils::TestClient<dynamixel_ros_control_msgs::srv::SetTorque>>& client,
+            bool enable)
   {
-    auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-    request->data = enable;
+    auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+    request->enable = enable;
 
     hector_testing_utils::ServiceCallOptions options;
     options.service_timeout = 5s;
     options.response_timeout = 5s;
-    auto resp = hector_testing_utils::call_service<std_srvs::srv::SetBool>(client->get(), request, *executor_, options);
+    auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(client->get(), request,
+                                                                                               *executor_, options);
     return resp && resp->success;
   }
 

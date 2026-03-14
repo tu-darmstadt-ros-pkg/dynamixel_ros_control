@@ -164,10 +164,16 @@ _max_position_limit_ in radians, _velocity_limit_ in radians per second or _pres
 
 ### Enabling/Disabling Torque
 
-Torque can be toggled via service calls, e.g.:
+Torque can be toggled via service calls using the custom `dynamixel_ros_control_msgs/srv/SetTorque` service:
 
 ```bash
-ros2 service call /<hardware_interface>/set_torque std_srvs/srv/SetBool "{data: <true|false>}"
+ros2 service call /<hardware_interface>/set_torque dynamixel_ros_control_msgs/srv/SetTorque "{enable: true}"
+```
+
+Specific joints can be excluded from the torque toggle using the `ignore_joints` field:
+
+```bash
+ros2 service call /<hardware_interface>/set_torque dynamixel_ros_control_msgs/srv/SetTorque "{enable: false, ignore_joints: ['gripper_servo_joint']}"
 ```
 
 The hardware interface automatically updates the **goal position register** of each motor to the current position before
@@ -177,6 +183,22 @@ Active Controllers will be deactivated when torque is turned off to prevent unex
 back on.
 For example a position controller would otherwise try to move the motor to the last commanded position when re-enabling
 torque.
+
+### Freezing Joint Goals
+
+Joints configured with `do_not_reset_on_ctrl_change: true` can be frozen via a per-joint service. When frozen, the joint's goal values are latched and cannot be overwritten by controller resets or mode switches.
+
+```bash
+ros2 service call /<hardware_interface>/<joint_name>/freeze std_srvs/srv/SetBool "{data: true}"
+```
+
+To unfreeze:
+
+```bash
+ros2 service call /<hardware_interface>/<joint_name>/freeze std_srvs/srv/SetBool "{data: false}"
+```
+
+This is useful for joints that should maintain their position across controller changes (e.g., a gripper that should stay closed while arm controllers are reloaded).
 
 ### Software E-Stop
 

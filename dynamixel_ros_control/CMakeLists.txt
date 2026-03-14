@@ -29,6 +29,7 @@ find_package(hector_transmission_interface_msgs REQUIRED)
 find_package(controller_orchestrator REQUIRED)
 find_package(realtime_tools REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(dynamixel_ros_control_msgs REQUIRED)
 
 set(HEADERS
     include/${PROJECT_NAME}/common.hpp
@@ -74,7 +75,8 @@ ament_target_dependencies(
   hector_transmission_interface_msgs
   controller_orchestrator
   realtime_tools
-  sensor_msgs)
+  sensor_msgs
+  dynamixel_ros_control_msgs)
 
 pluginlib_export_plugin_description_file(hardware_interface
                                          dynamixel_ros_control.xml)
@@ -90,7 +92,8 @@ if(BUILD_TESTING)
   add_definitions(-DTEST_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/config")
 
   # Hardware interface test common dependencies
-  set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools)
+  set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools
+                   dynamixel_ros_control_msgs)
 
   # Test: Normal usage (controller switching, movement, gripper, etc.)
   ament_add_gtest(test_hw_normal_usage test/test_hw_normal_usage.cpp)

@@ -15,6 +15,7 @@
 #include <controller_orchestrator/controller_orchestrator.hpp>
 #include <hector_transmission_interface/adjustable_offset_transmission_loader.hpp>
 #include <std_msgs/msg/bool.hpp>
+#include <dynamixel_ros_control_msgs/srv/set_torque.hpp>
 #include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
@@ -91,8 +92,9 @@ private:
   /// @brief Reboot motors with hardware errors and restore torque state.
   bool reboot();
 
-  /// @brief Enable or disable torque on all motors.
-  bool setTorque(bool do_enable, bool skip_controller_unloading = false, int retries = 5, bool direct_write = false);
+  /// @brief Enable or disable torque on all motors (optionally ignoring specific joints).
+  bool setTorque(bool do_enable, const std::vector<std::string>& ignore_joints = {},
+                 bool skip_controller_unloading = false, int retries = 5, bool direct_write = false);
 
   /// @brief Enable or disable the software E-Stop.
   bool setEStop(bool do_enable);
@@ -146,7 +148,7 @@ private:
 
   // ROS interfaces
   rclcpp::Node::SharedPtr node_;
-  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;
+  rclcpp::Service<dynamixel_ros_control_msgs::srv::SetTorque>::SharedPtr set_torque_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_service_;
   std::unordered_map<std::string, rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr> freeze_services_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;

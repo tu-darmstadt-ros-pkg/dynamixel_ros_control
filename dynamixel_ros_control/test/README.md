@@ -193,6 +193,8 @@ Torque enable/disable functionality tests.
 | `Torque_GoalVelocityZeroBeforeReEnable` | Motors stop moving after velocity controller is deactivated via torque disable |
 | `Torque_DeactivatesControllersOnDisable` | Disabling torque deactivates active controllers |
 
+> **Note:** The torque service uses the custom `dynamixel_ros_control_msgs/srv/SetTorque` type with `enable` and `ignore_joints` fields.
+
 ### `test_hw_led.cpp`
 
 LED status indication tests.

@@ -17,17 +17,18 @@ TEST_F(HardwareInterfaceTest, CombinedState_EStopWhileTorqueOff)
   // (torque off is already a safe state)
 
   // 1. Disable torque first
-  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  auto torque_client =
+      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
-  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-  request->data = false;
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+  request->enable = false;
 
   hector_testing_utils::ServiceCallOptions options;
   options.service_timeout = 5s;
   options.response_timeout = 5s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      torque_client->get(), request, *executor_, options);
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
@@ -104,17 +105,18 @@ TEST_F(HardwareInterfaceTest, CombinedState_TorqueOffWhileEStopActive)
   EXPECT_EQ(motor->getLedRed(), COLOR_ORANGE_R) << "LED should be orange during E-Stop";
 
   // 2. Disable torque while E-Stop is active
-  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  auto torque_client =
+      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
-  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-  request->data = false;
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+  request->enable = false;
 
   hector_testing_utils::ServiceCallOptions options;
   options.service_timeout = 5s;
   options.response_timeout = 5s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      torque_client->get(), request, *executor_, options);
   ASSERT_NE(resp, nullptr);
   // Note: This should succeed - torque can be disabled even during E-Stop
   EXPECT_TRUE(resp->success);
@@ -222,17 +224,18 @@ TEST_F(HardwareInterfaceTest, CombinedState_CalibrationWhileTorqueOff)
   std::this_thread::sleep_for(300ms);
 
   // 2. Disable torque (flipper interface service)
-  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_flipper_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_flipper_interface/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
-  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-  request->data = false;
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+  request->enable = false;
 
   hector_testing_utils::ServiceCallOptions options;
   options.service_timeout = 5s;
   options.response_timeout = 5s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      torque_client->get(), request, *executor_, options);
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success);
 
@@ -276,8 +279,9 @@ TEST_F(HardwareInterfaceTest, CombinedState_CalibrationWhileTorqueOff)
   }
 
   // 5. Enable torque again - verify no sudden movement when torque re-enabled
-  request->data = true;
-  resp = hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = true;
+  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                        *executor_, options);
   ASSERT_NE(resp, nullptr);
   EXPECT_TRUE(resp->success);
 
@@ -327,7 +331,8 @@ TEST_F(HardwareInterfaceTest, CombinedState_NoSuddenMovementOnAnyStateTransition
   std::this_thread::sleep_for(300ms);
   record_positions();
 
-  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  auto torque_client =
+      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto estop_pub = tester_node_->create_publisher<std_msgs::msg::Bool>("/soft_e_stop", 10);
@@ -341,7 +346,7 @@ TEST_F(HardwareInterfaceTest, CombinedState_NoSuddenMovementOnAnyStateTransition
   options.service_timeout = 5s;
   options.response_timeout = 5s;
   std_msgs::msg::Bool estop_msg;
-  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
 
   // Transition 1: Normal -> E-Stop
   record_positions();
@@ -352,8 +357,9 @@ TEST_F(HardwareInterfaceTest, CombinedState_NoSuddenMovementOnAnyStateTransition
 
   // Transition 2: E-Stop -> E-Stop + Torque Off
   record_positions();
-  request->data = false;
-  hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = false;
+  hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                 *executor_, options);
   std::this_thread::sleep_for(300ms);
   verify_no_jump("E-Stop -> E-Stop + Torque Off");
 
@@ -366,8 +372,9 @@ TEST_F(HardwareInterfaceTest, CombinedState_NoSuddenMovementOnAnyStateTransition
 
   // Transition 4: Torque Off -> Normal (enable torque)
   record_positions();
-  request->data = true;
-  hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = true;
+  hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                 *executor_, options);
   std::this_thread::sleep_for(300ms);
   verify_no_jump("Torque Off -> Normal");
 
@@ -375,8 +382,9 @@ TEST_F(HardwareInterfaceTest, CombinedState_NoSuddenMovementOnAnyStateTransition
   record_positions();
 
   // Torque off
-  request->data = false;
-  hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = false;
+  hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                 *executor_, options);
   std::this_thread::sleep_for(100ms);
   verify_no_jump("Complex: after torque off");
 
@@ -387,8 +395,9 @@ TEST_F(HardwareInterfaceTest, CombinedState_NoSuddenMovementOnAnyStateTransition
   verify_no_jump("Complex: after E-Stop on");
 
   // Torque on (while E-Stop active)
-  request->data = true;
-  hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = true;
+  hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                 *executor_, options);
   std::this_thread::sleep_for(100ms);
   verify_no_jump("Complex: after torque on during E-Stop");
 

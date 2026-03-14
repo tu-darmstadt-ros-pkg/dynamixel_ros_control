@@ -170,16 +170,19 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   exe_thread_ = std::thread([this] { exe_->spin(); });
 
   // create a service to set torque
-  set_torque_service_ = node_->create_service<std_srvs::srv::SetBool>(
-      "~/set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-                             const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+  set_torque_service_ = node_->create_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "~/set_torque", [this](const std::shared_ptr<dynamixel_ros_control_msgs::srv::SetTorque::Request> request,
+                             const std::shared_ptr<dynamixel_ros_control_msgs::srv::SetTorque::Response> response) {
         if (lifecycle_state_.label() != hardware_interface::lifecycle_state_names::ACTIVE) {
           response->success = false;
           response->message = "Hardware Interface must be in 'active' state to set torque";
           return;
         }
-        DXL_LOG_INFO("Request to set torque to " << (request->data ? "ON" : "OFF") << " received.");
-        response->success = setTorque(request->data);
+        std::vector<std::string> ignore_joints(request->ignore_joints.begin(), request->ignore_joints.end());
+        DXL_LOG_INFO("Request to set torque to "
+                     << (request->enable ? "ON" : "OFF") << " received."
+                     << (ignore_joints.empty() ? "" : " Ignoring joints: " + iterableToString(ignore_joints)));
+        response->success = setTorque(request->enable, ignore_joints);
         response->message = response->success ? "Torque set successfully" : "Failed to set torque";
       });
 
@@ -336,7 +339,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_activate from " << previous_state.label());
-  if (!setTorque(torque_on_startup_, true)) {
+  if (!setTorque(torque_on_startup_, {}, true)) {
     DXL_LOG_ERROR("Failed to set torque on activation to " << (torque_on_startup_ ? "ON" : "OFF"));
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -359,7 +362,7 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
-  if (!setTorque(!torque_off_on_shutdown_, true)) {
+  if (!setTorque(!torque_off_on_shutdown_, {}, true)) {
     DXL_LOG_ERROR("Failed to set torque on deactivation to " << (torque_off_on_shutdown_ ? "ON" : "OFF"));
     return CallbackReturn::ERROR;
   }
@@ -954,7 +957,7 @@ bool DynamixelHardwareInterface::reboot()
 
   // Restore desired torque state after reboot (motors default to torque off after reboot)
   DXL_LOG_INFO("Restoring torque state to " << (desired_torque_state_ ? "ON" : "OFF") << " after reboot.");
-  if (!setTorque(desired_torque_state_, true)) {
+  if (!setTorque(desired_torque_state_, {}, true)) {
     DXL_LOG_ERROR("Failed to restore torque state after reboot.");
     return false;
   }
@@ -965,9 +968,13 @@ bool DynamixelHardwareInterface::reboot()
   return true;
 }
 
-bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_controller_unloading, int retries,
-                                           const bool direct_write)
+bool DynamixelHardwareInterface::setTorque(const bool do_enable, const std::vector<std::string>& ignore_joints,
+                                           bool skip_controller_unloading, int retries, const bool direct_write)
 {
+  auto is_ignored = [&ignore_joints](const std::string& name) {
+    return std::find(ignore_joints.begin(), ignore_joints.end(), name) != ignore_joints.end();
+  };
+
   // Track the user's desired torque state (for restoration after reboot)
   desired_torque_state_ = do_enable;
 
@@ -978,6 +985,8 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_contr
     bool all_torqued = true;
     bool all_torqued_off = true;
     for (const auto& [name, joint] : joints_) {
+      if (is_ignored(name))
+        continue;
       bool joint_torqued;
       if (!joint.dynamixel->readRegister(DXL_REGISTER_CMD_TORQUE, joint_torqued)) {
         return false;
@@ -1014,6 +1023,8 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_contr
     while (counter < retries && !success) {
       success = true;
       for (auto& [name, joint] : joints_) {
+        if (is_ignored(name))
+          continue;
         joint.torque = do_enable;  // set torque of each joint -> also relevant for indirect write
         if (direct_write && !joint.dynamixel->writeRegister(DXL_REGISTER_CMD_TORQUE, joint.torque)) {
           success = false;
