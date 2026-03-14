@@ -81,6 +81,14 @@ public:
     return do_not_reset_on_ctrl_change_;
   }
 
+  void freeze();
+  void unfreeze();
+  bool isFrozen() const
+  {
+    return frozen_;
+  }
+  void applyFrozenGoals();
+
   // Parameters
   std::string name;
   std::shared_ptr<Dynamixel> dynamixel;
@@ -97,6 +105,8 @@ public:
   std::unordered_map<std::string, MimicState> mimic_joints_states_;  // joint_name -> (interface_name -> value)
 
   LED_State led_state;
+  bool frozen_{false};
+  std::unordered_map<std::string, double> frozen_goal_values_;
 
 private:
   ControlMode getControlModeFromInterfaces(const std::vector<std::string>& interfaces) const;

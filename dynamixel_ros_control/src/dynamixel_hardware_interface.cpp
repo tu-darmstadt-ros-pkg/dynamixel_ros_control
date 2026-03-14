@@ -194,6 +194,27 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
         response->message = response->success ? "Rebooted successfully" : "Failed to reboot";
       });
 
+  // Create per-joint freeze services for joints with do_not_reset_on_ctrl_change
+  for (auto& [joint_name, joint] : joints_) {
+    if (joint.doNotResetOnCtrlChange()) {
+      auto service_name = "~/" + joint_name + "/freeze";
+      freeze_services_[joint_name] = node_->create_service<std_srvs::srv::SetBool>(
+          service_name, [this, &joint, joint_name](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                                                   const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+            if (request->data) {
+              joint.freeze();
+              response->success = true;
+              response->message = "Joint '" + joint_name + "' frozen.";
+            } else {
+              joint.unfreeze();
+              response->success = true;
+              response->message = "Joint '" + joint_name + "' unfrozen.";
+            }
+          });
+      DXL_LOG_INFO("Created freeze service for joint '" << joint_name << "' at '" << service_name << "'");
+    }
+  }
+
   // Setup Adjustable Transmission Offset Manager
   auto pre_callback = [this]() { return deactivateControllers(); };
   auto post_callback = [this]() {
@@ -479,7 +500,9 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
       if (joint.state_transmission) {
         joint.state_transmission->actuator_to_joint();
       }
-      joint.resetGoalState();
+      if (!joint.doNotResetOnCtrlChange()) {
+        joint.resetGoalState();
+      }
     }
     first_read_successful_ = true;
   }
@@ -639,6 +662,9 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
 
   // Wait for a successful read after changing the control mode
   for (auto& [name, joint] : joints_) {
+    if (joint.isFrozen()) {
+      joint.applyFrozenGoals();
+    }
     if (joint.command_transmission) {
       joint.command_transmission->joint_to_actuator();
     }

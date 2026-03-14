@@ -148,6 +148,7 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_service_;
+  std::unordered_map<std::string, rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr> freeze_services_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;

@@ -280,6 +280,38 @@ void Joint::resetGoalState()
   }
 }
 
+void Joint::freeze()
+{
+  frozen_goal_values_ = getActuatorState().goal;
+  frozen_ = true;
+  DXL_LOG_INFO("Joint '" << name << "' frozen with goal values: " << [this]() {
+    std::ostringstream ss;
+    for (const auto& [k, v] : frozen_goal_values_)
+      ss << k << "=" << v << " ";
+    return ss.str();
+  }());
+}
+
+void Joint::unfreeze()
+{
+  frozen_ = false;
+  frozen_goal_values_.clear();
+  DXL_LOG_INFO("Joint '" << name << "' unfrozen.");
+}
+
+void Joint::applyFrozenGoals()
+{
+  if (!frozen_)
+    return;
+  auto& goal = getActuatorState().goal;
+  for (const auto& [interface_name, value] : frozen_goal_values_) {
+    goal[interface_name] = value;
+  }
+  if (command_transmission) {
+    command_transmission->actuator_to_joint();
+  }
+}
+
 void Joint::setupMimicJoint(const std::string& joint_name, const double offset, const double multiplier)
 {
   mimic_joints_states_[joint_name] = MimicState{};
