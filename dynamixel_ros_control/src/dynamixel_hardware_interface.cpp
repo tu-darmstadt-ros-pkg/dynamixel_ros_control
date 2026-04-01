@@ -2,6 +2,7 @@
 #include "dynamixel_ros_control/log.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <boost/algorithm/string/classification.hpp>
@@ -257,7 +258,9 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     for (auto& [name, joint] : joints_) {
       if (joint.dynamixel->registerAvailable(DXL_REGISTER_BUS_WATCHDOG)) {
         const double ms_per_tick = joint.dynamixel->getItem(DXL_REGISTER_BUS_WATCHDOG).dxlValueToUnitRatio();
-        const double watchdog_ms = std::clamp(dt_ms * 4.0, ms_per_tick, 127.0 * ms_per_tick);
+        // Compute in ticks using ceil to avoid setting watchdog shorter than intended
+        const int watchdog_ticks = std::clamp(static_cast<int>(std::ceil(dt_ms * 4.0 / ms_per_tick)), 1, 127);
+        const double watchdog_ms = watchdog_ticks * ms_per_tick;
         // Clear any existing bus watchdog error first
         if (!joint.dynamixel->writeRegister(DXL_REGISTER_BUS_WATCHDOG, 0.0)) {
           DXL_LOG_WARN("Failed to clear bus watchdog for joint '" << name << "'");
@@ -266,8 +269,8 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
         if (!joint.dynamixel->writeRegister(DXL_REGISTER_BUS_WATCHDOG, watchdog_ms)) {
           DXL_LOG_WARN("Failed to set bus watchdog for joint '" << name << "'");
         } else {
-          DXL_LOG_INFO("Bus watchdog for joint '" << name << "' set to " << watchdog_ms << " ms (dt=" << dt_ms
-                                                  << " ms)");
+          DXL_LOG_INFO("Bus watchdog for joint '" << name << "' set to " << watchdog_ms << " ms (" << watchdog_ticks
+                                                  << " ticks, dt=" << dt_ms << " ms)");
         }
       }
     }

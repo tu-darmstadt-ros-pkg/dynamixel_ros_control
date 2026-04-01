@@ -228,7 +228,7 @@ The reboot service:
 
 The hardware interface automatically configures the Dynamixel [Bus Watchdog](https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#bus-watchdog98) during `on_configure`. The bus watchdog is a safety feature that stops the motor if communication is lost, preventing uncontrolled movement.
 
-The watchdog timeout is set to **4x the control loop period** (derived from the `update_rate` / `rw_rate` in the URDF `<ros2_control>` tag). For example, with an update rate of 50 Hz (20 ms period), the watchdog timeout is set to 80 ms. If the motor does not receive any communication within that time, it stops and enters a watchdog error state.
+The watchdog timeout is set to **4x the control loop period** (derived from the `<update_rate>` in the URDF `<ros2_control>` tag). For example, with an update rate of 50 Hz (20 ms period), the watchdog timeout is set to 80 ms. If the motor does not receive any communication within that time, it stops and enters a watchdog error state.
 
 > **Note:** Not all Dynamixel models support the bus watchdog. The older PRO series (non-A variants such as H42-20-S300-R, H54-200-S500-R) and the original RH-P12-RN do not have this register. The hardware interface automatically skips these models. Supported models include all X-series (XM, XL, XC, XH, XD, XW), MX 2.0 series, P-series (PH, PM), PRO+ A-variants (e.g. H42-20-S300-R(A)), and RH-P12-RN(A).
 
