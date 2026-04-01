@@ -5,6 +5,7 @@
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
+#include <limits>
 
 #include <transmission_interface/simple_transmission_loader.hpp>
 #include <transmission_interface/transmission.hpp>
@@ -201,15 +202,17 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   for (auto& [joint_name, joint] : joints_) {
     if (joint.doNotResetOnCtrlChange()) {
       auto service_name = "~/" + joint_name + "/freeze";
+      auto* joint_ptr = &joint;
       freeze_services_[joint_name] = node_->create_service<std_srvs::srv::SetBool>(
-          service_name, [this, &joint, joint_name](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-                                                   const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+          service_name, [this, joint_ptr, joint_name](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
+                                                      const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+            std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
             if (request->data) {
-              joint.freeze();
+              joint_ptr->freeze();
               response->success = true;
               response->message = "Joint '" + joint_name + "' frozen.";
             } else {
-              joint.unfreeze();
+              joint_ptr->unfreeze();
               response->success = true;
               response->message = "Joint '" + joint_name + "' unfrozen.";
             }
@@ -632,7 +635,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     }
 
     // reset after first read (e.g. goal position = current position)
-    // TODO: separaate first_read and ctrl_changed flags!
+    // TODO: separate first_read and ctrl_changed flags!
     if (!first_read_successful_ && !joint.doNotResetOnCtrlChange()) {
       joint.resetGoalState();
     }
