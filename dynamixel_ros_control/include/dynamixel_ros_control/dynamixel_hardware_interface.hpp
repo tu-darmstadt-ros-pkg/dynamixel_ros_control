@@ -16,7 +16,6 @@
 #include <hector_transmission_interface/adjustable_offset_transmission_loader.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <dynamixel_ros_control_msgs/srv/set_torque.hpp>
-#include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
@@ -150,7 +149,6 @@ private:
   rclcpp::Node::SharedPtr node_;
   rclcpp::Service<dynamixel_ros_control_msgs::srv::SetTorque>::SharedPtr set_torque_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_service_;
-  std::unordered_map<std::string, rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr> freeze_services_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;

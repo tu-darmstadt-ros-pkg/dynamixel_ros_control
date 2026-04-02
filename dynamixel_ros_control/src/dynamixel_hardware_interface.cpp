@@ -144,7 +144,6 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
     ss << "-- state interfaces: " << iterableToString(joint.getAvailableStateInterfaces()) << std::endl;
     ss << "-- mounting_offset: " << joint.mounting_offset << std::endl;
     ss << "-- offset: " << joint.offset << std::endl;
-    ss << "-- do_not_reset_on_ctrl_change: " << joint.doNotResetOnCtrlChange() << std::endl;
     ss << "-- initial values: " << mapToString(joint.dynamixel->getInitialRegisterValues()) << std::endl;
     DXL_LOG_DEBUG(ss.str());
     joints_.emplace(joint.name, std::move(joint));
@@ -197,29 +196,6 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
         response->success = reboot();
         response->message = response->success ? "Rebooted successfully" : "Failed to reboot";
       });
-
-  // Create per-joint freeze services for joints with do_not_reset_on_ctrl_change
-  for (auto& [joint_name, joint] : joints_) {
-    if (joint.doNotResetOnCtrlChange()) {
-      auto service_name = "~/" + joint_name + "/freeze";
-      auto* joint_ptr = &joint;
-      freeze_services_[joint_name] = node_->create_service<std_srvs::srv::SetBool>(
-          service_name, [this, joint_ptr, joint_name](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-                                                      const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
-            std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
-            if (request->data) {
-              joint_ptr->freeze();
-              response->success = true;
-              response->message = "Joint '" + joint_name + "' frozen.";
-            } else {
-              joint_ptr->unfreeze();
-              response->success = true;
-              response->message = "Joint '" + joint_name + "' unfrozen.";
-            }
-          });
-      DXL_LOG_INFO("Created freeze service for joint '" << joint_name << "' at '" << service_name << "'");
-    }
-  }
 
   // Setup Adjustable Transmission Offset Manager
   auto pre_callback = [this]() { return deactivateControllers(); };
@@ -506,9 +482,7 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
       if (joint.state_transmission) {
         joint.state_transmission->actuator_to_joint();
       }
-      if (!joint.doNotResetOnCtrlChange()) {
-        joint.resetGoalState();
-      }
+      joint.resetGoalState();
     }
     first_read_successful_ = true;
   }
@@ -521,17 +495,13 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     return hardware_interface::return_type::ERROR;
   }
 
-  // TODO: refactor - extract all joints that need to be reset
+  // Collect all joints involved in the switch for goal reset
   std::vector<std::string> joints_to_reset;
   for (const auto& full_interface_name : start_interfaces) {
     std::string joint_name;
     std::string interface_name;
     if (!splitFullInterfaceName(full_interface_name, joint_name, interface_name)) {
       return hardware_interface::return_type::ERROR;
-    }
-    if (joints_.count(joint_name) > 0 && joints_[joint_name].doNotResetOnCtrlChange()) {
-      DXL_LOG_DEBUG("Skipping reset for joint '" << joint_name << "' (do_not_reset_on_ctrl_change is set).");
-      continue;
     }
     if (std::find(joints_to_reset.begin(), joints_to_reset.end(), joint_name) == joints_to_reset.end())
       joints_to_reset.emplace_back(joint_name);
@@ -541,10 +511,6 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     std::string interface_name;
     if (!splitFullInterfaceName(full_interface_name, joint_name, interface_name)) {
       return hardware_interface::return_type::ERROR;
-    }
-    if (joints_.count(joint_name) > 0 && joints_[joint_name].doNotResetOnCtrlChange()) {
-      DXL_LOG_DEBUG("Skipping reset for joint '" << joint_name << "' (do_not_reset_on_ctrl_change is set).");
-      continue;
     }
     if (std::find(joints_to_reset.begin(), joints_to_reset.end(), joint_name) == joints_to_reset.end())
       joints_to_reset.emplace_back(joint_name);
@@ -636,7 +602,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
 
     // reset after first read (e.g. goal position = current position)
     // TODO: separate first_read and ctrl_changed flags!
-    if (!first_read_successful_ && !joint.doNotResetOnCtrlChange()) {
+    if (!first_read_successful_) {
       joint.resetGoalState();
     }
     joint.updateMimicJointStates();
@@ -666,11 +632,8 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     return hardware_interface::return_type::ERROR;
   }
 
-  // Wait for a successful read after changing the control mode
+  // Apply command transmissions
   for (auto& [name, joint] : joints_) {
-    if (joint.isFrozen()) {
-      joint.applyFrozenGoals();
-    }
     if (joint.command_transmission) {
       joint.command_transmission->joint_to_actuator();
     }
@@ -978,8 +941,12 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, const std::vect
     return std::find(ignore_joints.begin(), ignore_joints.end(), name) != ignore_joints.end();
   };
 
-  // Track the user's desired torque state (for restoration after reboot)
-  desired_torque_state_ = do_enable;
+  // Track the user's desired torque state (for restoration after reboot).
+  // Only update when the request applies to all joints; otherwise we might
+  // override the torque state of previously-ignored joints on reboot/restore.
+  if (ignore_joints.empty()) {
+    desired_torque_state_ = do_enable;
+  }
 
   // check if torque change is necessary
   {
@@ -1017,7 +984,13 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, const std::vect
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
     if (do_enable) {
       // reset goal state before enabling torque && verify that goal positions are set correctly
-      if (!resetGoalStateAndVerify(joint_names_, max_reset_and_verify_retries_))
+      // Filter out ignored joints so their goals are not overwritten
+      std::vector<std::string> joints_to_reset;
+      for (const auto& name : joint_names_) {
+        if (!is_ignored(name))
+          joints_to_reset.emplace_back(name);
+      }
+      if (!resetGoalStateAndVerify(joints_to_reset, max_reset_and_verify_retries_))
         return false;
     }
     bool success = false;

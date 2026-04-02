@@ -184,22 +184,6 @@ back on.
 For example a position controller would otherwise try to move the motor to the last commanded position when re-enabling
 torque.
 
-### Freezing Joint Goals
-
-Joints configured with `do_not_reset_on_ctrl_change: true` can be frozen via a per-joint service. When frozen, the joint's goal values are latched and cannot be overwritten by controller resets or mode switches.
-
-```bash
-ros2 service call /<hardware_interface>/<joint_name>/freeze std_srvs/srv/SetBool "{data: true}"
-```
-
-To unfreeze:
-
-```bash
-ros2 service call /<hardware_interface>/<joint_name>/freeze std_srvs/srv/SetBool "{data: false}"
-```
-
-This is useful for joints that should maintain their position across controller changes (e.g., a gripper that should stay closed while arm controllers are reloaded).
-
 ### Software E-Stop
 
 The hardware interface provides a software emergency‑stop by subscribing to the <hardware_interface_name>/soft_e_stop

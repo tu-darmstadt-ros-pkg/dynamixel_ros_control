@@ -21,7 +21,6 @@
 #include <std_msgs/msg/bool.hpp>
 #include <std_msgs/msg/float64_multi_array.hpp>
 #include <dynamixel_ros_control_msgs/srv/set_torque.hpp>
-#include <std_srvs/srv/set_bool.hpp>
 #include <std_srvs/srv/trigger.hpp>
 #include <lifecycle_msgs/msg/state.hpp>
 
@@ -422,10 +421,11 @@ protected:
   // Helper to set torque state
   bool
   setTorque(const std::shared_ptr<hector_testing_utils::TestClient<dynamixel_ros_control_msgs::srv::SetTorque>>& client,
-            bool enable)
+            bool enable, const std::vector<std::string>& ignore_joints = {})
   {
     auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
     request->enable = enable;
+    request->ignore_joints = ignore_joints;
 
     hector_testing_utils::ServiceCallOptions options;
     options.service_timeout = 5s;

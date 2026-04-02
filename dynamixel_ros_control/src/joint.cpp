@@ -56,9 +56,6 @@ bool Joint::loadConfiguration(DynamixelDriver& driver, const hardware_interface:
     preferred_position_control_mode_ = stringToControlMode(control_mode_str);
   }
 
-  // Option to skip reset on controller change
-  getParameter(info.parameters, "do_not_reset_on_ctrl_change", do_not_reset_on_ctrl_change_, false);
-
   // Initial values
   std::unordered_map<std::string, std::string> initial_register_values;
   for (const auto& [param_name, param_value] : info.parameters) {
@@ -151,9 +148,7 @@ bool Joint::addActiveCommandInterface(const std::string& interface_name)
     return true;
   }
 
-  if (!do_not_reset_on_ctrl_change_) {
-    resetGoalState(interface_name);
-  }
+  resetGoalState(interface_name);
   active_command_interfaces_.emplace_back(interface_name);
   return true;
 }
@@ -168,9 +163,7 @@ bool Joint::removeActiveCommandInterface(const std::string& interface_name)
     return false;
   }
 
-  if (!do_not_reset_on_ctrl_change_) {
-    resetGoalState(interface_name);
-  }
+  resetGoalState(interface_name);
   active_command_interfaces_.erase(it);
   return true;
 }
@@ -277,38 +270,6 @@ void Joint::resetGoalState()
 {
   for (auto& interface_name : getAvailableCommandInterfaces()) {
     resetGoalState(interface_name);
-  }
-}
-
-void Joint::freeze()
-{
-  frozen_goal_values_ = getActuatorState().goal;
-  frozen_ = true;
-  DXL_LOG_INFO("Joint '" << name << "' frozen with goal values: " << [this]() {
-    std::ostringstream ss;
-    for (const auto& [k, v] : frozen_goal_values_)
-      ss << k << "=" << v << " ";
-    return ss.str();
-  }());
-}
-
-void Joint::unfreeze()
-{
-  frozen_ = false;
-  frozen_goal_values_.clear();
-  DXL_LOG_INFO("Joint '" << name << "' unfrozen.");
-}
-
-void Joint::applyFrozenGoals()
-{
-  if (!frozen_)
-    return;
-  auto& goal = getActuatorState().goal;
-  for (const auto& [interface_name, value] : frozen_goal_values_) {
-    goal[interface_name] = value;
-  }
-  if (command_transmission) {
-    command_transmission->actuator_to_joint();
   }
 }
 
