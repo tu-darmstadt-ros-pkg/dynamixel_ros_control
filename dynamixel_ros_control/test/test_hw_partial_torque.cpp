@@ -166,23 +166,30 @@ TEST_F(HardwareInterfaceTest, GoalStatePublisher_ReflectsCommandedGoals)
   std_msgs::msg::Float64MultiArray cmd;
   cmd.data = {TARGET_POSITION, TARGET_POSITION, TARGET_POSITION, TARGET_POSITION,
               TARGET_POSITION, TARGET_POSITION, TARGET_POSITION};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(1s);
 
-  // 3. Check the published goal state
-  {
+  // 3. Publish repeatedly and wait for the goal to appear in the subscribed message.
+  // The command needs to be picked up by the controller update cycle and written through
+  // the hardware interface before it appears in goal_joint_states.
+  bool goal_reflected = false;
+  deadline = std::chrono::steady_clock::now() + 5s;
+  while (std::chrono::steady_clock::now() < deadline && !goal_reflected) {
+    pub->publish(cmd);
+    std::this_thread::sleep_for(100ms);
+    executor_->spin_some();
+
     std::lock_guard<std::mutex> lock(msg_mutex);
-    ASSERT_NE(received_msg, nullptr) << "Should have received a goal_joint_states message";
-
-    // Find arm_joint_1 in the message
-    auto it = std::find(received_msg->name.begin(), received_msg->name.end(), "arm_joint_1");
-    ASSERT_NE(it, received_msg->name.end()) << "arm_joint_1 should be in goal_joint_states";
-    size_t idx = std::distance(received_msg->name.begin(), it);
-
-    // The published goal should reflect the commanded position
-    EXPECT_NEAR(received_msg->position[idx], TARGET_POSITION, 0.1)
-        << "Published goal position should reflect the commanded value";
+    if (received_msg) {
+      auto it = std::find(received_msg->name.begin(), received_msg->name.end(), "arm_joint_1");
+      if (it != received_msg->name.end()) {
+        size_t idx = std::distance(received_msg->name.begin(), it);
+        if (std::abs(received_msg->position[idx] - TARGET_POSITION) < 0.1) {
+          goal_reflected = true;
+        }
+      }
+    }
   }
+
+  EXPECT_TRUE(goal_reflected) << "Published goal position should reflect the commanded value within timeout";
 }
 
 }  // namespace dynamixel_ros_control::test
