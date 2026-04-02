@@ -289,7 +289,17 @@ bool Dynamixel::writeInitialValues()
 {
   bool success = true;
   for (const auto& [register_name, register_value] : initial_values_) {
-    success &= writeRegister(register_name, register_value);
+    if (!registerAvailable(register_name)) {
+      DXL_LOG_WARN("Register '" << register_name << "' is not available on motor ID " << getIdInt()
+                                << ". Check model compatibility.");
+      success = false;
+      continue;
+    }
+    if (!writeRegister(register_name, register_value)) {
+      DXL_LOG_WARN("Failed to write initial value '" << register_value << "' to register '" << register_name
+                                                     << "' on motor ID " << getIdInt());
+      success = false;
+    }
   }
   return success;
 }

@@ -178,6 +178,37 @@ back on.
 For example a position controller would otherwise try to move the motor to the last commanded position when re-enabling
 torque.
 
+### Motion Profiles
+
+Dynamixel motors have a built-in trajectory profile generator that shapes motion through controlled acceleration, cruising, and deceleration phases. Without profile configuration, the motor jumps to each new goal position as fast as possible, which causes jerky, staccato-like motion when streaming position commands at high rates (e.g., 50 Hz).
+
+Profile registers can be configured per joint using the `registers.*` URDF parameter mechanism:
+
+```xml
+<joint name="arm_joint_1">
+  <param name="id">11</param>
+  <param name="registers.profile_velocity">1.0</param>
+  <param name="registers.profile_acceleration">0.5</param>
+  ...
+</joint>
+```
+
+Values are automatically converted to motor-native units using each model's unit conversion table.
+
+For **time-based profiles** (recommended for streaming controllers), set `drive_mode` bit 2 to enable time-based profiling. In this mode, `profile_velocity` specifies the total profile duration in milliseconds and `profile_acceleration` specifies the acceleration time in milliseconds. Since `drive_mode` is an EEPROM register with no unit conversion, set the raw value directly:
+
+```xml
+<param name="registers.drive_mode">4</param>
+<param name="registers.profile_velocity">20</param>
+<param name="registers.profile_acceleration">8</param>
+```
+
+This configures a 20 ms profile duration (matching a 50 Hz command rate) with 8 ms acceleration ramp.
+
+> **Note:** Not all Dynamixel models support profile registers. The older PRO series (H42-20-S300-R, H54-200-S500-R) and the original RH-P12-RN use `goal_acceleration` instead. The hardware interface logs a warning if a configured register is not available on the motor model.
+
+All `registers.*` values are automatically restored after a hardware error reboot, so profile configuration is not lost during recovery.
+
 ### Software E-Stop
 
 The hardware interface provides a software emergency‑stop by subscribing to the <hardware_interface_name>/soft_e_stop

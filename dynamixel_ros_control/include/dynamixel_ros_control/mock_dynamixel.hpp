@@ -174,6 +174,11 @@ public:
           address_map_[name] = addr;
           length_map_[name] = len;
 
+          // Track RAM registers for reset on reboot
+          if (parts.size() >= 5 && parts[4] == "RAM") {
+            ram_registers_.emplace_back(static_cast<uint16_t>(addr), static_cast<uint8_t>(len));
+          }
+
           // Cache important addresses
           if (name == "torque_enable")
             torque_enable_addr_ = addr;
@@ -322,6 +327,18 @@ public:
   uint8_t getHardwareError() const
   {
     return hardware_error_;
+  }
+
+  // Reset all RAM registers to 0 (simulates power cycle on reboot)
+  void resetRAMRegisters()
+  {
+    for (const auto& [addr, len] : ram_registers_) {
+      for (uint8_t i = 0; i < len; ++i) {
+        if (static_cast<size_t>(addr + i) < memory_.size()) {
+          memory_[addr + i] = 0;
+        }
+      }
+    }
   }
 
   // Reboot tracking
@@ -733,7 +750,8 @@ private:
   // Error state
   uint8_t hardware_error_ = 0;
   bool comm_error_enabled_ = false;
-  int reboot_count_ = 0;  // Tracks how many times this motor has been rebooted
+  int reboot_count_ = 0;                                     // Tracks how many times this motor has been rebooted
+  std::vector<std::pair<uint16_t, uint8_t>> ram_registers_;  // RAM register (address, length) pairs for reset on reboot
 
   // Indirect addressing configuration
   uint16_t indirect_address_start_ = 0;
@@ -922,6 +940,7 @@ public:
       return COMM_RX_TIMEOUT;
 
     motor->incrementRebootCount();
+    motor->resetRAMRegisters();
     motor->clearHardwareError();
     if (error)
       *error = 0;

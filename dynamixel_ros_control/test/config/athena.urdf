@@ -1559,6 +1559,8 @@
       <param name="id">11</param>
       <param name="registers.homing_offset">0.0</param>
       <param name="registers.led_blue">255</param>
+      <param name="registers.profile_velocity">20</param>
+      <param name="registers.profile_acceleration">8</param>
       <param name="position_control_mode">extended_position</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>

@@ -149,6 +149,12 @@ if(BUILD_TESTING)
   target_link_libraries(test_hw_hardware_error ${PROJECT_NAME})
   ament_target_dependencies(test_hw_hardware_error ${HW_TEST_DEPS})
 
+  # Test: Motion profile register configuration and restoration after reboot
+  ament_add_gtest(test_hw_profile test/test_hw_profile.cpp)
+  set_tests_properties(test_hw_profile PROPERTIES TIMEOUT 180)
+  target_link_libraries(test_hw_profile ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_profile ${HW_TEST_DEPS})
+
   # Test: Mimic joints (gripper finger joints following servo)
   ament_add_gtest(test_hw_mimic test/test_hw_mimic.cpp)
   set_tests_properties(test_hw_mimic PROPERTIES TIMEOUT 180)

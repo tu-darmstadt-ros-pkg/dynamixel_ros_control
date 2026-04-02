@@ -907,6 +907,16 @@ bool DynamixelHardwareInterface::reboot()
     return false;
   }
 
+  // Restore initial register values (RAM registers are reset to defaults after reboot)
+  {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    for (auto& [name, joint] : joints_) {
+      if (!joint.dynamixel->writeInitialValues()) {
+        DXL_LOG_WARN("Failed to restore initial register values for joint '" << name << "' after reboot.");
+      }
+    }
+  }
+
   // Release e-stop since hardware error has been resolved
   if (e_stop_active_) {
     DXL_LOG_INFO("Releasing e-stop after successful reboot.");

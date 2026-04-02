@@ -144,10 +144,12 @@ public:
   /// @brief Get configured initial register values.
   const std::unordered_map<std::string, std::string>& getInitialRegisterValues() const;
 
+  /// @brief Write all configured initial register values to hardware.
+  bool writeInitialValues();
+
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address,
                                 uint16_t& indirect_data_address) const;
-  bool writeInitialValues();
 
   DynamixelDriver& driver_;
   ControlTable* control_table_{nullptr};
