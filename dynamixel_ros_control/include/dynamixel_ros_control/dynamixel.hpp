@@ -47,6 +47,14 @@ constexpr char DXL_REGISTER_LED_RED[] = "led_red";
 constexpr char DXL_REGISTER_LED_GREEN[] = "led_green";
 constexpr char DXL_REGISTER_LED_BLUE[] = "led_blue";
 
+constexpr char DXL_REGISTER_BUS_WATCHDOG[] = "bus_watchdog";
+// Valid range for the bus_watchdog register across all supported Dynamixel models.
+// The register is 1 byte but interpreted as signed: 0 disables the watchdog, and
+// values 1..127 select a timeout in units defined per-model (see `ms_20` in the
+// model YAMLs). Values >127 are reserved/invalid per the Dynamixel control table spec.
+constexpr int DXL_BUS_WATCHDOG_MIN_TICKS = 1;
+constexpr int DXL_BUS_WATCHDOG_MAX_TICKS = 127;
+
 /// @brief Convert string to ControlMode enum.
 ControlMode stringToControlMode(const std::string& str);
 
