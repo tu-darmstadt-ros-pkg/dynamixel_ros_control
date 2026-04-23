@@ -14,6 +14,11 @@
         <param name="id">${id}</param>
         <param name="position_control_mode">extended_position</param>
         <param name="registers.velocity_limit">1.0</param>
+        <!-- Time-based trapezoidal profile: drive_mode bit 2 enables time-based mode.
+             profile_velocity = total profile duration (ms), profile_acceleration = accel ramp (ms). -->
+        <param name="registers.drive_mode">4</param>
+        <param name="registers.profile_velocity">20</param>
+        <param name="registers.profile_acceleration">8</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
         <command_interface name="current"/>
