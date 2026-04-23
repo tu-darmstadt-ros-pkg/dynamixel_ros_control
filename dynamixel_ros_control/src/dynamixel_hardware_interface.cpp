@@ -16,6 +16,10 @@
 
 namespace {
 
+// Multiplier applied to the control-loop period to derive the watchdog timeout.
+// Allows a few missed cycles before the watchdog trips.
+constexpr double BUS_WATCHDOG_PERIOD_MULTIPLIER = 4.0;
+
 std::unordered_map<std::string, std::string> loadInterfaceRegisterTranslationMap(const YAML::Node& node)
 {
   if (!node.IsSequence()) {
@@ -253,13 +257,15 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
   // Timeout is set to 4x the control loop period to allow for occasional missed cycles.
   if (info_.rw_rate > 0) {
     const double dt_ms = 1000.0 / static_cast<double>(info_.rw_rate);
-    // Set to 4x the cycle time, clamped to the valid register range.
+    // Set to a multiple of the cycle time, clamped to the valid register range.
     // The unit conversion (ms per tick) is defined in each model's YAML control table.
     for (auto& [name, joint] : joints_) {
       if (joint.dynamixel->registerAvailable(DXL_REGISTER_BUS_WATCHDOG)) {
         const double ms_per_tick = joint.dynamixel->getItem(DXL_REGISTER_BUS_WATCHDOG).dxlValueToUnitRatio();
         // Compute in ticks using ceil to avoid setting watchdog shorter than intended
-        const int watchdog_ticks = std::clamp(static_cast<int>(std::ceil(dt_ms * 4.0 / ms_per_tick)), 1, 127);
+        const int watchdog_ticks =
+            std::clamp(static_cast<int>(std::ceil(dt_ms * BUS_WATCHDOG_PERIOD_MULTIPLIER / ms_per_tick)),
+                       DXL_BUS_WATCHDOG_MIN_TICKS, DXL_BUS_WATCHDOG_MAX_TICKS);
         const double watchdog_ms = watchdog_ticks * ms_per_tick;
         // Clear any existing bus watchdog error first
         if (!joint.dynamixel->writeRegister(DXL_REGISTER_BUS_WATCHDOG, 0.0)) {
