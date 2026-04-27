@@ -222,6 +222,8 @@ public:
             led_blue_addr_ = addr;
           else if (name == "bus_watchdog")
             bus_watchdog_addr_ = addr;
+          else if (name == "drive_mode")
+            drive_mode_addr_ = addr;
         }
       }
 
@@ -474,11 +476,21 @@ private:
     return default_velocity_limit_;
   }
 
-  // For position mode: profile_velocity is the dynamic velocity limit
+  // drive_mode bit 2 (0x04) selects time-based profile mode, in which profile_velocity
+  // is a duration in ms rather than a velocity tick value.
+  bool isTimeBasedProfile() const
+  {
+    if (drive_mode_addr_ == 0)
+      return false;
+    return (memory_[drive_mode_addr_] & 0x04) != 0;
+  }
+
+  // For position mode: profile_velocity is the dynamic velocity limit (only in
+  // velocity-based profile mode — in time-based mode it has different semantics).
   double getPositionModeVelocityLimit() const
   {
     // First check profile_velocity (dynamic limit during position moves)
-    if (profile_velocity_addr_ > 0) {
+    if (profile_velocity_addr_ > 0 && !isTimeBasedProfile()) {
       int32_t profile_vel = read4ByteSigned(profile_velocity_addr_);
       if (profile_vel > 0) {
         return static_cast<double>(profile_vel) * rad_per_s_per_tick_;
@@ -519,7 +531,7 @@ private:
         return static_cast<double>(limit_ticks);  // Units vary by model
       }
     }
-    if (profile_acceleration_addr_ > 0) {
+    if (profile_acceleration_addr_ > 0 && !isTimeBasedProfile()) {
       int32_t profile_acc = read4ByteSigned(profile_acceleration_addr_);
       if (profile_acc > 0) {
         return static_cast<double>(profile_acc);
@@ -732,6 +744,7 @@ private:
   uint16_t led_green_addr_ = 0;
   uint16_t led_blue_addr_ = 0;
   uint16_t bus_watchdog_addr_ = 0;
+  uint16_t drive_mode_addr_ = 0;
 
   // Unit conversions
   double rad_per_tick_ = 0.00002068538;  // Default for H42 series

@@ -11,26 +11,29 @@ namespace dynamixel_ros_control::test {
 
 TEST_F(HardwareInterfaceTest, Profile_RegistersSetOnStartup)
 {
-  // Verify that profile_velocity and profile_acceleration registers are written
-  // during on_configure when configured via registers.* URDF parameters.
-  // The test URDF sets registers.profile_velocity=1.0 and registers.profile_acceleration=0.5
+  // Verify that profile and drive_mode registers are written during on_configure
+  // when configured via registers.* URDF parameters. The test URDF sets
+  // drive_mode=4 (time-based), profile_velocity=20 (ms), profile_acceleration=8 (ms)
   // on arm_joint_1 (motor ID 11, PH model).
   std::this_thread::sleep_for(200ms);
 
   auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
   ASSERT_NE(motor, nullptr);
 
+  // Verify drive_mode was written (time-based profile bit)
+  uint16_t drive_mode_addr = motor->getAddress("drive_mode");
+  ASSERT_GT(drive_mode_addr, 0u) << "drive_mode register should exist on PH model";
+  EXPECT_EQ(motor->read1Byte(drive_mode_addr), 4) << "drive_mode should be 4 (time-based profile)";
+
   // Verify profile_velocity register was written
   uint16_t profile_vel_addr = motor->getAddress("profile_velocity");
   ASSERT_GT(profile_vel_addr, 0u) << "profile_velocity register should exist on PH model";
-  int32_t profile_vel = motor->read4ByteSigned(profile_vel_addr);
-  EXPECT_GT(profile_vel, 0) << "profile_velocity should be nonzero after initial write (set to 1.0 rad/s)";
+  EXPECT_EQ(motor->read4ByteSigned(profile_vel_addr), 20) << "profile_velocity should be 20 (ms, raw)";
 
   // Verify profile_acceleration register was written
   uint16_t profile_acc_addr = motor->getAddress("profile_acceleration");
   ASSERT_GT(profile_acc_addr, 0u) << "profile_acceleration register should exist on PH model";
-  int32_t profile_acc = motor->read4ByteSigned(profile_acc_addr);
-  EXPECT_GT(profile_acc, 0) << "profile_acceleration should be nonzero after initial write (set to 0.5 rad/s2)";
+  EXPECT_EQ(motor->read4ByteSigned(profile_acc_addr), 8) << "profile_acceleration should be 8 (ms, raw)";
 
   // Verify motors without profile config have default (0) values
   auto motor2 = MockDynamixelManager::instance().getMotor(ARM_JOINT_2_ID);
