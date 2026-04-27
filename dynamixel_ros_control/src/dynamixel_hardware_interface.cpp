@@ -873,13 +873,17 @@ std::vector<std::string> DynamixelHardwareInterface::getJointsWithHardwareError(
 
 bool DynamixelHardwareInterface::reboot()
 {
+  std::vector<std::string> rebooted_joints;
   {
     // lock communication mutex (avoid simultaneous access with read / write)
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
     for (auto& [name, joint] : joints_) {
-      if (joint.dynamixel->hardware_error_status != OK && !joint.dynamixel->reboot()) {
-        DXL_LOG_ERROR("Dynamixel '" << name << "' reboot failed.");
-        return false;
+      if (joint.dynamixel->hardware_error_status != OK) {
+        if (!joint.dynamixel->reboot()) {
+          DXL_LOG_ERROR("Dynamixel '" << name << "' reboot failed.");
+          return false;
+        }
+        rebooted_joints.push_back(name);
       }
     }
   }
@@ -907,11 +911,11 @@ bool DynamixelHardwareInterface::reboot()
     return false;
   }
 
-  // Restore initial register values (RAM registers are reset to defaults after reboot)
+  // Restore initial register values for rebooted joints (RAM registers are reset to defaults after reboot)
   {
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
-    for (auto& [name, joint] : joints_) {
-      if (!joint.dynamixel->writeInitialValues()) {
+    for (const auto& name : rebooted_joints) {
+      if (!joints_.at(name).dynamixel->writeInitialValues()) {
         DXL_LOG_WARN("Failed to restore initial register values for joint '" << name << "' after reboot.");
       }
     }
