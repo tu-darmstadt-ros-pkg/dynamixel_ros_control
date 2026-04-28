@@ -732,6 +732,5 @@ TEST_F(HardwareInterfaceTest, Robustness_ControllerSwitchAfterCommunicationRecov
 
 int main(int argc, char** argv)
 {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  dynamixel_ros_control::test::run_tests_and_exit(argc, argv);
 }

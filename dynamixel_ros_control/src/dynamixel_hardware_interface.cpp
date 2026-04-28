@@ -892,6 +892,30 @@ bool DynamixelHardwareInterface::reboot()
   // Dynamixel motors need time to restart after a reboot command
   get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
 
+  // Reboot wipes RAM. Re-apply indirect address mappings (used by all sync read/write managers)
+  // and restore configured initial register values BEFORE the first read, since both depend on
+  // motor RAM state.
+  std::set<Dynamixel*> rebooted_dxls;
+  for (const auto& name : rebooted_joints) {
+    rebooted_dxls.insert(joints_.at(name).dynamixel.get());
+  }
+  {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    if (!read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
+        !cmd_read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
+        !control_write_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
+        !torque_write_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
+        !led_write_manager_.rewriteIndirectAddresses(rebooted_dxls)) {
+      DXL_LOG_ERROR("Failed to restore indirect address mappings after reboot.");
+      return false;
+    }
+    for (const auto& name : rebooted_joints) {
+      if (!joints_.at(name).dynamixel->writeInitialValues()) {
+        DXL_LOG_WARN("Failed to restore initial register values for joint '" << name << "' after reboot.");
+      }
+    }
+  }
+
   // Refresh hardware status by performing a read
   {
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
@@ -909,16 +933,6 @@ bool DynamixelHardwareInterface::reboot()
   if (!isHardwareOk()) {
     DXL_LOG_ERROR("Hardware still reports errors after reboot.");
     return false;
-  }
-
-  // Restore initial register values for rebooted joints (RAM registers are reset to defaults after reboot)
-  {
-    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
-    for (const auto& name : rebooted_joints) {
-      if (!joints_.at(name).dynamixel->writeInitialValues()) {
-        DXL_LOG_WARN("Failed to restore initial register values for joint '" << name << "' after reboot.");
-      }
-    }
   }
 
   // Release e-stop since hardware error has been resolved

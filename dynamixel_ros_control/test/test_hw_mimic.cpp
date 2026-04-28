@@ -360,6 +360,5 @@ TEST_F(HardwareInterfaceTest, MimicJoint_NoCommandInterfacesForMimicJoints)
 
 int main(int argc, char** argv)
 {
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  dynamixel_ros_control::test::run_tests_and_exit(argc, argv);
 }

@@ -290,9 +290,10 @@ bool Dynamixel::writeInitialValues()
   bool success = true;
   for (const auto& [register_name, register_value] : initial_values_) {
     if (!registerAvailable(register_name)) {
+      // Not a hardware failure: the configured register simply doesn't exist on this model.
+      // Already warned here, so callers that log on `false` would just double-warn.
       DXL_LOG_WARN("Register '" << register_name << "' is not available on motor ID " << getIdInt()
                                 << ". Check model compatibility.");
-      success = false;
       continue;
     }
     if (!writeRegister(register_name, register_value)) {

@@ -1,7 +1,10 @@
 #include <gtest/gtest.h>
+#include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
 #include <cmath>
+
+#include "test_sanitizer_helpers.hpp"
 
 using namespace dynamixel_ros_control;
 
@@ -16,6 +19,10 @@ constexpr uint16_t ADDR_GOAL_VELOCITY = 552;
 constexpr uint16_t ADDR_PRESENT_POSITION = 580;
 constexpr uint16_t ADDR_PRESENT_VELOCITY = 576;
 constexpr uint16_t ADDR_HARDWARE_ERROR = 518;
+
+// PH Series Indirect Addresses (from PH.yaml indirect_addresses section)
+constexpr uint16_t ADDR_INDIRECT_ADDRESS_START = 168;
+constexpr uint16_t ADDR_INDIRECT_DATA_START = 634;
 
 // Model number for PH series (PH54-200-S500-R)
 constexpr uint16_t MODEL_PH = 2020;
@@ -421,6 +428,70 @@ TEST_F(MockDynamixelTest, ClearHardwareErrorOnReboot)
 
   EXPECT_EQ(motor->getHardwareError(), 0);
   EXPECT_EQ(motor->read1Byte(ADDR_HARDWARE_ERROR), 0);
+}
+
+TEST_F(MockDynamixelTest, IndirectAddressMappingsClearedOnReboot)
+{
+  // On real hardware a reboot wipes all RAM, including the indirect-address pointer
+  // registers. Without this behavior in the mock, tests for the production-side
+  // re-write path would falsely pass.
+  //
+  // This test is synchronous and single-threaded — no executor, no service calls,
+  // no sleep — so it is not subject to timing flakes.
+  DynamixelDriver driver;
+  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
+
+  driver.addDummyMotor(1, MODEL_PH);
+
+  auto motor = MockDynamixelManager::instance().getMotor(1);
+  ASSERT_NE(motor, nullptr);
+
+  // Write a non-zero indirect-address pointer (slot 0 -> torque_enable).
+  // The pointer registers themselves live below the indirect-data window
+  // (PH series: 168..223 vs 634..661), so reads/writes here are direct
+  // memory accesses, not subject to resolveAddress redirection.
+  motor->write2Byte(ADDR_INDIRECT_ADDRESS_START, ADDR_TORQUE_ENABLE);
+  ASSERT_EQ(motor->read2Byte(ADDR_INDIRECT_ADDRESS_START), ADDR_TORQUE_ENABLE);
+
+  // Reboot.
+  EXPECT_TRUE(driver.reboot(1));
+
+  // The pointer must be cleared, matching real-hardware reboot behavior.
+  EXPECT_EQ(motor->read2Byte(ADDR_INDIRECT_ADDRESS_START), 0)
+      << "Indirect address pointer must be cleared on reboot, otherwise tests for "
+      << "the production-side rewriteIndirectAddresses path cannot detect regressions.";
+}
+
+TEST_F(MockDynamixelTest, WriteInitialValuesSkipsUnavailableRegister)
+{
+  // Configured registers that don't exist on the motor model are a config-skip,
+  // not a hardware failure. writeInitialValues() must continue to apply the
+  // available registers and return true so that callers don't double-warn.
+  DynamixelDriver driver;
+  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
+
+  driver.addDummyMotor(1, MODEL_PH);
+
+  Dynamixel dxl(1, driver);
+  ASSERT_TRUE(dxl.connect());
+
+  // Configure one register that exists (led_blue) and one that does not exist
+  // on PH (a fabricated name guaranteed not in the control table).
+  dxl.setInitialRegisterValues({
+      {"led_blue", "200"},
+      {"this_register_does_not_exist_on_any_model", "42"},
+  });
+
+  // Skip-don't-fail: a missing register is logged but does NOT cause a `false` return,
+  // so the reboot caller doesn't emit a redundant generic warning.
+  EXPECT_TRUE(dxl.writeInitialValues());
+
+  auto motor = MockDynamixelManager::instance().getMotor(1);
+  ASSERT_NE(motor, nullptr);
+  uint16_t led_blue_addr = motor->getAddress("led_blue");
+  ASSERT_GT(led_blue_addr, 0u);
+  EXPECT_EQ(motor->read1Byte(led_blue_addr), 200)
+      << "Available registers must still be applied even when a sibling register is unavailable.";
 }
 
 // ============================================================================
@@ -914,10 +985,6 @@ TEST_F(MockDynamixelTest, OverheatingErrorInjection)
 // Indirect Addressing Tests
 // ============================================================================
 
-// PH Series Indirect Addresses
-constexpr uint16_t ADDR_INDIRECT_ADDRESS_START = 168;
-constexpr uint16_t ADDR_INDIRECT_DATA_START = 634;
-
 TEST_F(MockDynamixelTest, IndirectAddressingOneByte)
 {
   MockDynamixelManager::instance().addMotor(1, MODEL_PH);
@@ -1078,5 +1145,9 @@ TEST_F(MockDynamixelTest, BusWatchdogViaDriver)
 int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
+  const int result = RUN_ALL_TESTS();
+  if (dynamixel_ros_control::test::trigger_lsan_check() != 0 && result == 0) {
+    return 1;
+  }
+  return result;
 }

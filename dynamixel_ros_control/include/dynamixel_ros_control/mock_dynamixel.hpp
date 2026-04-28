@@ -256,9 +256,22 @@ public:
     }
   }
 
-  // Memory access methods
+  // Memory access methods.
+  //
+  // The mock simulates a serial bus: in production the DynamixelHardwareInterface
+  // serializes all bus access via dynamixel_comm_mutex_. The test fixture however
+  // drives the physics update loop (MockDynamixelManager::update -> per-motor
+  // update()) on a separate thread, while controller_manager calls into read()
+  // and services on its own thread — both reach into memory_ concurrently
+  // through the mock. memory_mutex_ closes that mock-side race that would
+  // otherwise cause TSan warnings (and on weakly-ordered hardware, real torn
+  // reads of multi-byte registers).
+  //
+  // recursive_mutex because update() drives several read/write paths that
+  // re-enter read1Byte / write1Byte transitively.
   uint8_t read1Byte(uint16_t address) const
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     uint16_t real_addr = resolveAddress(address);
     if (static_cast<size_t>(real_addr) >= memory_.size())
       return 0;
@@ -267,11 +280,13 @@ public:
 
   uint16_t read2Byte(uint16_t address) const
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     return static_cast<uint16_t>(read1Byte(address)) | (static_cast<uint16_t>(read1Byte(address + 1)) << 8);
   }
 
   uint32_t read4Byte(uint16_t address) const
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     return static_cast<uint32_t>(read1Byte(address)) | (static_cast<uint32_t>(read1Byte(address + 1)) << 8) |
            (static_cast<uint32_t>(read1Byte(address + 2)) << 16) |
            (static_cast<uint32_t>(read1Byte(address + 3)) << 24);
@@ -284,6 +299,7 @@ public:
 
   void write1Byte(uint16_t address, uint8_t data)
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     uint16_t real_addr = resolveAddress(address);
     if (static_cast<size_t>(real_addr) < memory_.size())
       memory_[real_addr] = data;
@@ -334,10 +350,30 @@ public:
   // Reset all RAM registers to 0 (simulates power cycle on reboot)
   void resetRAMRegisters()
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     for (const auto& [addr, len] : ram_registers_) {
       for (uint8_t i = 0; i < len; ++i) {
         if (static_cast<size_t>(addr + i) < memory_.size()) {
           memory_[addr + i] = 0;
+        }
+      }
+    }
+    // Indirect-address pointer region and indirect-data window are RAM on real hardware
+    // (defined in the model YAML's indirect_addresses section, not the control_table list).
+    // Without zeroing them here, the mock would keep mappings alive across reboot and hide
+    // bugs where production code fails to re-write them.
+    if (indirect_count_ > 0) {
+      const size_t pointer_bytes = static_cast<size_t>(indirect_count_) * 2;
+      for (size_t i = 0; i < pointer_bytes; ++i) {
+        const size_t addr = static_cast<size_t>(indirect_address_start_) + i;
+        if (addr < memory_.size()) {
+          memory_[addr] = 0;
+        }
+      }
+      for (size_t i = 0; i < indirect_count_; ++i) {
+        const size_t addr = static_cast<size_t>(indirect_data_start_) + i;
+        if (addr < memory_.size()) {
+          memory_[addr] = 0;
         }
       }
     }
@@ -482,6 +518,7 @@ private:
   {
     if (drive_mode_addr_ == 0)
       return false;
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     return (memory_[drive_mode_addr_] & 0x04) != 0;
   }
 
@@ -719,6 +756,9 @@ private:
   uint8_t id_;
   uint16_t model_number_;
   std::vector<uint8_t> memory_;
+  // recursive_mutex: update() drives several read/write paths that re-enter
+  // read1Byte / write1Byte transitively. mutable so const accessors can lock.
+  mutable std::recursive_mutex memory_mutex_;
   std::map<std::string, uint16_t> address_map_;
   std::map<std::string, uint8_t> length_map_;
 

@@ -76,96 +76,94 @@ pluginlib_export_plugin_description_file(hardware_interface
                                          dynamixel_ros_control.xml)
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
-  ament_add_gtest(test_mock_dynamixel test/test_mock_dynamixel.cpp)
-  target_link_libraries(test_mock_dynamixel ${PROJECT_NAME})
-
   find_package(controller_manager REQUIRED)
   find_package(hector_testing_utils REQUIRED)
   find_package(realtime_tools REQUIRED)
 
   add_definitions(-DTEST_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/config")
-
-  # Hardware interface test common dependencies
   set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools)
 
-  # Test: Normal usage (controller switching, movement, gripper, etc.)
-  ament_add_gtest(test_hw_normal_usage test/test_hw_normal_usage.cpp)
-  set_tests_properties(test_hw_normal_usage PROPERTIES TIMEOUT 300)
-  target_link_libraries(test_hw_normal_usage ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_normal_usage ${HW_TEST_DEPS})
+  # Detect sanitizer builds from CMAKE_CXX_FLAGS (set by colcon mixin asan-gcc /
+  # tsan). Used to inflate test timeouts (sanitizers slow execution ~10x) and to
+  # wire up the ASAN/LSAN/TSAN options + suppression file so leak detection
+  # works under _Exit().
+  set(_dxl_sanitizer_timeout_factor 1)
+  set(_dxl_sanitizer_env "")
+  set(_dxl_lsan_suppressions
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/config/lsan_suppressions.txt")
+  set(_dxl_tsan_suppressions
+      "${CMAKE_CURRENT_SOURCE_DIR}/test/config/tsan_suppressions.txt")
+  if(CMAKE_CXX_FLAGS MATCHES "fsanitize=address")
+    set(_dxl_sanitizer_timeout_factor 5)
+    set(_dxl_asan_opts_list
+        "new_delete_type_mismatch=0" "verify_asan_link_order=0"
+        "detect_leaks=1" "halt_on_error=0" "abort_on_error=0")
+    string(JOIN ":" _dxl_asan_opts ${_dxl_asan_opts_list})
+    list(
+      APPEND _dxl_sanitizer_env "ASAN_OPTIONS=${_dxl_asan_opts}"
+      "LSAN_OPTIONS=suppressions=${_dxl_lsan_suppressions}:print_suppressions=0"
+    )
+    message(STATUS "dynamixel_ros_control: AddressSanitizer detected, "
+                   "scaling test timeouts x${_dxl_sanitizer_timeout_factor}")
+  elseif(CMAKE_CXX_FLAGS MATCHES "fsanitize=thread")
+    set(_dxl_sanitizer_timeout_factor 10)
+    set(_dxl_tsan_opts_list
+        "halt_on_error=0" "abort_on_error=0" "second_deadlock_stack=1"
+        "history_size=7" "suppressions=${_dxl_tsan_suppressions}")
+    string(JOIN ":" _dxl_tsan_opts ${_dxl_tsan_opts_list})
+    list(APPEND _dxl_sanitizer_env "TSAN_OPTIONS=${_dxl_tsan_opts}")
+    message(STATUS "dynamixel_ros_control: ThreadSanitizer detected, "
+                   "scaling test timeouts x${_dxl_sanitizer_timeout_factor}")
+  endif()
 
-  # Test: LED colors
-  ament_add_gtest(test_hw_led test/test_hw_led.cpp)
-  set_tests_properties(test_hw_led PROPERTIES TIMEOUT 120)
-  target_link_libraries(test_hw_led ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_led ${HW_TEST_DEPS})
+  # For tsan we need to launch the test via `setarch -R` (ADDR_NO_RANDOMIZE) to
+  # avoid the kernel-6.5+ ASLR-vs-TSan-shadow-region collision. ament's RUNNER
+  # hook lets us swap in a shim that does exactly that.
+  set(_dxl_test_runner_arg "")
+  if(CMAKE_CXX_FLAGS MATCHES "fsanitize=thread")
+    set(_dxl_test_runner_arg
+        RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/test/setarch_runner.py")
+  endif()
 
-  # Test: E-Stop functionality
-  ament_add_gtest(test_hw_estop test/test_hw_estop.cpp)
-  set_tests_properties(test_hw_estop PROPERTIES TIMEOUT 300)
-  target_link_libraries(test_hw_estop ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_estop ${HW_TEST_DEPS})
+  # Helper: register a gtest with consistent timeout/dependencies/sanitizer env.
+  function(dxl_add_gtest test_name source_file base_timeout)
+    ament_add_gtest(${test_name} ${source_file} ${_dxl_test_runner_arg})
+    target_link_libraries(${test_name} ${PROJECT_NAME})
+    if(NOT "${ARGN}" STREQUAL "")
+      ament_target_dependencies(${test_name} ${ARGN})
+    endif()
+    math(EXPR scaled_timeout
+         "${base_timeout} * ${_dxl_sanitizer_timeout_factor}")
+    set_tests_properties(${test_name} PROPERTIES TIMEOUT ${scaled_timeout})
+    if(_dxl_sanitizer_env)
+      set_tests_properties(${test_name} PROPERTIES ENVIRONMENT
+                                                   "${_dxl_sanitizer_env}")
+    endif()
+  endfunction()
 
-  # Test: Torque enable/disable
-  ament_add_gtest(test_hw_torque test/test_hw_torque.cpp)
-  set_tests_properties(test_hw_torque PROPERTIES TIMEOUT 180)
-  target_link_libraries(test_hw_torque ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_torque ${HW_TEST_DEPS})
+  # Mock-only test: doesn't use rclcpp.
+  dxl_add_gtest(test_mock_dynamixel test/test_mock_dynamixel.cpp 60)
 
-  # Test: Transmission ratios and offset adjustment
-  ament_add_gtest(test_hw_transmission test/test_hw_transmission.cpp)
-  set_tests_properties(test_hw_transmission PROPERTIES TIMEOUT 300)
-  target_link_libraries(test_hw_transmission ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_transmission ${HW_TEST_DEPS})
-
-  # Test: Communication error handling and recovery
-  ament_add_gtest(test_hw_communication_error
-                  test/test_hw_communication_error.cpp)
-  set_tests_properties(test_hw_communication_error PROPERTIES TIMEOUT 180)
-  target_link_libraries(test_hw_communication_error ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_communication_error ${HW_TEST_DEPS})
-
-  # Test: Combined state transitions (E-Stop + Torque + Calibration)
-  ament_add_gtest(test_hw_combined_state test/test_hw_combined_state.cpp)
-  set_tests_properties(test_hw_combined_state PROPERTIES TIMEOUT 240)
-  target_link_libraries(test_hw_combined_state ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_combined_state ${HW_TEST_DEPS})
-
-  # Test: Critical safety (torque enable with goal verification)
-  ament_add_gtest(test_hw_safety test/test_hw_safety.cpp)
-  set_tests_properties(test_hw_safety PROPERTIES TIMEOUT 120)
-  target_link_libraries(test_hw_safety ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_safety ${HW_TEST_DEPS})
-
-  # Test: Lifecycle (service availability)
-  ament_add_gtest(test_hw_lifecycle test/test_hw_lifecycle.cpp)
-  set_tests_properties(test_hw_lifecycle PROPERTIES TIMEOUT 60)
-  target_link_libraries(test_hw_lifecycle ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_lifecycle ${HW_TEST_DEPS})
-
-  # Test: Hardware error handling (red LED, e-stop activation, reboot)
-  ament_add_gtest(test_hw_hardware_error test/test_hw_hardware_error.cpp)
-  set_tests_properties(test_hw_hardware_error PROPERTIES TIMEOUT 180)
-  target_link_libraries(test_hw_hardware_error ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_hardware_error ${HW_TEST_DEPS})
-
-  # Test: Motion profile register configuration and restoration after reboot
-  ament_add_gtest(test_hw_profile test/test_hw_profile.cpp)
-  set_tests_properties(test_hw_profile PROPERTIES TIMEOUT 180)
-  target_link_libraries(test_hw_profile ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_profile ${HW_TEST_DEPS})
-
-  # Test: Mimic joints (gripper finger joints following servo)
-  ament_add_gtest(test_hw_mimic test/test_hw_mimic.cpp)
-  set_tests_properties(test_hw_mimic PROPERTIES TIMEOUT 180)
-  target_link_libraries(test_hw_mimic ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_mimic ${HW_TEST_DEPS})
-
-  # Test: Bus watchdog configuration
-  ament_add_gtest(test_hw_bus_watchdog test/test_hw_bus_watchdog.cpp)
-  set_tests_properties(test_hw_bus_watchdog PROPERTIES TIMEOUT 60)
-  target_link_libraries(test_hw_bus_watchdog ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_bus_watchdog ${HW_TEST_DEPS})
+  # Hardware interface integration tests.
+  dxl_add_gtest(test_hw_normal_usage test/test_hw_normal_usage.cpp 300
+                ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_led test/test_hw_led.cpp 120 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_estop test/test_hw_estop.cpp 300 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_torque test/test_hw_torque.cpp 180 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_transmission test/test_hw_transmission.cpp 300
+                ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_communication_error
+                test/test_hw_communication_error.cpp 180 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_combined_state test/test_hw_combined_state.cpp 240
+                ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_safety test/test_hw_safety.cpp 120 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_lifecycle test/test_hw_lifecycle.cpp 60 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_hardware_error test/test_hw_hardware_error.cpp 180
+                ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_profile test/test_hw_profile.cpp 180 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_mimic test/test_hw_mimic.cpp 180 ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_bus_watchdog test/test_hw_bus_watchdog.cpp 60
+                ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder

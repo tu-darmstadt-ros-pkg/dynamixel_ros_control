@@ -6,6 +6,7 @@
 #include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_ros_control/sdk_wrapper.hpp>
 #include <rclcpp/rclcpp.hpp>
+#include <set>
 
 namespace dynamixel_ros_control {
 
@@ -27,6 +28,16 @@ public:
   void addRegister(Dynamixel& dxl, const std::string& register_name, bool& value);
 
   [[nodiscard]] bool init(DynamixelDriver& driver);
+
+  /**
+   * @brief Re-write indirect address mappings for the given motors without re-allocating
+   * driver-side indirect-address slots. Use after a Dynamixel reboot, which wipes RAM
+   * (including the indirect address pointer registers).
+   * @param motors Subset of dynamixels whose indirect mappings should be rewritten.
+   *               Motors not in this set are skipped.
+   */
+  [[nodiscard]] bool rewriteIndirectAddresses(const std::set<Dynamixel*>& motors);
+
   [[nodiscard]] bool release() const;
   [[nodiscard]] bool write();
 

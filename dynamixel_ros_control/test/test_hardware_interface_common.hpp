@@ -26,6 +26,8 @@
 
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
 
+#include "test_sanitizer_helpers.hpp"
+
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
@@ -448,5 +450,43 @@ protected:
   std::shared_ptr<hector_testing_utils::TestClient<ConfigureController>> config_client_;
   std::shared_ptr<hector_testing_utils::TestClient<ListHardwareInterfaces>> list_hw_client_;
 };
+
+// Sanitizer helpers (LSan trigger, TSan ASLR workaround) live in a separate
+// header so test_mock_dynamixel.cpp can use them without dragging in rclcpp.
+
+/**
+ * @brief Run all gtest cases and exit immediately, skipping C++ static destructors.
+ *
+ * Workaround for a known ROS 2 / Cyclone DDS teardown race: when the process exits
+ * normally, glibc's __cxa_finalize calls dlclose() on the rmw plugin via
+ * rcpputils::SharedLibrary's destructor. Cyclone DDS spawns background receiver
+ * threads (recv, recvUC, dq.user, ...) that are not joined by rclcpp::shutdown(),
+ * so they may still be executing inside libddsc when the rmw plugin is unmapped,
+ * resulting in a SIGSEGV in _dl_close_worker.
+ *
+ * The crash happens AFTER gtest reports its result, so the test outcome is correct
+ * but ctest still records a failure due to the non-zero exit code. Calling
+ * std::_Exit() bypasses static destructors and avoids the dlclose race entirely
+ * — the OS reclaims all process resources directly. The gtest XML report is
+ * already flushed by RUN_ALL_TESTS() before this point.
+ *
+ * Under AddressSanitizer/LeakSanitizer we explicitly trigger the leak check
+ * before _Exit so the build can still detect leaks; without this call LSan
+ * would never run because _Exit skips its atexit hook.
+ *
+ * Use as the body of main() in every integration test executable that uses rclcpp.
+ */
+[[noreturn]] inline void run_tests_and_exit(int argc, char** argv)
+{
+  testing::InitGoogleTest(&argc, argv);
+  int result = RUN_ALL_TESTS();
+  // Trigger LSan (no-op without ASan/LSan). Recoverable variant returns 1 on
+  // leaks instead of calling _exit(23) itself, so we can still fall through
+  // to our own _Exit and propagate the failure to ctest.
+  if (trigger_lsan_check() != 0 && result == 0) {
+    result = 1;
+  }
+  std::_Exit(result);
+}
 
 }  // namespace dynamixel_ros_control::test
