@@ -27,6 +27,9 @@ find_package(transmission_interface REQUIRED)
 find_package(hector_transmission_interface REQUIRED)
 find_package(hector_transmission_interface_msgs REQUIRED)
 find_package(controller_orchestrator REQUIRED)
+find_package(realtime_tools REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(dynamixel_ros_control_msgs REQUIRED)
 
 set(HEADERS
     include/${PROJECT_NAME}/common.hpp
@@ -70,7 +73,10 @@ ament_target_dependencies(
   transmission_interface
   hector_transmission_interface
   hector_transmission_interface_msgs
-  controller_orchestrator)
+  controller_orchestrator
+  realtime_tools
+  sensor_msgs
+  dynamixel_ros_control_msgs)
 
 pluginlib_export_plugin_description_file(hardware_interface
                                          dynamixel_ros_control.xml)
@@ -81,7 +87,8 @@ if(BUILD_TESTING)
   find_package(realtime_tools REQUIRED)
 
   add_definitions(-DTEST_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/config")
-  set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools)
+  set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools
+                   dynamixel_ros_control_msgs)
 
   # Detect sanitizer builds from CMAKE_CXX_FLAGS (set by colcon mixin asan-gcc /
   # tsan). Used to inflate test timeouts (sanitizers slow execution ~10x) and to
@@ -159,6 +166,8 @@ if(BUILD_TESTING)
   dxl_add_gtest(test_hw_safety test/test_hw_safety.cpp 120 ${HW_TEST_DEPS})
   dxl_add_gtest(test_hw_lifecycle test/test_hw_lifecycle.cpp 60 ${HW_TEST_DEPS})
   dxl_add_gtest(test_hw_hardware_error test/test_hw_hardware_error.cpp 180
+                ${HW_TEST_DEPS})
+  dxl_add_gtest(test_hw_partial_torque test/test_hw_partial_torque.cpp 180
                 ${HW_TEST_DEPS})
   dxl_add_gtest(test_hw_profile test/test_hw_profile.cpp 180 ${HW_TEST_DEPS})
   dxl_add_gtest(test_hw_mimic test/test_hw_mimic.cpp 180 ${HW_TEST_DEPS})
