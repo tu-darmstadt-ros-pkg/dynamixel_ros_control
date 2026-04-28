@@ -15,8 +15,10 @@
 #include <controller_orchestrator/controller_orchestrator.hpp>
 #include <hector_transmission_interface/adjustable_offset_transmission_loader.hpp>
 #include <std_msgs/msg/bool.hpp>
-#include <std_srvs/srv/set_bool.hpp>
+#include <dynamixel_ros_control_msgs/srv/set_torque.hpp>
 #include <std_srvs/srv/trigger.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
+#include <realtime_tools/realtime_publisher.hpp>
 
 namespace dynamixel_ros_control {
 
@@ -89,8 +91,9 @@ private:
   /// @brief Reboot motors with hardware errors and restore torque state.
   bool reboot();
 
-  /// @brief Enable or disable torque on all motors.
-  bool setTorque(bool do_enable, bool skip_controller_unloading = false, int retries = 5, bool direct_write = false);
+  /// @brief Enable or disable torque on all motors (optionally ignoring specific joints).
+  bool setTorque(bool do_enable, const std::vector<std::string>& ignore_joints = {},
+                 bool skip_controller_unloading = false, int retries = 5, bool direct_write = false);
 
   /// @brief Enable or disable the software E-Stop.
   bool setEStop(bool do_enable);
@@ -132,6 +135,7 @@ private:
   bool debug_{false};
   bool torque_on_startup_{false};
   bool torque_off_on_shutdown_{false};
+  bool publish_goal_joint_states_{false};
 
   // Runtime state
   std::atomic<bool> is_torqued_{false};     ///< Current torque state of motors.
@@ -143,7 +147,7 @@ private:
 
   // ROS interfaces
   rclcpp::Node::SharedPtr node_;
-  rclcpp::Service<std_srvs::srv::SetBool>::SharedPtr set_torque_service_;
+  rclcpp::Service<dynamixel_ros_control_msgs::srv::SetTorque>::SharedPtr set_torque_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_service_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
@@ -151,6 +155,10 @@ private:
   std::mutex dynamixel_comm_mutex_;  ///< Protects all Dynamixel communication.
   std::shared_ptr<controller_orchestrator::ControllerOrchestrator> controller_orchestrator_;
   std::shared_ptr<hector_transmission_interface::AdjustableOffsetManager> offset_manager_;
+
+  // Goal state publisher
+  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr goal_state_pub_;
+  std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_goal_state_pub_;
 };
 
 }  // namespace dynamixel_ros_control

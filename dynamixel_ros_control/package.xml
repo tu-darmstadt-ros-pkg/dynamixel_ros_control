@@ -12,6 +12,7 @@
 
   <depend>ament_index_cpp</depend>
   <depend>controller_orchestrator</depend>
+  <depend>dynamixel_ros_control_msgs</depend>
   <depend>dynamixel_sdk</depend>
   <depend>hardware_interface</depend>
   <depend>hector_transmission_interface</depend>
@@ -20,6 +21,8 @@
   <depend>pluginlib</depend>
   <depend>rclcpp</depend>
   <depend>rclcpp_lifecycle</depend>
+  <depend>realtime_tools</depend>
+  <depend>sensor_msgs</depend>
   <depend>std_msgs</depend>
   <depend>std_srvs</depend>
   <depend>transmission_interface</depend>
@@ -37,7 +40,6 @@
   <test_depend>joint_state_broadcaster</test_depend>
   <test_depend>joint_trajectory_controller</test_depend>
   <test_depend>position_controllers</test_depend>
-  <test_depend>realtime_tools</test_depend>
   <test_depend>velocity_controllers</test_depend>
 
   <export>

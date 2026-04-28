@@ -29,17 +29,18 @@ TEST_F(HardwareInterfaceTest, Safety_TorqueEnableFailsWhenGoalWriteFails)
   }
 
   // 3. Disable torque
-  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  auto torque_client =
+      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
-  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-  request->data = false;
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+  request->enable = false;
 
   hector_testing_utils::ServiceCallOptions options;
   options.service_timeout = 5s;
   options.response_timeout = 5s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      torque_client->get(), request, *executor_, options);
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success) << "Should be able to disable torque";
 
@@ -60,8 +61,9 @@ TEST_F(HardwareInterfaceTest, Safety_TorqueEnableFailsWhenGoalWriteFails)
 
   // 5. Attempt to enable torque - THIS MUST FAIL
   // The resetGoalStateAndVerify() function requires successful read/write/verify cycle
-  request->data = true;
-  resp = hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = true;
+  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                        *executor_, options);
   ASSERT_NE(resp, nullptr);
   EXPECT_FALSE(resp->success) << "Torque enable MUST fail when goal position write fails!";
 
@@ -82,8 +84,9 @@ TEST_F(HardwareInterfaceTest, Safety_TorqueEnableFailsWhenGoalWriteFails)
   // Small delay for error recovery
   std::this_thread::sleep_for(200ms);
 
-  request->data = true;
-  resp = hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = true;
+  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                        *executor_, options);
   ASSERT_NE(resp, nullptr);
   EXPECT_TRUE(resp->success) << "Torque enable should succeed after communication error is cleared";
 
@@ -118,16 +121,18 @@ TEST_F(HardwareInterfaceTest, Safety_NoMovementOnFailedTorqueEnable)
   std::this_thread::sleep_for(1s);
 
   // 2. Disable torque
-  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  auto torque_client =
+      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
-  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-  request->data = false;
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+  request->enable = false;
 
   hector_testing_utils::ServiceCallOptions options;
   options.service_timeout = 5s;
   options.response_timeout = 5s;
-  hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                 *executor_, options);
   std::this_thread::sleep_for(300ms);
 
   // 3. Record positions after torque off
@@ -146,9 +151,9 @@ TEST_F(HardwareInterfaceTest, Safety_NoMovementOnFailedTorqueEnable)
   }
 
   // 5. Attempt torque enable (should fail)
-  request->data = true;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = true;
+  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      torque_client->get(), request, *executor_, options);
   EXPECT_FALSE(resp->success) << "Torque enable should fail with communication errors";
 
   std::this_thread::sleep_for(500ms);
