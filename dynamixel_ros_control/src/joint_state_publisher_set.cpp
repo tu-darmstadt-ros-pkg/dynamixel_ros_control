@@ -35,7 +35,13 @@ inline void fill(sensor_msgs::msg::JointState& msg, const std::vector<std::strin
     msg.position[i] = (p != m.end()) ? p->second : std::numeric_limits<double>::quiet_NaN();
     auto v = m.find(hardware_interface::HW_IF_VELOCITY);
     msg.velocity[i] = (v != m.end()) ? v->second : std::numeric_limits<double>::quiet_NaN();
+    // sensor_msgs/JointState only has `effort`. The Dynamixel hardware interface treats
+    // HW_IF_EFFORT and HW_IF_CURRENT as alternative names for the same physical quantity, so fall back to HW_IF_CURRENT
+    // when a joint exposes the current interface instead of effort.
     auto e = m.find(hardware_interface::HW_IF_EFFORT);
+    if (e == m.end()) {
+      e = m.find(hardware_interface::HW_IF_CURRENT);
+    }
     msg.effort[i] = (e != m.end()) ? e->second : std::numeric_limits<double>::quiet_NaN();
   }
 }
@@ -76,15 +82,21 @@ void JointStatePublisherSet::publishRead(const rclcpp::Time& stamp,
   }
 }
 
-void JointStatePublisherSet::publishGoalAndWrite(const rclcpp::Time& stamp,
-                                                 const std::unordered_map<std::string, Joint>& joints,
-                                                 const std::vector<std::string>& joint_names)
+void JointStatePublisherSet::publishGoal(const rclcpp::Time& stamp,
+                                         const std::unordered_map<std::string, Joint>& joints,
+                                         const std::vector<std::string>& joint_names)
 {
   if (goal_ && goal_->trylock()) {
     fill(goal_->msg_, joint_names, joints, stamp,
          [](const Joint& j) -> const std::unordered_map<std::string, double>& { return j.joint_state.goal; });
     goal_->unlockAndPublish();
   }
+}
+
+void JointStatePublisherSet::publishWrite(const rclcpp::Time& stamp,
+                                          const std::unordered_map<std::string, Joint>& joints,
+                                          const std::vector<std::string>& joint_names)
+{
   if (write_ && write_->trylock()) {
     fill(write_->msg_, joint_names, joints, stamp, [](const Joint& j) -> const std::unordered_map<std::string, double>& {
       return j.command_transmission ? j.actuator_state.goal : j.joint_state.goal;

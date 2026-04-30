@@ -39,10 +39,17 @@ public:
   void publishRead(const rclcpp::Time& stamp, const std::unordered_map<std::string, Joint>& joints,
                    const std::vector<std::string>& joint_names);
 
-  // Publish joint-space goal and actuator-space goal at the same `stamp`. Picks
-  // `actuator_state.goal` when a command transmission exists, else `joint_state.goal`.
-  void publishGoalAndWrite(const rclcpp::Time& stamp, const std::unordered_map<std::string, Joint>& joints,
-                           const std::vector<std::string>& joint_names);
+  // Publish the joint-space goal (the controller's commanded values, pre-transmission).
+  // Safe to call even when the actual bus write failed for the cycle: this reflects
+  // controller intent, not what reached the motors.
+  void publishGoal(const rclcpp::Time& stamp, const std::unordered_map<std::string, Joint>& joints,
+                   const std::vector<std::string>& joint_names);
+
+  // Publish the actuator-space goal (post-transmission). Picks `actuator_state.goal` when
+  // a command transmission exists, else `joint_state.goal`. Should only be called on a
+  // successful bus write so the published values match what actually reached the motors.
+  void publishWrite(const rclcpp::Time& stamp, const std::unordered_map<std::string, Joint>& joints,
+                    const std::vector<std::string>& joint_names);
 
 private:
   std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> goal_;

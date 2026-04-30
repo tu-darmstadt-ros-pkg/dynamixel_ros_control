@@ -599,7 +599,8 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::OK;
   }
 
-  if (!read_manager_.read()) {
+  const bool read_ok_this_cycle = read_manager_.read();
+  if (!read_ok_this_cycle) {
     // Single read failure - log but don't return error yet
     DXL_LOG_WARN("Read failed, consecutive errors: " << read_manager_.getErrorCount());
   }
@@ -614,7 +615,11 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::ERROR;
   }
 
-  joint_state_publishers_.publishRead(time, joints_, joint_names_);
+  // Only publish on a successful bus read; otherwise actuator_state.current is stale and
+  // publishing it with a fresh stamp would mislead subscribers.
+  if (read_ok_this_cycle) {
+    joint_state_publishers_.publishRead(time, joints_, joint_names_);
+  }
 
   for (auto& [name, joint] : joints_) {
     if (joint.state_transmission) {
@@ -634,7 +639,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& /*time*/,
+hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& time,
                                                                   const rclcpp::Duration& /*period*/)
 {
   std::unique_lock<std::mutex> lock(dynamixel_comm_mutex_, std::try_to_lock);
@@ -669,7 +674,8 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   if (e_stop_active_)
     return hardware_interface::return_type::OK;
 
-  if (!control_write_manager_.write()) {
+  const bool write_ok_this_cycle = control_write_manager_.write();
+  if (!write_ok_this_cycle) {
     // Single write failure - log but don't return error yet
     DXL_LOG_WARN("Write failed, consecutive errors: " << control_write_manager_.getErrorCount());
   }
@@ -681,7 +687,12 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     return hardware_interface::return_type::ERROR;
   }
 
-  joint_state_publishers_.publishGoalAndWrite(get_clock()->now(), joints_, joint_names_);
+  // Goal reflects controller intent (always meaningful at this point); write reflects what
+  // reached the bus and is only published on a successful bus write.
+  joint_state_publishers_.publishGoal(time, joints_, joint_names_);
+  if (write_ok_this_cycle) {
+    joint_state_publishers_.publishWrite(time, joints_, joint_names_);
+  }
   return hardware_interface::return_type::OK;
 }
 

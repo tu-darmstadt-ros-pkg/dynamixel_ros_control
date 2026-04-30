@@ -3,6 +3,10 @@
 
 #include "test_hardware_interface_common.hpp"
 
+#include <algorithm>
+#include <cmath>
+#include <map>
+
 namespace dynamixel_ros_control::test {
 
 // Verifies that the URDF flags publish_read_joint_states and publish_write_joint_states
@@ -95,7 +99,17 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
 
   sensor_msgs::msg::JointState::SharedPtr g1, w1, r1, g2, w2, r2;
   ASSERT_TRUE(drive_to(0.0, g1, w1, r1)) << "Failed to capture publishers' state at command 0.0";
+  // Allow the motor model some time to track the commanded position before the second snapshot
+  // so that read_joint_states reflects the new commanded state.
+  std::this_thread::sleep_for(2s);
   ASSERT_TRUE(drive_to(0.5, g2, w2, r2)) << "Failed to capture publishers' state at command 0.5";
+  std::this_thread::sleep_for(2s);
+  // Refresh the read snapshot once the motor has settled at the second command.
+  {
+    std::lock_guard<std::mutex> l(mtx);
+    ASSERT_NE(last_read, nullptr);
+    r2 = last_read;
+  }
 
   // Sanity: all three messages were delivered and have parallel, identically-named entries.
   ASSERT_NE(r1, nullptr);
@@ -106,6 +120,20 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
   EXPECT_EQ(r1->name, w1->name);
   EXPECT_EQ(r1->name, g1->name);
 
+  // The flipper joints declare `current` (not `effort`) state/command interfaces in URDF.
+  // sensor_msgs/JointState only has `effort`, so the publisher set falls back to HW_IF_CURRENT;
+  // verify the effort field is finite at every snapshot to catch a regression of that fallback.
+  const std::vector<std::string> flippers = {"flipper_fl_joint", "flipper_fr_joint", "flipper_bl_joint",
+                                             "flipper_br_joint"};
+  for (const auto* snap : {&w1, &w2, &r1, &r2, &g1, &g2}) {
+    for (const auto& jname : flippers) {
+      size_t i = idx_of(**snap, jname);
+      ASSERT_NE(i, size_t(-1)) << jname << " missing from a published JointState";
+      EXPECT_TRUE(std::isfinite((*snap)->effort[i]))
+          << jname << ": effort should be populated from HW_IF_CURRENT, got NaN";
+    }
+  }
+
   // write_joint_states is actuator-space (post-transmission), goal_joint_states is joint-space
   // (pre-transmission). Their delta across two commanded joint positions is exactly
   // (goal_delta) * mechanical_reduction (the constant offset cancels).
@@ -114,12 +142,27 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
   for (const auto& [jname, ratio] : reductions) {
     size_t i_w = idx_of(*w1, jname);
     size_t i_g = idx_of(*g1, jname);
+    size_t i_r = idx_of(*r1, jname);
+    size_t i_r2 = idx_of(*r2, jname);
     ASSERT_NE(i_w, size_t(-1)) << jname << " missing from write_joint_states";
     ASSERT_NE(i_g, size_t(-1)) << jname << " missing from goal_joint_states";
+    ASSERT_NE(i_r, size_t(-1)) << jname << " missing from read_joint_states";
+
     const double goal_delta = g2->position[i_g] - g1->position[i_g];
     const double write_delta = w2->position[i_w] - w1->position[i_w];
+
+    // Exact: write is computed from goal via the transmission, no motor dynamics involved.
     EXPECT_NEAR(write_delta, goal_delta * ratio, 1e-6)
         << jname << ": write delta (actuator) should equal goal delta (joint) * reduction (" << ratio << ")";
+
+    // Sanity for read_joint_states: position is finite (not NaN) and the sample is live
+    // (changes between snapshots taken several seconds apart while the motor is moving).
+    // We don't assert numerical agreement with write because mock-motor tracking dynamics
+    // are the responsibility of test_hw_transmission.
+    EXPECT_TRUE(std::isfinite(r1->position[i_r])) << jname << ": read position (snapshot 1) should be finite";
+    EXPECT_TRUE(std::isfinite(r2->position[i_r2])) << jname << ": read position (snapshot 2) should be finite";
+    EXPECT_NE(r1->position[i_r], r2->position[i_r2])
+        << jname << ": read position should change between snapshots while the motor is being driven";
   }
 }
 

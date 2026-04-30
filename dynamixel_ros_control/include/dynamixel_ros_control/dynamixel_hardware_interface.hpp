@@ -156,7 +156,10 @@ private:
   std::shared_ptr<controller_orchestrator::ControllerOrchestrator> controller_orchestrator_;
   std::shared_ptr<hector_transmission_interface::AdjustableOffsetManager> offset_manager_;
 
-  // Realtime joint state publishers (goal/read/write topics, actuator-space SI units)
+  // Realtime joint state publishers (SI units):
+  //   ~/goal_joint_states  - joint-space goal (pre-transmission)
+  //   ~/read_joint_states  - actuator-space state (pre-transmission application on read path)
+  //   ~/write_joint_states - actuator-space goal (post-transmission)
   JointStatePublisherSet joint_state_publishers_;
 };
 
