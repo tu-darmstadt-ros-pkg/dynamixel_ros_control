@@ -172,6 +172,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_hw_bus_watchdog test/test_hw_bus_watchdog.cpp)
   set_tests_properties(test_hw_bus_watchdog PROPERTIES TIMEOUT 60)
   target_link_libraries(test_hw_bus_watchdog ${PROJECT_NAME})
+
+  # Test: Realtime joint-state publishers (read/write/goal topics, transmission
+  # cross-check)
+  ament_add_gtest(test_hw_realtime_publishers
+                  test/test_hw_realtime_publishers.cpp)
+  set_tests_properties(test_hw_realtime_publishers PROPERTIES TIMEOUT 120)
+  target_link_libraries(test_hw_realtime_publishers ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_realtime_publishers ${HW_TEST_DEPS})
   ament_target_dependencies(test_hw_bus_watchdog ${HW_TEST_DEPS})
 endif()
 
