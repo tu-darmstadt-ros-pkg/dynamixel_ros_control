@@ -69,46 +69,6 @@ bool loadInterfaceRegisterNameTranslation(std::unordered_map<std::string, std::s
 
 namespace dynamixel_ros_control {
 
-namespace {
-
-// Create a realtime JointState publisher with all message vectors pre-sized so the
-// realtime path (read()/write()) performs no allocations.
-std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>
-makeJointStateRTPublisher(const rclcpp::Node::SharedPtr& node, const std::string& topic,
-                          const std::vector<std::string>& joint_names)
-{
-  auto pub = node->create_publisher<sensor_msgs::msg::JointState>(topic, rclcpp::SystemDefaultsQoS());
-  auto rt_pub = std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(pub);
-  auto& m = rt_pub->msg_;
-  m.name.assign(joint_names.begin(), joint_names.end());
-  m.position.assign(joint_names.size(), std::numeric_limits<double>::quiet_NaN());
-  m.velocity.assign(joint_names.size(), std::numeric_limits<double>::quiet_NaN());
-  m.effort.assign(joint_names.size(), std::numeric_limits<double>::quiet_NaN());
-  return rt_pub;
-}
-
-// Fill the three numeric vectors of an already-trylocked realtime JointState message.
-// `pick(joint)` returns one of joint.{actuator,joint}_state.{current,goal}.
-template <typename Pick>
-inline void fillJointStateMsg(sensor_msgs::msg::JointState& msg, const std::vector<std::string>& joint_names,
-                              const std::unordered_map<std::string, Joint>& joints, const rclcpp::Time& stamp,
-                              Pick pick)
-{
-  msg.header.stamp = stamp;
-  const size_t n = joint_names.size();
-  for (size_t i = 0; i < n; ++i) {
-    const auto& m = pick(joints.at(joint_names[i]));
-    auto p = m.find(hardware_interface::HW_IF_POSITION);
-    msg.position[i] = (p != m.end()) ? p->second : std::numeric_limits<double>::quiet_NaN();
-    auto v = m.find(hardware_interface::HW_IF_VELOCITY);
-    msg.velocity[i] = (v != m.end()) ? v->second : std::numeric_limits<double>::quiet_NaN();
-    auto e = m.find(hardware_interface::HW_IF_EFFORT);
-    msg.effort[i] = (e != m.end()) ? e->second : std::numeric_limits<double>::quiet_NaN();
-  }
-}
-
-}  // namespace
-
 hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentInterfaceParams& param)
 {
@@ -136,9 +96,6 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_init");
   getParameter(info_.hardware_parameters, "torque_on_startup", torque_on_startup_, false);
   getParameter(info_.hardware_parameters, "torque_off_on_shutdown", torque_off_on_shutdown_, false);
-  getParameter(info_.hardware_parameters, "publish_goal_joint_states", publish_goal_joint_states_, false);
-  getParameter(info_.hardware_parameters, "publish_read_joint_states", publish_read_joint_states_, false);
-  getParameter(info_.hardware_parameters, "publish_write_joint_states", publish_write_joint_states_, false);
 
   bool use_dummy = false;
   getParameter(info_.hardware_parameters, "use_dummy", use_dummy, false);
@@ -258,16 +215,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
 
-  // setup realtime joint state publishers (all are pre-sized; per-cycle writes do no allocations)
-  if (publish_goal_joint_states_) {
-    realtime_goal_state_pub_ = makeJointStateRTPublisher(node_, "~/goal_joint_states", joint_names_);
-  }
-  if (publish_read_joint_states_) {
-    realtime_read_state_pub_ = makeJointStateRTPublisher(node_, "~/read_joint_states", joint_names_);
-  }
-  if (publish_write_joint_states_) {
-    realtime_write_state_pub_ = makeJointStateRTPublisher(node_, "~/write_joint_states", joint_names_);
-  }
+  joint_state_publishers_.init(node_, info_.hardware_parameters, joint_names_);
 
   // set up e-stop subscription
   std::string topic = ns != "/" ? ns + "/soft_e_stop" : "/soft_e_stop";
@@ -666,15 +614,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::ERROR;
   }
 
-  // Publish actuator-space (pre-transmission) read states. For joints without a transmission
-  // the actuator state is stored directly in joint_state (mirrors Joint::getActuatorState()).
-  if (realtime_read_state_pub_ && realtime_read_state_pub_->trylock()) {
-    fillJointStateMsg(realtime_read_state_pub_->msg_, joint_names_, joints_, time,
-                      [](const Joint& j) -> const std::unordered_map<std::string, double>& {
-                        return j.state_transmission ? j.actuator_state.current : j.joint_state.current;
-                      });
-    realtime_read_state_pub_->unlockAndPublish();
-  }
+  joint_state_publishers_.publishRead(time, joints_, joint_names_);
 
   for (auto& [name, joint] : joints_) {
     if (joint.state_transmission) {
@@ -741,24 +681,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     return hardware_interface::return_type::ERROR;
   }
 
-  // Publish goal (joint-space, pre-transmission) and write (actuator-space, post-transmission)
-  // joint states. Both reflect the values from this write cycle.
-  const auto stamp = get_clock()->now();
-  if (realtime_goal_state_pub_ && realtime_goal_state_pub_->trylock()) {
-    fillJointStateMsg(realtime_goal_state_pub_->msg_, joint_names_, joints_, stamp,
-                      [](const Joint& j) -> const std::unordered_map<std::string, double>& {
-                        return j.joint_state.goal;
-                      });
-    realtime_goal_state_pub_->unlockAndPublish();
-  }
-  if (realtime_write_state_pub_ && realtime_write_state_pub_->trylock()) {
-    fillJointStateMsg(realtime_write_state_pub_->msg_, joint_names_, joints_, stamp,
-                      [](const Joint& j) -> const std::unordered_map<std::string, double>& {
-                        return j.command_transmission ? j.actuator_state.goal : j.joint_state.goal;
-                      });
-    realtime_write_state_pub_->unlockAndPublish();
-  }
-
+  joint_state_publishers_.publishGoalAndWrite(get_clock()->now(), joints_, joint_names_);
   return hardware_interface::return_type::OK;
 }
 
