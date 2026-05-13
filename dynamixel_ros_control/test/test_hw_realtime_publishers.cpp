@@ -68,6 +68,15 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
   auto drive_to = [&](double pos, sensor_msgs::msg::JointState::SharedPtr& out_goal,
                       sensor_msgs::msg::JointState::SharedPtr& out_write,
                       sensor_msgs::msg::JointState::SharedPtr& out_read) {
+    // Clear the cached snapshots so each captured message is guaranteed to come from a
+    // cycle that ran after this command was issued, rather than possibly being a stale
+    // message left over from the previous setpoint.
+    {
+      std::lock_guard<std::mutex> l(mtx);
+      last_goal.reset();
+      last_write.reset();
+      last_read.reset();
+    }
     std_msgs::msg::Float64MultiArray cmd;
     cmd.data = {pos, pos, pos, pos};
     bool ok = false;
@@ -78,8 +87,14 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
       executor_->spin_some();
       std::lock_guard<std::mutex> l(mtx);
       if (last_goal && last_write && last_read) {
-        bool all_match = true;
+        // goal and write are published from the same write() cycle and therefore share a
+        // header.stamp; require equality so we never pair a goal with a write from a
+        // different cycle (e.g. when one publisher's trylock() failed once).
+        const bool same_write_cycle = last_goal->header.stamp == last_write->header.stamp;
+        bool all_match = same_write_cycle;
         for (const auto& j : joints) {
+          if (!all_match)
+            break;
           size_t i_g = idx_of(*last_goal, j);
           if (i_g == size_t(-1) || std::abs(last_goal->position[i_g] - pos) > 1e-6) {
             all_match = false;
