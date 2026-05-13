@@ -1688,6 +1688,9 @@
       <param name="use_dummy">true</param>
       <param name="torque_on_startup">true</param>
       <param name="torque_off_on_shutdown">false</param>
+      <param name="publish_goal_joint_states">true</param>
+      <param name="publish_read_joint_states">true</param>
+      <param name="publish_write_joint_states">true</param>
     </hardware>
     <joint name="flipper_fl_joint">
       <param name="id">1</param>

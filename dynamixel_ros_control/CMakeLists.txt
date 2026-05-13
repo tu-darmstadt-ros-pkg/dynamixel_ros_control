@@ -39,6 +39,7 @@ set(HEADERS
     include/${PROJECT_NAME}/control_table_item.hpp
     include/${PROJECT_NAME}/dynamixel_driver.hpp
     include/${PROJECT_NAME}/dynamixel_hardware_interface.hpp
+    include/${PROJECT_NAME}/joint_state_publisher_set.hpp
     include/${PROJECT_NAME}/sync_read_manager.hpp
     include/${PROJECT_NAME}/sync_write_manager.hpp
     include/${PROJECT_NAME}/log.hpp)
@@ -51,6 +52,7 @@ set(SOURCES
     src/control_table_item.cpp
     src/dynamixel_driver.cpp
     src/dynamixel_hardware_interface.cpp
+    src/joint_state_publisher_set.cpp
     src/sync_read_manager.cpp
     src/sync_write_manager.cpp)
 include_directories(include)
@@ -172,6 +174,14 @@ if(BUILD_TESTING)
   ament_add_gtest(test_hw_bus_watchdog test/test_hw_bus_watchdog.cpp)
   set_tests_properties(test_hw_bus_watchdog PROPERTIES TIMEOUT 60)
   target_link_libraries(test_hw_bus_watchdog ${PROJECT_NAME})
+
+  # Test: Realtime joint-state publishers (read/write/goal topics, transmission
+  # cross-check)
+  ament_add_gtest(test_hw_realtime_publishers
+                  test/test_hw_realtime_publishers.cpp)
+  set_tests_properties(test_hw_realtime_publishers PROPERTIES TIMEOUT 120)
+  target_link_libraries(test_hw_realtime_publishers ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_realtime_publishers ${HW_TEST_DEPS})
   ament_target_dependencies(test_hw_bus_watchdog ${HW_TEST_DEPS})
 endif()
 
