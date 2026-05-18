@@ -183,7 +183,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_hw_manifest ${PROJECT_NAME})
   ament_target_dependencies(test_hw_manifest ${HW_TEST_DEPS})
 
-  # Test: Health topic (5 Hz timer, runtime state)
+  # Test: Diagnostics topic (~/diagnostics, 1 Hz timer, runtime state)
   ament_add_gtest(test_hw_health test/test_hw_health.cpp)
   set_tests_properties(test_hw_health PROPERTIES TIMEOUT 300)
   target_link_libraries(test_hw_health ${PROJECT_NAME})

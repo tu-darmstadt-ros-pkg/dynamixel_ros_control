@@ -216,7 +216,7 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
 
   // Joint state publishers (~/goal_joint_states + optional read/write) and diagnostics
-  // (~/manifest one-shot + ~/health 5 Hz) are both opt-in observability — keep them adjacent.
+  // (~/manifest one-shot + ~/diagnostics 1 Hz) are both opt-in observability
   joint_state_publishers_.init(node_, info_.hardware_parameters, joint_names_);
   diagnostics_ = std::make_unique<DynamixelDiagnostics>(node_, get_name(), joints_, joint_names_, driver_,
                                                         read_manager_, control_write_manager_);
@@ -648,7 +648,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   first_read_successful_ = true;
   last_successful_read_time_ = time;
 
-  diagnostics_->snapshotHealth(time, e_stop_active_.load(), desired_torque_state_, mode_switch_failed_,
+  diagnostics_->snapshotHealth(time, e_stop_active_.load(), desired_torque_state_.load(), mode_switch_failed_,
                                last_successful_read_time_);
 
   return hardware_interface::return_type::OK;
@@ -953,8 +953,9 @@ bool DynamixelHardwareInterface::reboot()
   }
 
   // Restore desired torque state after reboot (motors default to torque off after reboot)
-  DXL_LOG_INFO("Restoring torque state to " << (desired_torque_state_ ? "ON" : "OFF") << " after reboot.");
-  if (!setTorque(desired_torque_state_, {}, true)) {
+  const bool desired_torque = desired_torque_state_.load();
+  DXL_LOG_INFO("Restoring torque state to " << (desired_torque ? "ON" : "OFF") << " after reboot.");
+  if (!setTorque(desired_torque, {}, true)) {
     DXL_LOG_ERROR("Failed to restore torque state after reboot.");
     return false;
   }
@@ -963,8 +964,13 @@ bool DynamixelHardwareInterface::reboot()
   updateColorLED();
 
   // Reboot may have changed EEPROM state (e.g. drive_mode written via writeInitialValues).
-  // Re-publish the manifest so subscribers see the post-reboot snapshot.
-  diagnostics_->publishManifest(node_->now());
+  // Re-publish the manifest so subscribers see the post-reboot snapshot. publishManifest()
+  // issues per-joint register reads on the shared bus; hold the comm mutex to keep it from
+  // racing with read()/write(), which now resume between the reboot work above and here.
+  {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    diagnostics_->publishManifest(node_->now());
+  }
 
   return true;
 }

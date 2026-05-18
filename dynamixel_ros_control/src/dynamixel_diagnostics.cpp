@@ -84,7 +84,6 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
   msg.header.stamp = stamp;
   msg.status.clear();
 
-  // Bus-level status.
   DiagnosticStatus bus;
   bus.level = DiagnosticStatus::OK;
   bus.name = hw_iface_name_ + "/bus";

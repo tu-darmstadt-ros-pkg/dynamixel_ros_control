@@ -141,10 +141,11 @@ private:
   bool torque_off_on_shutdown_{false};
 
   // Runtime state
-  std::atomic<bool> is_torqued_{false};     ///< Current torque state of motors.
-  bool desired_torque_state_{false};        ///< User's desired torque state (restored after reboot).
-  std::atomic<bool> e_stop_active_{false};  ///< True if software E-Stop is engaged.
-  bool mode_switch_failed_{false};          ///< True if control mode switch failed.
+  std::atomic<bool> is_torqued_{false};            ///< Current torque state of motors.
+  std::atomic<bool> desired_torque_state_{false};  ///< User's desired torque state (restored after reboot).
+                                                   ///< Written by SetTorque service, read by read() (snapshotHealth).
+  std::atomic<bool> e_stop_active_{false};         ///< True if software E-Stop is engaged.
+  bool mode_switch_failed_{false};                 ///< True if control mode switch failed.
 
   constexpr static int max_reset_and_verify_retries_ = 5;  ///< Max retries for resetting goal state and verifying.
 
@@ -154,8 +155,8 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_service_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
 
-  /// @brief Owns ~/manifest (transient_local, one-shot per configure/reboot) and ~/health
-  /// (5 Hz timer). Records health snapshots from read() via try_lock.
+  /// @brief Owns ~/manifest (transient_local, one-shot per configure/reboot) and ~/diagnostics
+  /// (1 Hz timer). Records diagnostics snapshots from read() via try_lock.
   std::unique_ptr<DynamixelDiagnostics> diagnostics_;
 
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;

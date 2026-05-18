@@ -32,7 +32,7 @@ const diagnostic_msgs::msg::DiagnosticStatus* findBus(const diagnostic_msgs::msg
 }  // namespace
 
 // ============================================================================
-// Health tests (~/health, 5 Hz timer, runtime state)
+// Diagnostics tests (~/diagnostics, 1 Hz timer, runtime state)
 // ============================================================================
 
 TEST_F(HardwareInterfaceTest, Health_PublishedPeriodically)
