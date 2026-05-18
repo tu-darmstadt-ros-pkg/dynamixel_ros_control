@@ -920,9 +920,11 @@ bool DynamixelHardwareInterface::reboot()
     // Wait for motors to come back online after reboot.
     get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
 
-    // Reboot wipes RAM. Re-apply indirect address mappings (used by all sync read/write
-    // managers) and restore configured initial register values BEFORE the first read,
-    // since both depend on motor RAM state.
+    // Reboot wipes RAM. Re-apply indirect address mappings and restore
+    // configured initial register values before the first read. The rewrite
+    // runs unconditionally: on X-series the pointers live in RAM and must
+    // be rewritten; on P-series they live in EEPROM and readWriteRegister
+    // skips the write when the value already matches.
     if (!read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
         !cmd_read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
         !control_write_manager_.rewriteIndirectAddresses(rebooted_dxls) ||

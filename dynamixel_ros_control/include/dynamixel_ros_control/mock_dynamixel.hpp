@@ -360,10 +360,10 @@ public:
         }
       }
     }
-    // Indirect-address pointer region and indirect-data window are RAM on real hardware
-    // (defined in the model YAML's indirect_addresses section, not the control_table list).
-    // Without zeroing them here, the mock would keep mappings alive across reboot and hide
-    // bugs where production code fails to re-write them.
+    // Clear the indirect-address pointer + data regions unconditionally. On X-series
+    // motors these are RAM and a real reboot wipes them; on P-series they're EEPROM
+    // and survive. Wiping them in the mock regardless lets a single test (using any
+    // model) exercise the production-side rewrite path.
     if (indirect_count_ > 0) {
       const size_t pointer_bytes = static_cast<size_t>(indirect_count_) * 2;
       for (size_t i = 0; i < pointer_bytes; ++i) {

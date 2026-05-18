@@ -503,5 +503,6 @@ TEST_F(HardwareInterfaceTest, SimultaneousOperations_ArmAndFlipperIndependent)
 
 int main(int argc, char** argv)
 {
-  dynamixel_ros_control::test::run_tests_and_exit(argc, argv);
+  testing::InitGoogleTest(&argc, argv);
+  return RUN_ALL_TESTS();
 }

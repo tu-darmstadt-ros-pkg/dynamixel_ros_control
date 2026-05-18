@@ -329,24 +329,14 @@ If communication appears slow or irregular, check the following:
 ## Testing
 
 The package ships an integration test suite (gtest + a mock Dynamixel layer)
-that exercises the hardware interface without real motors. The convenience
-commands below are provided by
-[tuda_workspace_scripts](https://github.com/tu-darmstadt-ros-pkg/tuda_workspace_scripts)
-(`tuda_wss`):
+that exercises the hardware interface without real motors:
 
 ```bash
-tuda_wss test dynamixel_ros_control                  # plain run
-tuda_wss test dynamixel_ros_control --memory-check   # AddressSanitizer
-tuda_wss test dynamixel_ros_control --thread-check   # ThreadSanitizer
+colcon test --packages-select dynamixel_ros_control
 ```
 
-Sanitizer builds land in `build/asan/` and `build/tsan/` so they don't
-disturb your normal `build/`. Test timeouts are auto-scaled (×5 for asan,
-×10 for tsan) and the LSan / TSan suppression files in
-[test/config/](dynamixel_ros_control/test/config/) silence known
-framework-side noise (rcl/rclcpp/cyclonedds), so any reports that surface
-should be in this package's code.
-
+Test timeouts are auto-scaled under AddressSanitizer (×5) and
+ThreadSanitizer (×10) builds.
 
 ## Contribution
 

@@ -4,8 +4,6 @@
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
 #include <cmath>
 
-#include "test_sanitizer_helpers.hpp"
-
 using namespace dynamixel_ros_control;
 
 // PH-Series (model 2020) register addresses (from PH.yaml)
@@ -1145,9 +1143,5 @@ TEST_F(MockDynamixelTest, BusWatchdogViaDriver)
 int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);
-  const int result = RUN_ALL_TESTS();
-  if (dynamixel_ros_control::test::trigger_lsan_check() != 0 && result == 0) {
-    return 1;
-  }
-  return result;
+  return RUN_ALL_TESTS();
 }

@@ -92,51 +92,19 @@ if(BUILD_TESTING)
   set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools
                    dynamixel_ros_control_msgs)
 
-  # Detect sanitizer builds from CMAKE_CXX_FLAGS (set by colcon mixin asan-gcc /
-  # tsan). Used to inflate test timeouts (sanitizers slow execution ~10x) and to
-  # wire up the ASAN/LSAN/TSAN options + suppression file so leak detection
-  # works under _Exit().
+  # Scale test timeouts under sanitizer builds (set by colcon asan-gcc / tsan
+  # mixins). Sanitizers slow execution roughly 5x (asan) / 10x (tsan).
   set(_dxl_sanitizer_timeout_factor 1)
-  set(_dxl_sanitizer_env "")
-  set(_dxl_lsan_suppressions
-      "${CMAKE_CURRENT_SOURCE_DIR}/test/config/lsan_suppressions.txt")
-  set(_dxl_tsan_suppressions
-      "${CMAKE_CURRENT_SOURCE_DIR}/test/config/tsan_suppressions.txt")
   if(CMAKE_CXX_FLAGS MATCHES "fsanitize=address")
     set(_dxl_sanitizer_timeout_factor 5)
-    set(_dxl_asan_opts_list
-        "new_delete_type_mismatch=0" "verify_asan_link_order=0"
-        "detect_leaks=1" "halt_on_error=0" "abort_on_error=0")
-    string(JOIN ":" _dxl_asan_opts ${_dxl_asan_opts_list})
-    list(
-      APPEND _dxl_sanitizer_env "ASAN_OPTIONS=${_dxl_asan_opts}"
-      "LSAN_OPTIONS=suppressions=${_dxl_lsan_suppressions}:print_suppressions=0"
-    )
-    message(STATUS "dynamixel_ros_control: AddressSanitizer detected, "
-                   "scaling test timeouts x${_dxl_sanitizer_timeout_factor}")
   elseif(CMAKE_CXX_FLAGS MATCHES "fsanitize=thread")
     set(_dxl_sanitizer_timeout_factor 10)
-    set(_dxl_tsan_opts_list
-        "halt_on_error=0" "abort_on_error=0" "second_deadlock_stack=1"
-        "history_size=7" "suppressions=${_dxl_tsan_suppressions}")
-    string(JOIN ":" _dxl_tsan_opts ${_dxl_tsan_opts_list})
-    list(APPEND _dxl_sanitizer_env "TSAN_OPTIONS=${_dxl_tsan_opts}")
-    message(STATUS "dynamixel_ros_control: ThreadSanitizer detected, "
-                   "scaling test timeouts x${_dxl_sanitizer_timeout_factor}")
   endif()
 
-  # For tsan we need to launch the test via `setarch -R` (ADDR_NO_RANDOMIZE) to
-  # avoid the kernel-6.5+ ASLR-vs-TSan-shadow-region collision. ament's RUNNER
-  # hook lets us swap in a shim that does exactly that.
-  set(_dxl_test_runner_arg "")
-  if(CMAKE_CXX_FLAGS MATCHES "fsanitize=thread")
-    set(_dxl_test_runner_arg
-        RUNNER "${CMAKE_CURRENT_SOURCE_DIR}/test/setarch_runner.py")
-  endif()
-
-  # Helper: register a gtest with consistent timeout/dependencies/sanitizer env.
+  # Register a gtest with the project library linked, optional ament
+  # dependencies (variadic), and a TIMEOUT scaled by the sanitizer factor.
   function(dxl_add_gtest test_name source_file base_timeout)
-    ament_add_gtest(${test_name} ${source_file} ${_dxl_test_runner_arg})
+    ament_add_gtest(${test_name} ${source_file})
     target_link_libraries(${test_name} ${PROJECT_NAME})
     if(NOT "${ARGN}" STREQUAL "")
       ament_target_dependencies(${test_name} ${ARGN})
@@ -144,10 +112,6 @@ if(BUILD_TESTING)
     math(EXPR scaled_timeout
          "${base_timeout} * ${_dxl_sanitizer_timeout_factor}")
     set_tests_properties(${test_name} PROPERTIES TIMEOUT ${scaled_timeout})
-    if(_dxl_sanitizer_env)
-      set_tests_properties(${test_name} PROPERTIES ENVIRONMENT
-                                                   "${_dxl_sanitizer_env}")
-    endif()
   endfunction()
 
   # Mock-only test: doesn't use rclcpp.
