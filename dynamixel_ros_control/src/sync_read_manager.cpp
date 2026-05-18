@@ -26,9 +26,8 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
     offsets.resize(dynamixels_.size(), 0.0);
   } else {
     if (dxl_value_pairs.size() != offsets.size()) {
-      DXL_LOG_ERROR("Size of offsets (" << dxl_value_pairs.size()
-                                        << ") does not match number of Dynamixel-Value pairs (" << offsets.size()
-                                        << ")");
+      DXL_LOG_ERROR("Size of offsets (" << offsets.size() << ") does not match number of Dynamixel-Value pairs ("
+                                        << dxl_value_pairs.size() << ")");
       return false;
     }
   }

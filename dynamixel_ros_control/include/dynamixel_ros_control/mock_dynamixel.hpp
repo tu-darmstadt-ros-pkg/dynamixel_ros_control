@@ -307,12 +307,14 @@ public:
 
   void write2Byte(uint16_t address, uint16_t data)
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     write1Byte(address, data & 0xFF);
     write1Byte(address + 1, (data >> 8) & 0xFF);
   }
 
   void write4Byte(uint16_t address, uint32_t data)
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     write1Byte(address, data & 0xFF);
     write1Byte(address + 1, (data >> 8) & 0xFF);
     write1Byte(address + 2, (data >> 16) & 0xFF);

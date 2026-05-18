@@ -896,8 +896,11 @@ std::vector<std::string> DynamixelHardwareInterface::getJointsWithHardwareError(
 bool DynamixelHardwareInterface::reboot()
 {
   std::vector<std::string> rebooted_joints;
+  std::set<Dynamixel*> rebooted_dxls;
   {
-    // lock communication mutex (avoid simultaneous access with read / write)
+    // Hold the mutex across the whole reboot sequence: reboot wipes RAM
+    // (including indirect-address pointers), so any read/write during this
+    // window would return garbage. read()/write() try_to_lock and skip safely.
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
     for (auto& [name, joint] : joints_) {
       if (joint.dynamixel->hardware_error_status != OK) {
@@ -906,23 +909,20 @@ bool DynamixelHardwareInterface::reboot()
           return false;
         }
         rebooted_joints.push_back(name);
+        rebooted_dxls.insert(joint.dynamixel.get());
       }
     }
-  }
 
-  // Wait for motors to come back online after reboot
-  // Dynamixel motors need time to restart after a reboot command
-  get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
+    if (rebooted_joints.empty()) {
+      return true;
+    }
 
-  // Reboot wipes RAM. Re-apply indirect address mappings (used by all sync read/write managers)
-  // and restore configured initial register values BEFORE the first read, since both depend on
-  // motor RAM state.
-  std::set<Dynamixel*> rebooted_dxls;
-  for (const auto& name : rebooted_joints) {
-    rebooted_dxls.insert(joints_.at(name).dynamixel.get());
-  }
-  {
-    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    // Wait for motors to come back online after reboot.
+    get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
+
+    // Reboot wipes RAM. Re-apply indirect address mappings (used by all sync read/write
+    // managers) and restore configured initial register values BEFORE the first read,
+    // since both depend on motor RAM state.
     if (!read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
         !cmd_read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
         !control_write_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
