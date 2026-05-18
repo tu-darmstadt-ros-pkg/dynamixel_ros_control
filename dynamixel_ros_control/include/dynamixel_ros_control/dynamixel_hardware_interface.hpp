@@ -5,6 +5,7 @@
 #include <mutex>
 
 #include "joint.hpp"
+#include "joint_state_publisher_set.hpp"
 #include "sync_read_manager.hpp"
 #include "sync_write_manager.hpp"
 
@@ -135,7 +136,6 @@ private:
   bool debug_{false};
   bool torque_on_startup_{false};
   bool torque_off_on_shutdown_{false};
-  bool publish_goal_joint_states_{false};
 
   // Runtime state
   std::atomic<bool> is_torqued_{false};     ///< Current torque state of motors.
@@ -156,9 +156,11 @@ private:
   std::shared_ptr<controller_orchestrator::ControllerOrchestrator> controller_orchestrator_;
   std::shared_ptr<hector_transmission_interface::AdjustableOffsetManager> offset_manager_;
 
-  // Goal state publisher
-  rclcpp::Publisher<sensor_msgs::msg::JointState>::SharedPtr goal_state_pub_;
-  std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> realtime_goal_state_pub_;
+  // Realtime joint state publishers (SI units):
+  //   ~/goal_joint_states  - joint-space goal (pre-transmission)
+  //   ~/read_joint_states  - actuator-space state (pre-transmission application on read path)
+  //   ~/write_joint_states - actuator-space goal (post-transmission)
+  JointStatePublisherSet joint_state_publishers_;
 };
 
 }  // namespace dynamixel_ros_control
