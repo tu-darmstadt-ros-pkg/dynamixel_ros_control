@@ -205,10 +205,11 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
 
   // set up realtime-safe publishers (actual ROS publish happens on internal threads, not control thread)
-  rt_diagnostics_pub_ = std::make_shared<realtime_tools::RealtimePublisher<diagnostic_msgs::msg::DiagnosticArray>>(
-      node_->create_publisher<diagnostic_msgs::msg::DiagnosticArray>("~/diagnostics", rclcpp::QoS(1).transient_local()));
   rt_goal_joint_state_pub_ = std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(
       node_->create_publisher<sensor_msgs::msg::JointState>("~/goal_joint_states", 1));
+
+  diagnostics_ = std::make_unique<DynamixelDiagnostics>(node_, get_name(), joints_, joint_names_, driver_,
+                                                        read_manager_, control_write_manager_);
 
   // set up e-stop subscription
   std::string topic = ns != "/" ? ns + "/soft_e_stop" : "/soft_e_stop";
@@ -259,6 +260,10 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
 
   updateColorLED(hardware_interface::lifecycle_state_names::INACTIVE);
 
+  // Manifest reflects live EEPROM state — publish after motors are connected and the control
+  // tables are loaded.
+  diagnostics_->publishManifest(node_->now());
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -288,6 +293,7 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_cleanup from " << previous_state.label());
+  diagnostics_.reset();
   if (exe_) {
     exe_->cancel();
   }
@@ -316,6 +322,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
     return CallbackReturn::ERROR;
   }
   updateColorLED(hardware_interface::lifecycle_state_names::ACTIVE);
+  diagnostics_->startHealthTimer();
   return CallbackReturn::SUCCESS;
 }
 
@@ -323,6 +330,7 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
+  diagnostics_->stopHealthTimer();
   if (!setTorque(!torque_off_on_shutdown_, true)) {
     DXL_LOG_ERROR("Failed to set torque on deactivation to " << (torque_off_on_shutdown_ ? "ON" : "OFF"));
     return CallbackReturn::ERROR;
@@ -592,7 +600,8 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   first_read_successful_ = true;
   last_successful_read_time_ = time;
 
-  publishDiagnostics();
+  diagnostics_->snapshotHealth(time, e_stop_active_.load(), desired_torque_state_, mode_switch_failed_,
+                               last_successful_read_time_);
   publishGoalJointStates();
 
   return hardware_interface::return_type::OK;
@@ -645,39 +654,6 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     return hardware_interface::return_type::ERROR;
   }
   return hardware_interface::return_type::OK;
-}
-
-void DynamixelHardwareInterface::publishDiagnostics()
-{
-  // Compare raw values to detect changes
-  DiagnosticState current;
-  current.hw_ok = isHardwareOk();
-  current.e_stop_active = e_stop_active_.load();
-  current.torque_enabled = is_torqued_.load();
-  current.read_errors = read_manager_.getErrorCount();
-  current.write_errors = control_write_manager_.getErrorCount();
-  for (const auto& [name, joint] : joints_) {
-    auto status = joint.dynamixel->hardware_error_status;
-    if (status != OK) {
-      current.joint_hw_errors[name] = status;
-    }
-  }
-
-  if (first_diagnostics_published_ && current == last_diag_state_) {
-    return;
-  }
-
-  if (!rt_diagnostics_pub_->trylock()) {
-    return;
-  }
-
-  auto& msg = rt_diagnostics_pub_->msg_;
-  msg.header.stamp = node_->now();
-  msg.status = {current.toMsg(get_name())};
-
-  rt_diagnostics_pub_->unlockAndPublish();
-  last_diag_state_ = current;
-  first_diagnostics_published_ = true;
 }
 
 void DynamixelHardwareInterface::publishGoalJointStates()
@@ -954,6 +930,10 @@ bool DynamixelHardwareInterface::reboot()
 
   // Ensure LEDs reflect the current state
   updateColorLED();
+
+  // Reboot may have changed EEPROM state (e.g. drive_mode written via writeInitialValues).
+  // Re-publish the manifest so subscribers see the post-reboot snapshot.
+  diagnostics_->publishManifest(node_->now());
 
   return true;
 }

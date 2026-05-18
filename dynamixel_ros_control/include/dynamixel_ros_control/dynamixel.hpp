@@ -50,6 +50,9 @@ constexpr char DXL_REGISTER_LED_BLUE[] = "led_blue";
 /// @brief Convert string to ControlMode enum.
 ControlMode stringToControlMode(const std::string& str);
 
+/// @brief Convert ControlMode enum to its canonical string ("position", "extended_position", ...).
+std::string controlModeToString(ControlMode mode);
+
 /**
  * @brief Represents a single Dynamixel motor.
  *

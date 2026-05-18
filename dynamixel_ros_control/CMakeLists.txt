@@ -34,6 +34,7 @@ find_package(realtime_tools REQUIRED)
 set(HEADERS
     include/${PROJECT_NAME}/common.hpp
     include/${PROJECT_NAME}/diagnostic_state.hpp
+    include/${PROJECT_NAME}/dynamixel_diagnostics.hpp
     include/${PROJECT_NAME}/joint.hpp
     include/${PROJECT_NAME}/dynamixel.hpp
     include/${PROJECT_NAME}/control_table.hpp
@@ -47,6 +48,7 @@ set(HEADERS
 set(SOURCES
     src/common.cpp
     src/diagnostic_state.cpp
+    src/dynamixel_diagnostics.cpp
     src/joint.cpp
     src/dynamixel.cpp
     src/control_table.cpp
@@ -163,11 +165,24 @@ if(BUILD_TESTING)
   target_link_libraries(test_hw_mimic ${PROJECT_NAME})
   ament_target_dependencies(test_hw_mimic ${HW_TEST_DEPS})
 
-  # Test: Diagnostics and joint state publishing
-  ament_add_gtest(test_hw_diagnostics test/test_hw_diagnostics.cpp)
-  set_tests_properties(test_hw_diagnostics PROPERTIES TIMEOUT 300)
-  target_link_libraries(test_hw_diagnostics ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_diagnostics ${HW_TEST_DEPS})
+  # Test: Manifest topic (transient_local, published on configure / after
+  # reboot)
+  ament_add_gtest(test_hw_manifest test/test_hw_manifest.cpp)
+  set_tests_properties(test_hw_manifest PROPERTIES TIMEOUT 300)
+  target_link_libraries(test_hw_manifest ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_manifest ${HW_TEST_DEPS})
+
+  # Test: Health topic (5 Hz timer, runtime state)
+  ament_add_gtest(test_hw_health test/test_hw_health.cpp)
+  set_tests_properties(test_hw_health PROPERTIES TIMEOUT 300)
+  target_link_libraries(test_hw_health ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_health ${HW_TEST_DEPS})
+
+  # Test: Goal joint state publisher (~/goal_joint_states)
+  ament_add_gtest(test_hw_goal_joint_state test/test_hw_goal_joint_state.cpp)
+  set_tests_properties(test_hw_goal_joint_state PROPERTIES TIMEOUT 300)
+  target_link_libraries(test_hw_goal_joint_state ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_goal_joint_state ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder

@@ -4,7 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <mutex>
 
-#include "diagnostic_state.hpp"
+#include "dynamixel_diagnostics.hpp"
 #include "joint.hpp"
 #include "sync_read_manager.hpp"
 #include "sync_write_manager.hpp"
@@ -15,7 +15,6 @@
 #include <hector_transmission_interface/adjustable_offset_manager.hpp>
 #include <controller_orchestrator/controller_orchestrator.hpp>
 #include <hector_transmission_interface/adjustable_offset_transmission_loader.hpp>
-#include <diagnostic_msgs/msg/diagnostic_array.hpp>
 #include <realtime_tools/realtime_publisher.hpp>
 #include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/bool.hpp>
@@ -114,9 +113,6 @@ private:
   void setJointLED(const std::string& joint_name, const std::string& color);  ///< Set LED color for a specific motor.
   void updateErrorLEDs();                                                     ///< Set red LED for motors with errors.
 
-  /// @brief Publish diagnostics via RealtimePublisher. Only publishes when content changes.
-  void publishDiagnostics();
-
   /// @brief Publish goal joint states via RealtimePublisher.
   void publishGoalJointStates();
 
@@ -157,11 +153,11 @@ private:
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_service_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
   // Realtime-safe publishers (publish from control thread, actual ROS publish on internal thread)
-  std::shared_ptr<realtime_tools::RealtimePublisher<diagnostic_msgs::msg::DiagnosticArray>> rt_diagnostics_pub_;
   std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> rt_goal_joint_state_pub_;
 
-  DiagnosticState last_diag_state_;          ///< Cached raw values for cheap change detection.
-  bool first_diagnostics_published_{false};  ///< Ensures at least one message is published.
+  /// @brief Owns ~/manifest (transient_local, one-shot per configure/reboot) and ~/health
+  /// (5 Hz timer). Records health snapshots from read() via try_lock.
+  std::unique_ptr<DynamixelDiagnostics> diagnostics_;
 
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;
