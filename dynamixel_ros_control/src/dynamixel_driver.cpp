@@ -161,8 +161,8 @@ bool DynamixelDriver::reboot(const uint8_t id) const
   return comm_result == COMM_SUCCESS;
 }
 
-bool DynamixelDriver::writeRegister(const uint8_t id, const uint16_t address, const uint8_t data_length,
-                                    int32_t value) const
+RegisterAccessResult DynamixelDriver::writeRegister(const uint8_t id, const uint16_t address, const uint8_t data_length,
+                                                    int32_t value) const
 {
   DXL_LOG_DEBUG("[Register Write] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: "
                                        << static_cast<unsigned int>(data_length) << ", value: " << value);
@@ -181,22 +181,11 @@ bool DynamixelDriver::writeRegister(const uint8_t id, const uint16_t address, co
     comm_result = packet_handler_->write4ByteTxRx(port_handler_, id, address, unsigned_value, &error);
   }
 
-  if (comm_result != COMM_SUCCESS) {
-    DXL_LOG_ERROR("[ID " << static_cast<int>(id)
-                         << "] Communication error while writing: " << communicationErrorToString(comm_result));
-    return false;
-  }
-
-  if (error != 0) {
-    DXL_LOG_ERROR("[ID " << static_cast<int>(id) << "] Failed to write: " << packetErrorToString(error));
-    return false;
-  }
-
-  return true;
+  return {comm_result == COMM_SUCCESS && error == 0, comm_result, error};
 }
 
-bool DynamixelDriver::readRegister(const uint8_t id, const uint16_t address, const uint8_t data_length,
-                                   int32_t& value_out) const
+RegisterAccessResult DynamixelDriver::readRegister(const uint8_t id, const uint16_t address, const uint8_t data_length,
+                                                   int32_t& value_out) const
 {
   uint8_t error = 0;
   int comm_result = COMM_RX_FAIL;
@@ -217,23 +206,12 @@ bool DynamixelDriver::readRegister(const uint8_t id, const uint16_t address, con
     std::memcpy(&value_out, &data, sizeof(int32_t));
   } else {
     DXL_LOG_ERROR("Unsupported data length: " << data_length);
-    return false;
+    return {false, COMM_RX_FAIL, 0};
   }
   DXL_LOG_DEBUG("[Register Read] id " << static_cast<unsigned int>(id) << ", address: " << address << ", length: "
                                       << static_cast<unsigned int>(data_length) << ", value: " << value_out);
 
-  if (comm_result != COMM_SUCCESS) {
-    DXL_LOG_ERROR("[ID " << static_cast<int>(id)
-                         << "] Read communication error: " << communicationErrorToString(comm_result));
-    return false;
-  }
-
-  if (error != 0) {
-    DXL_LOG_ERROR("[ID " << static_cast<int>(id) << "] Read error: " << packetErrorToString(error));
-    return false;
-  }
-
-  return true;
+  return {comm_result == COMM_SUCCESS && error == 0, comm_result, error};
 }
 
 std::shared_ptr<GroupSyncWrite> DynamixelDriver::setSyncWrite(uint16_t address, uint8_t data_length) const
@@ -297,6 +275,20 @@ std::string DynamixelDriver::packetErrorToString(const uint8_t error) const
 {
   const char* error_cstr = packet_handler_->getRxPacketError(error);
   return {error_cstr};
+}
+
+std::string DynamixelDriver::describeError(const RegisterAccessResult& result) const
+{
+  if (result.success) {
+    return {};
+  }
+  if (result.comm_result != COMM_SUCCESS) {
+    return "comm error: " + communicationErrorToString(result.comm_result);
+  }
+  if (result.packet_error != 0) {
+    return "packet error: " + packetErrorToString(result.packet_error);
+  }
+  return "unknown error";
 }
 
 bool DynamixelDriver::setPacketHandler()

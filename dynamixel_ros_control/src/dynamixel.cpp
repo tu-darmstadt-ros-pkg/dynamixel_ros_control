@@ -113,12 +113,23 @@ bool Dynamixel::writeRegister(const std::string& register_name, const int32_t va
     DXL_LOG_ERROR("Unknown register '" << register_name << "'");
     return false;
   }
-  return writeRegister(item->address(), item->data_length(), value);
+  const auto result = driver_.writeRegister(getId(), item->address(), item->data_length(), value);
+  if (!result) {
+    DXL_LOG_ERROR("[ID " << getIdInt() << "] Failed to write register '" << register_name << "' (addr="
+                         << item->address() << ", value=" << value << "): " << driver_.describeError(result));
+  }
+  return result.success;
 }
 
 bool Dynamixel::writeRegister(const uint16_t address, const uint8_t data_length, const int32_t value) const
 {
-  return driver_.writeRegister(getId(), address, data_length, value);
+  const auto result = driver_.writeRegister(getId(), address, data_length, value);
+  if (!result) {
+    DXL_LOG_ERROR("[ID " << getIdInt() << "] Failed to write addr=" << address
+                         << " (len=" << static_cast<int>(data_length) << ", value=" << value
+                         << "): " << driver_.describeError(result));
+  }
+  return result.success;
 }
 
 bool Dynamixel::readRegister(const std::string& register_name, double& value_out) const
@@ -150,12 +161,22 @@ bool Dynamixel::readRegister(const std::string& register_name, int32_t& value_ou
   catch (const std::out_of_range&) {
     return false;
   }
-  return readRegister(item->address(), item->data_length(), value_out);
+  const auto result = driver_.readRegister(getId(), item->address(), item->data_length(), value_out);
+  if (!result) {
+    DXL_LOG_ERROR("[ID " << getIdInt() << "] Failed to read register '" << register_name
+                         << "' (addr=" << item->address() << "): " << driver_.describeError(result));
+  }
+  return result.success;
 }
 
 bool Dynamixel::readRegister(const uint16_t address, const uint8_t data_length, int32_t& value_out) const
 {
-  return driver_.readRegister(getId(), address, data_length, value_out);
+  const auto result = driver_.readRegister(getId(), address, data_length, value_out);
+  if (!result) {
+    DXL_LOG_ERROR("[ID " << getIdInt() << "] Failed to read addr=" << address
+                         << " (len=" << static_cast<int>(data_length) << "): " << driver_.describeError(result));
+  }
+  return result.success;
 }
 
 bool Dynamixel::writeControlMode(const ControlMode mode, const bool disable_torque) const
@@ -297,8 +318,10 @@ bool Dynamixel::writeInitialValues()
       continue;
     }
     if (!writeRegister(register_name, register_value)) {
-      DXL_LOG_WARN("Failed to write initial value '" << register_value << "' to register '" << register_name
-                                                     << "' on motor ID " << getIdInt());
+      // writeRegister already logged the failure with full context; just record
+      // that this particular initial-value write didn't take.
+      DXL_LOG_DEBUG("Initial value '" << register_value << "' for register '" << register_name << "' on motor ID "
+                                      << getIdInt() << " was not applied (see error above).");
       success = false;
     }
   }
