@@ -59,7 +59,6 @@ std::string DiagnosticState::hardwareErrorToString(int32_t error_status)
     result += "Electrical Shock, ";
   if (error_status & OVERLOAD_ERROR)
     result += "Overload, ";
-  // Remove trailing ", "
   if (result.size() >= 2) {
     result.erase(result.size() - 2);
   }

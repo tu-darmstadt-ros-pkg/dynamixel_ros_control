@@ -93,7 +93,6 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
   bus.values.push_back(kv("num_joints", std::to_string(joint_names_.size())));
   msg.status.push_back(bus);
 
-  // Per joint: read live EEPROM state so the manifest reflects what's actually on the motor.
   for (const auto& joint_name : joint_names_) {
     const auto& joint = joints_.at(joint_name);
     const Dynamixel& dxl = *joint.dynamixel;
@@ -162,7 +161,7 @@ void DynamixelDiagnostics::snapshotHealth(const rclcpp::Time& stamp, bool e_stop
 {
   std::unique_lock<std::mutex> lock(snapshot_mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
-    // The 5 Hz consumer holds the lock; the timer will publish the previous snapshot. Fine.
+    // The consumer holds the lock; the timer will publish the previous snapshot. Fine.
     return;
   }
 
@@ -209,8 +208,6 @@ void DynamixelDiagnostics::publishHealth()
   msg.header.stamp = snap.stamp;
   msg.status.clear();
 
-  // Aggregate level computation. Joint-level errors -> ERROR; thresholds exceeded -> ERROR;
-  // e-stop or non-zero error counts below threshold -> WARN; else OK.
   uint8_t bus_level = DiagnosticStatus::OK;
   if (snap.read_consecutive_errors >= DEFAULT_ERROR_THRESHOLD ||
       snap.write_consecutive_errors >= DEFAULT_ERROR_THRESHOLD) {
