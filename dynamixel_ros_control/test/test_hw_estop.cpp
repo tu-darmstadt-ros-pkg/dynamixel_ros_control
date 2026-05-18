@@ -422,16 +422,18 @@ TEST_F(HardwareInterfaceTest, EStop_CannotActivateWhenTorqueOff)
   // Test that e-stop cannot be activated when torque is off
 
   // 1. Disable torque first
-  auto torque_client = tester_node_->create_test_client<std_srvs::srv::SetBool>("/athena_arm_interface/set_torque");
+  auto torque_client =
+      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
-  auto request = std::make_shared<std_srvs::srv::SetBool::Request>();
-  request->data = false;
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+  request->enable = false;
 
   hector_testing_utils::ServiceCallOptions options;
   options.service_timeout = 5s;
   options.response_timeout = 5s;
-  hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                 *executor_, options);
   std::this_thread::sleep_for(300ms);
 
   // 2. Verify LED is green (torque off)
@@ -468,8 +470,9 @@ TEST_F(HardwareInterfaceTest, EStop_CannotActivateWhenTorqueOff)
   estop_pub->publish(estop_msg);
   std::this_thread::sleep_for(100ms);
 
-  request->data = true;
-  hector_testing_utils::call_service<std_srvs::srv::SetBool>(torque_client->get(), request, *executor_, options);
+  request->enable = true;
+  hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                 *executor_, options);
   std::this_thread::sleep_for(300ms);
 }
 

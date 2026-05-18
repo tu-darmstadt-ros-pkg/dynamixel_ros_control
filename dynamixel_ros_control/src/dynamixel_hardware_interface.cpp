@@ -1,10 +1,14 @@
 #include "dynamixel_ros_control/common.hpp"
 #include "dynamixel_ros_control/log.hpp"
 
+#include <algorithm>
+#include <cmath>
+
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
+#include <limits>
 
 #include <transmission_interface/simple_transmission_loader.hpp>
 #include <transmission_interface/transmission.hpp>
@@ -12,6 +16,10 @@
 #include <hector_transmission_interface/adjustable_offset_transmission_loader.hpp>
 
 namespace {
+
+// Multiplier applied to the control-loop period to derive the watchdog timeout.
+// Allows a few missed cycles before the watchdog trips.
+constexpr double BUS_WATCHDOG_PERIOD_MULTIPLIER = 4.0;
 
 std::unordered_map<std::string, std::string> loadInterfaceRegisterTranslationMap(const YAML::Node& node)
 {
@@ -168,16 +176,19 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   exe_thread_ = std::thread([this] { exe_->spin(); });
 
   // create a service to set torque
-  set_torque_service_ = node_->create_service<std_srvs::srv::SetBool>(
-      "~/set_torque", [this](const std::shared_ptr<std_srvs::srv::SetBool::Request> request,
-                             const std::shared_ptr<std_srvs::srv::SetBool::Response> response) {
+  set_torque_service_ = node_->create_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "~/set_torque", [this](const std::shared_ptr<dynamixel_ros_control_msgs::srv::SetTorque::Request> request,
+                             const std::shared_ptr<dynamixel_ros_control_msgs::srv::SetTorque::Response> response) {
         if (lifecycle_state_.label() != hardware_interface::lifecycle_state_names::ACTIVE) {
           response->success = false;
           response->message = "Hardware Interface must be in 'active' state to set torque";
           return;
         }
-        DXL_LOG_INFO("Request to set torque to " << (request->data ? "ON" : "OFF") << " received.");
-        response->success = setTorque(request->data);
+        std::vector<std::string> ignore_joints(request->ignore_joints.begin(), request->ignore_joints.end());
+        DXL_LOG_INFO("Request to set torque to "
+                     << (request->enable ? "ON" : "OFF") << " received."
+                     << (ignore_joints.empty() ? "" : " Ignoring joints: " + iterableToString(ignore_joints)));
+        response->success = setTorque(request->enable, ignore_joints);
         response->message = response->success ? "Torque set successfully" : "Failed to set torque";
       });
 
@@ -204,10 +215,9 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
 
-  // set up realtime-safe publishers (actual ROS publish happens on internal threads, not control thread)
-  rt_goal_joint_state_pub_ = std::make_shared<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>>(
-      node_->create_publisher<sensor_msgs::msg::JointState>("~/goal_joint_states", 1));
-
+  // Joint state publishers (~/goal_joint_states + optional read/write) and diagnostics
+  // (~/manifest one-shot + ~/health 5 Hz) are both opt-in observability — keep them adjacent.
+  joint_state_publishers_.init(node_, info_.hardware_parameters, joint_names_);
   diagnostics_ = std::make_unique<DynamixelDiagnostics>(node_, get_name(), joints_, joint_names_, driver_,
                                                         read_manager_, control_write_manager_);
 
@@ -251,6 +261,36 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
   }
   if (!connection_successful)
     return hardware_interface::CallbackReturn::FAILURE;
+
+  // Configure bus watchdog for all motors that support it.
+  // The bus watchdog stops the motor if communication is lost for longer than the configured timeout.
+  // Timeout is set to 4x the control loop period to allow for occasional missed cycles.
+  if (info_.rw_rate > 0) {
+    const double dt_ms = 1000.0 / static_cast<double>(info_.rw_rate);
+    // Set to a multiple of the cycle time, clamped to the valid register range.
+    // The unit conversion (ms per tick) is defined in each model's YAML control table.
+    for (auto& [name, joint] : joints_) {
+      if (joint.dynamixel->registerAvailable(DXL_REGISTER_BUS_WATCHDOG)) {
+        const double ms_per_tick = joint.dynamixel->getItem(DXL_REGISTER_BUS_WATCHDOG).dxlValueToUnitRatio();
+        // Compute in ticks using ceil to avoid setting watchdog shorter than intended
+        const int watchdog_ticks =
+            std::clamp(static_cast<int>(std::ceil(dt_ms * BUS_WATCHDOG_PERIOD_MULTIPLIER / ms_per_tick)),
+                       DXL_BUS_WATCHDOG_MIN_TICKS, DXL_BUS_WATCHDOG_MAX_TICKS);
+        const double watchdog_ms = watchdog_ticks * ms_per_tick;
+        // Clear any existing bus watchdog error first
+        if (!joint.dynamixel->writeRegister(DXL_REGISTER_BUS_WATCHDOG, 0.0)) {
+          DXL_LOG_WARN("Failed to clear bus watchdog for joint '" << name << "'");
+        }
+        // Set bus watchdog value
+        if (!joint.dynamixel->writeRegister(DXL_REGISTER_BUS_WATCHDOG, watchdog_ms)) {
+          DXL_LOG_WARN("Failed to set bus watchdog for joint '" << name << "'");
+        } else {
+          DXL_LOG_INFO("Bus watchdog for joint '" << name << "' set to " << watchdog_ms << " ms (" << watchdog_ticks
+                                                  << " ticks, dt=" << dt_ms << " ms)");
+        }
+      }
+    }
+  }
 
   // Set up sync read / write managers
   if (!setUpStateAndStatusReadManager() || !setUpTorqueWriteManager() || !setUpControlWriteManager() ||
@@ -306,7 +346,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_activate from " << previous_state.label());
-  if (!setTorque(torque_on_startup_, true)) {
+  if (!setTorque(torque_on_startup_, {}, true)) {
     DXL_LOG_ERROR("Failed to set torque on activation to " << (torque_on_startup_ ? "ON" : "OFF"));
     return hardware_interface::CallbackReturn::ERROR;
   }
@@ -331,7 +371,7 @@ DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previou
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
   diagnostics_->stopHealthTimer();
-  if (!setTorque(!torque_off_on_shutdown_, true)) {
+  if (!setTorque(!torque_off_on_shutdown_, {}, true)) {
     DXL_LOG_ERROR("Failed to set torque on deactivation to " << (torque_off_on_shutdown_ ? "ON" : "OFF"));
     return CallbackReturn::ERROR;
   }
@@ -485,7 +525,7 @@ DynamixelHardwareInterface::perform_command_mode_switch(const std::vector<std::s
     return hardware_interface::return_type::ERROR;
   }
 
-  // TODO: refactor - extract all joints that need to be reset
+  // Collect all joints involved in the switch for goal reset
   std::vector<std::string> joints_to_reset;
   for (const auto& full_interface_name : start_interfaces) {
     std::string joint_name;
@@ -570,7 +610,8 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::OK;
   }
 
-  if (!read_manager_.read()) {
+  const bool read_ok_this_cycle = read_manager_.read();
+  if (!read_ok_this_cycle) {
     // Single read failure - log but don't return error yet
     DXL_LOG_WARN("Read failed, consecutive errors: " << read_manager_.getErrorCount());
   }
@@ -585,12 +626,19 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     return hardware_interface::return_type::ERROR;
   }
 
+  // Only publish on a successful bus read; otherwise actuator_state.current is stale and
+  // publishing it with a fresh stamp would mislead subscribers.
+  if (read_ok_this_cycle) {
+    joint_state_publishers_.publishRead(time, joints_, joint_names_);
+  }
+
   for (auto& [name, joint] : joints_) {
     if (joint.state_transmission) {
       joint.state_transmission->actuator_to_joint();
     }
 
     // reset after first read (e.g. goal position = current position)
+    // TODO: separate first_read and ctrl_changed flags!
     if (!first_read_successful_) {
       joint.resetGoalState();
     }
@@ -602,12 +650,11 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
 
   diagnostics_->snapshotHealth(time, e_stop_active_.load(), desired_torque_state_, mode_switch_failed_,
                                last_successful_read_time_);
-  publishGoalJointStates();
 
   return hardware_interface::return_type::OK;
 }
 
-hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& /*time*/,
+hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::Time& time,
                                                                   const rclcpp::Duration& /*period*/)
 {
   std::unique_lock<std::mutex> lock(dynamixel_comm_mutex_, std::try_to_lock);
@@ -626,7 +673,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
     return hardware_interface::return_type::ERROR;
   }
 
-  // Wait for a successful read after changing the control mode
+  // Apply command transmissions
   for (auto& [name, joint] : joints_) {
     if (joint.command_transmission) {
       joint.command_transmission->joint_to_actuator();
@@ -642,7 +689,8 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   if (e_stop_active_)
     return hardware_interface::return_type::OK;
 
-  if (!control_write_manager_.write()) {
+  const bool write_ok_this_cycle = control_write_manager_.write();
+  if (!write_ok_this_cycle) {
     // Single write failure - log but don't return error yet
     DXL_LOG_WARN("Write failed, consecutive errors: " << control_write_manager_.getErrorCount());
   }
@@ -653,31 +701,14 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
                                                          << " consecutive errors");
     return hardware_interface::return_type::ERROR;
   }
-  return hardware_interface::return_type::OK;
-}
 
-void DynamixelHardwareInterface::publishGoalJointStates()
-{
-  if (rt_goal_joint_state_pub_->trylock()) {
-    auto& msg = rt_goal_joint_state_pub_->msg_;
-    msg.header.stamp = node_->now();
-    msg.name.resize(joint_names_.size());
-    msg.position.resize(joint_names_.size());
-    msg.velocity.resize(joint_names_.size());
-    msg.effort.resize(joint_names_.size());
-
-    for (size_t i = 0; i < joint_names_.size(); ++i) {
-      const auto& joint = joints_.at(joint_names_[i]);
-      msg.name[i] = joint_names_[i];
-      auto gpos_it = joint.joint_state.goal.find(hardware_interface::HW_IF_POSITION);
-      msg.position[i] = gpos_it != joint.joint_state.goal.end() ? gpos_it->second : 0.0;
-      auto gvel_it = joint.joint_state.goal.find(hardware_interface::HW_IF_VELOCITY);
-      msg.velocity[i] = gvel_it != joint.joint_state.goal.end() ? gvel_it->second : 0.0;
-      auto geff_it = joint.joint_state.goal.find(hardware_interface::HW_IF_EFFORT);
-      msg.effort[i] = geff_it != joint.joint_state.goal.end() ? geff_it->second : 0.0;
-    }
-    rt_goal_joint_state_pub_->unlockAndPublish();
+  // Goal reflects controller intent (always meaningful at this point); write reflects what
+  // reached the bus and is only published on a successful bus write.
+  joint_state_publishers_.publishGoal(time, joints_, joint_names_);
+  if (write_ok_this_cycle) {
+    joint_state_publishers_.publishWrite(time, joints_, joint_names_);
   }
+  return hardware_interface::return_type::OK;
 }
 
 bool DynamixelHardwareInterface::loadTransmissionConfiguration()
@@ -923,7 +954,7 @@ bool DynamixelHardwareInterface::reboot()
 
   // Restore desired torque state after reboot (motors default to torque off after reboot)
   DXL_LOG_INFO("Restoring torque state to " << (desired_torque_state_ ? "ON" : "OFF") << " after reboot.");
-  if (!setTorque(desired_torque_state_, true)) {
+  if (!setTorque(desired_torque_state_, {}, true)) {
     DXL_LOG_ERROR("Failed to restore torque state after reboot.");
     return false;
   }
@@ -938,11 +969,19 @@ bool DynamixelHardwareInterface::reboot()
   return true;
 }
 
-bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_controller_unloading, int retries,
-                                           const bool direct_write)
+bool DynamixelHardwareInterface::setTorque(const bool do_enable, const std::vector<std::string>& ignore_joints,
+                                           bool skip_controller_unloading, int retries, const bool direct_write)
 {
-  // Track the user's desired torque state (for restoration after reboot)
-  desired_torque_state_ = do_enable;
+  auto is_ignored = [&ignore_joints](const std::string& name) {
+    return std::find(ignore_joints.begin(), ignore_joints.end(), name) != ignore_joints.end();
+  };
+
+  // Track the user's desired torque state (for restoration after reboot).
+  // Only update when the request applies to all joints; otherwise we might
+  // override the torque state of previously-ignored joints on reboot/restore.
+  if (ignore_joints.empty()) {
+    desired_torque_state_ = do_enable;
+  }
 
   // check if torque change is necessary
   {
@@ -951,6 +990,8 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_contr
     bool all_torqued = true;
     bool all_torqued_off = true;
     for (const auto& [name, joint] : joints_) {
+      if (is_ignored(name))
+        continue;
       bool joint_torqued;
       if (!joint.dynamixel->readRegister(DXL_REGISTER_CMD_TORQUE, joint_torqued)) {
         return false;
@@ -978,7 +1019,13 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_contr
     std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
     if (do_enable) {
       // reset goal state before enabling torque && verify that goal positions are set correctly
-      if (!resetGoalStateAndVerify(joint_names_, max_reset_and_verify_retries_))
+      // Filter out ignored joints so their goals are not overwritten
+      std::vector<std::string> joints_to_reset;
+      for (const auto& name : joint_names_) {
+        if (!is_ignored(name))
+          joints_to_reset.emplace_back(name);
+      }
+      if (!resetGoalStateAndVerify(joints_to_reset, max_reset_and_verify_retries_))
         return false;
     }
     bool success = false;
@@ -987,6 +1034,8 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, bool skip_contr
     while (counter < retries && !success) {
       success = true;
       for (auto& [name, joint] : joints_) {
+        if (is_ignored(name))
+          continue;
         joint.torque = do_enable;  // set torque of each joint -> also relevant for indirect write
         if (direct_write && !joint.dynamixel->writeRegister(DXL_REGISTER_CMD_TORQUE, joint.torque)) {
           success = false;

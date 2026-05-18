@@ -1020,6 +1020,61 @@ TEST_F(MockDynamixelTest, IndirectAddressingScattered)
   EXPECT_EQ(byte3, 0);
 }
 
+// ============================================================================
+// Bus Watchdog Tests
+// ============================================================================
+
+constexpr uint16_t ADDR_BUS_WATCHDOG = 546;
+
+TEST_F(MockDynamixelTest, BusWatchdogAddressCached)
+{
+  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
+  auto motor = MockDynamixelManager::instance().getMotor(1);
+  ASSERT_NE(motor, nullptr);
+
+  // PH series should have bus_watchdog at address 546
+  EXPECT_EQ(motor->getAddress("bus_watchdog"), ADDR_BUS_WATCHDOG);
+}
+
+TEST_F(MockDynamixelTest, BusWatchdogAccessor)
+{
+  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
+  auto motor = MockDynamixelManager::instance().getMotor(1);
+  ASSERT_NE(motor, nullptr);
+
+  // Initially bus watchdog should be 0
+  EXPECT_EQ(motor->getBusWatchdog(), 0);
+
+  // Write a value via register
+  motor->write1Byte(ADDR_BUS_WATCHDOG, 4);
+
+  // Verify via accessor
+  EXPECT_EQ(motor->getBusWatchdog(), 4);
+
+  // Verify via direct register read
+  EXPECT_EQ(motor->read1Byte(ADDR_BUS_WATCHDOG), 4);
+}
+
+TEST_F(MockDynamixelTest, BusWatchdogViaDriver)
+{
+  DynamixelDriver driver;
+  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
+
+  driver.addDummyMotor(1, MODEL_PH);
+
+  // Write bus watchdog value via driver
+  EXPECT_TRUE(driver.writeRegister(1, ADDR_BUS_WATCHDOG, 1, 4));
+
+  // Read back
+  int32_t val;
+  EXPECT_TRUE(driver.readRegister(1, ADDR_BUS_WATCHDOG, 1, val));
+  EXPECT_EQ(val, 4);
+
+  // Verify via mock accessor
+  auto motor = MockDynamixelManager::instance().getMotor(1);
+  EXPECT_EQ(motor->getBusWatchdog(), 4);
+}
+
 int main(int argc, char** argv)
 {
   testing::InitGoogleTest(&argc, argv);

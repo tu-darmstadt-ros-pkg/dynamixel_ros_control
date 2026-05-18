@@ -30,6 +30,7 @@ find_package(hector_transmission_interface REQUIRED)
 find_package(hector_transmission_interface_msgs REQUIRED)
 find_package(controller_orchestrator REQUIRED)
 find_package(realtime_tools REQUIRED)
+find_package(dynamixel_ros_control_msgs REQUIRED)
 
 set(HEADERS
     include/${PROJECT_NAME}/common.hpp
@@ -41,6 +42,7 @@ set(HEADERS
     include/${PROJECT_NAME}/control_table_item.hpp
     include/${PROJECT_NAME}/dynamixel_driver.hpp
     include/${PROJECT_NAME}/dynamixel_hardware_interface.hpp
+    include/${PROJECT_NAME}/joint_state_publisher_set.hpp
     include/${PROJECT_NAME}/sync_read_manager.hpp
     include/${PROJECT_NAME}/sync_write_manager.hpp
     include/${PROJECT_NAME}/log.hpp)
@@ -55,6 +57,7 @@ set(SOURCES
     src/control_table_item.cpp
     src/dynamixel_driver.cpp
     src/dynamixel_hardware_interface.cpp
+    src/joint_state_publisher_set.cpp
     src/sync_read_manager.cpp
     src/sync_write_manager.cpp)
 include_directories(include)
@@ -80,7 +83,8 @@ ament_target_dependencies(
   hector_transmission_interface
   hector_transmission_interface_msgs
   controller_orchestrator
-  realtime_tools)
+  realtime_tools
+  dynamixel_ros_control_msgs)
 
 pluginlib_export_plugin_description_file(hardware_interface
                                          dynamixel_ros_control.xml)
@@ -96,7 +100,8 @@ if(BUILD_TESTING)
   add_definitions(-DTEST_CONFIG_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/config")
 
   # Hardware interface test common dependencies
-  set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools)
+  set(HW_TEST_DEPS controller_manager hector_testing_utils realtime_tools
+                   dynamixel_ros_control_msgs)
 
   # Test: Normal usage (controller switching, movement, gripper, etc.)
   ament_add_gtest(test_hw_normal_usage test/test_hw_normal_usage.cpp)
@@ -159,6 +164,12 @@ if(BUILD_TESTING)
   target_link_libraries(test_hw_hardware_error ${PROJECT_NAME})
   ament_target_dependencies(test_hw_hardware_error ${HW_TEST_DEPS})
 
+  # Test: Partial torque (ignore_joints) and goal state publisher
+  ament_add_gtest(test_hw_partial_torque test/test_hw_partial_torque.cpp)
+  set_tests_properties(test_hw_partial_torque PROPERTIES TIMEOUT 180)
+  target_link_libraries(test_hw_partial_torque ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_partial_torque ${HW_TEST_DEPS})
+
   # Test: Mimic joints (gripper finger joints following servo)
   ament_add_gtest(test_hw_mimic test/test_hw_mimic.cpp)
   set_tests_properties(test_hw_mimic PROPERTIES TIMEOUT 180)
@@ -178,11 +189,20 @@ if(BUILD_TESTING)
   target_link_libraries(test_hw_health ${PROJECT_NAME})
   ament_target_dependencies(test_hw_health ${HW_TEST_DEPS})
 
-  # Test: Goal joint state publisher (~/goal_joint_states)
-  ament_add_gtest(test_hw_goal_joint_state test/test_hw_goal_joint_state.cpp)
-  set_tests_properties(test_hw_goal_joint_state PROPERTIES TIMEOUT 300)
-  target_link_libraries(test_hw_goal_joint_state ${PROJECT_NAME})
-  ament_target_dependencies(test_hw_goal_joint_state ${HW_TEST_DEPS})
+  # Test: Bus watchdog configuration
+  ament_add_gtest(test_hw_bus_watchdog test/test_hw_bus_watchdog.cpp)
+  set_tests_properties(test_hw_bus_watchdog PROPERTIES TIMEOUT 60)
+  target_link_libraries(test_hw_bus_watchdog ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_bus_watchdog ${HW_TEST_DEPS})
+
+  # Test: Realtime joint-state publishers (read/write/goal topics, transmission
+  # cross-check) — jazzy's test_hw_realtime_publishers supersedes my
+  # test_hw_goal_joint_state (it covers the same ~/goal_joint_states topic).
+  ament_add_gtest(test_hw_realtime_publishers
+                  test/test_hw_realtime_publishers.cpp)
+  set_tests_properties(test_hw_realtime_publishers PROPERTIES TIMEOUT 120)
+  target_link_libraries(test_hw_realtime_publishers ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_realtime_publishers ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder

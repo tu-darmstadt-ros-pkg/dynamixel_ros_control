@@ -164,10 +164,16 @@ _max_position_limit_ in radians, _velocity_limit_ in radians per second or _pres
 
 ### Enabling/Disabling Torque
 
-Torque can be toggled via service calls, e.g.:
+Torque can be toggled via service calls using the custom `dynamixel_ros_control_msgs/srv/SetTorque` service:
 
 ```bash
-ros2 service call /<hardware_interface>/set_torque std_srvs/srv/SetBool "{data: <true|false>}"
+ros2 service call /<hardware_interface>/set_torque dynamixel_ros_control_msgs/srv/SetTorque "{enable: true}"
+```
+
+Specific joints can be excluded from the torque toggle using the `ignore_joints` field:
+
+```bash
+ros2 service call /<hardware_interface>/set_torque dynamixel_ros_control_msgs/srv/SetTorque "{enable: false, ignore_joints: ['gripper_servo_joint']}"
 ```
 
 The hardware interface automatically updates the **goal position register** of each motor to the current position before
@@ -224,6 +230,14 @@ The reboot service:
 * Releases the E-Stop if successful
 * Restores the previous torque state
 
+### Bus Watchdog
+
+The hardware interface automatically configures the Dynamixel [Bus Watchdog](https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#bus-watchdog98) during `on_configure`. The bus watchdog is a safety feature that stops the motor if communication is lost, preventing uncontrolled movement.
+
+The watchdog timeout is set to **4x the control loop period** (derived from the `<update_rate>` in the URDF `<ros2_control>` tag). For example, with an update rate of 50 Hz (20 ms period), the watchdog timeout is set to 80 ms. If the motor does not receive any communication within that time, it stops and enters a watchdog error state.
+
+> **Note:** Not all Dynamixel models support the bus watchdog. The older PRO series (non-A variants such as H42-20-S300-R, H54-200-S500-R) and the original RH-P12-RN do not have this register. The hardware interface automatically skips these models. Supported models include all X-series (XM, XL, XC, XH, XD, XW), MX 2.0 series, P-series (PH, PM), PRO+ A-variants (e.g. H42-20-S300-R(A)), and RH-P12-RN(A).
+
 ### Mimic Joints
 
 If a mimicked joint is part of the controlled joints, the hardware interface can create a state interfaces for
@@ -246,6 +260,11 @@ Supports runtime calibration of joint offsets. Useful for flippers or joints tha
 * Offsets can be adjusted **per joint** using external joint position measurements.
 * Automatically deactivates all active controllers before adjusting any transmission offsets.
 * New offsets are saved persistently and automatically restored after reboot.
+* **Automatic 2π jump correction**: When an actuator briefly loses power and its position resets by a multiple of 2π,
+  the transmission detects the jump and compensates the offset automatically. The command transmission is synchronized
+  to keep goal positions consistent. See the
+  [hector_transmission_interface README](https://github.com/tu-darmstadt-ros-pkg/hector_transmission_interface) for
+  details.
 
 To calibrate joints, call:
 

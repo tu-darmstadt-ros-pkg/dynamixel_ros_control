@@ -8,6 +8,7 @@ unit_conversions: # dxl value to unit ratio
   ms: 1.0
   A: 0.00269
   load: 0.1
+  ms_20: 20.0
 
 indirect_addresses:
 # address start | data start  | count
@@ -49,7 +50,7 @@ control_table:
   - 84  | position_p_gain          | 2      | RW     | RAM    |
   - 88  | feedforward_2nd_gain     | 2      | RW     | RAM    |
   - 90  | feedforward_1st_gain     | 2      | RW     | RAM    |
-  - 98  | bus_watchdog             | 1      | RW     | RAM    |
+  - 98  | bus_watchdog             | 1      | RW     | RAM    | ms_20
   - 100 | goal_pwm                 | 2      | RW     | RAM    |
   - 102 | goal_current             | 2      | RW     | RAM    | A
   - 104 | goal_velocity            | 4      | RW     | RAM    | rad_per_s

@@ -215,6 +215,8 @@ public:
             led_green_addr_ = addr;
           else if (name == "led_blue")
             led_blue_addr_ = addr;
+          else if (name == "bus_watchdog")
+            bus_watchdog_addr_ = addr;
         }
       }
 
@@ -411,6 +413,12 @@ public:
   {
     if (led_blue_addr_ > 0)
       write1Byte(led_blue_addr_, value);
+  }
+
+  // Bus watchdog accessor
+  uint8_t getBusWatchdog() const
+  {
+    return bus_watchdog_addr_ > 0 ? read1Byte(bus_watchdog_addr_) : 0;
   }
 
   // Homing offset accessor
@@ -706,6 +714,7 @@ private:
   uint16_t led_red_addr_ = 0;
   uint16_t led_green_addr_ = 0;
   uint16_t led_blue_addr_ = 0;
+  uint16_t bus_watchdog_addr_ = 0;
 
   // Unit conversions
   double rad_per_tick_ = 0.00002068538;  // Default for H42 series
