@@ -333,7 +333,9 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_cleanup from " << previous_state.label());
-  diagnostics_.reset();
+  // Don't reset diagnostics_: it's constructed once in on_init() and stays valid for the
+  // component's lifetime. cleanup → configure transitions reuse the same instance; resetting
+  // here would null-deref on the next on_configure() / read() / reboot() call.
   if (exe_) {
     exe_->cancel();
   }

@@ -72,6 +72,14 @@ DynamixelDiagnostics::DynamixelDiagnostics(rclcpp::Node::SharedPtr node, std::st
   // collide on a single global /diagnostics topic; a per-robot aggregator can still pick it up.
   rt_health_pub_ = std::make_shared<realtime_tools::RealtimePublisher<DiagnosticArray>>(
       node_->create_publisher<DiagnosticArray>("~/diagnostics", rclcpp::QoS(10)));
+
+  // Size + name the per-joint snapshot slots once. snapshotHealth() only updates the runtime
+  // fields after this; joint_name is never reassigned, so the snapshot path stays alloc-free
+  // regardless of name length / SSO threshold.
+  snapshot_.joints.resize(joint_names_.size());
+  for (size_t i = 0; i < joint_names_.size(); ++i) {
+    snapshot_.joints[i].joint_name = joint_names_[i];
+  }
 }
 
 void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
@@ -173,14 +181,10 @@ void DynamixelDiagnostics::snapshotHealth(const rclcpp::Time& stamp, bool e_stop
   snapshot_.read_consecutive_errors = read_manager_.getErrorCount();
   snapshot_.write_consecutive_errors = write_manager_.getErrorCount();
 
-  // First call sizes the vector; subsequent calls reuse the existing slots (no heap traffic).
-  if (snapshot_.joints.size() != joint_names_.size()) {
-    snapshot_.joints.resize(joint_names_.size());
-  }
+  // Slots and joint_name are populated once in the ctor — only update runtime fields here.
   for (size_t i = 0; i < joint_names_.size(); ++i) {
     const auto& joint = joints_.at(joint_names_[i]);
     auto& js = snapshot_.joints[i];
-    js.joint_name = joint_names_[i];
     js.motor_id = joint.dynamixel->getId();
     js.torqued = joint.torque;
     js.hardware_error_status = joint.dynamixel->hardware_error_status;
@@ -239,7 +243,7 @@ void DynamixelDiagnostics::publishHealth()
     s.hardware_id = "id=" + std::to_string(static_cast<unsigned>(js.motor_id));
     if (js.hardware_error_status != 0) {
       s.level = DiagnosticStatus::ERROR;
-      s.message = DiagnosticState::hardwareErrorToString(js.hardware_error_status);
+      s.message = hardwareErrorToString(js.hardware_error_status);
     } else {
       s.level = DiagnosticStatus::OK;
       s.message = "OK";
@@ -247,7 +251,7 @@ void DynamixelDiagnostics::publishHealth()
     s.values.push_back(kv("motor_id", std::to_string(static_cast<unsigned>(js.motor_id))));
     s.values.push_back(kv("torqued", js.torqued ? "true" : "false"));
     s.values.push_back(kv("hardware_error_status", std::to_string(js.hardware_error_status)));
-    s.values.push_back(kv("hardware_error_decoded", DiagnosticState::hardwareErrorToString(js.hardware_error_status)));
+    s.values.push_back(kv("hardware_error_decoded", hardwareErrorToString(js.hardware_error_status)));
     s.values.push_back(kv("operating_mode", controlModeToString(js.operating_mode)));
     msg.status.push_back(s);
   }
