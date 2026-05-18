@@ -21,7 +21,7 @@
 
 namespace dynamixel_ros_control {
 
-/// @brief Per-joint snapshot copied from read() into the health buffer. No allocations after init.
+/// @brief Per-joint snapshot copied from read() into the diagnostics buffer. No allocations after init.
 struct JointHealthSnapshot
 {
   std::string joint_name;
@@ -31,7 +31,7 @@ struct JointHealthSnapshot
   ControlMode operating_mode{UNDEFINED};
 };
 
-/// @brief Bus-wide health snapshot. Populated each `read()`, consumed by the 5 Hz timer.
+/// @brief Bus-wide diagnostics snapshot. Populated each `read()`, consumed by the 1 Hz timer.
 struct HealthSnapshot
 {
   rclcpp::Time stamp;
@@ -45,17 +45,20 @@ struct HealthSnapshot
 };
 
 /**
- * @brief Owns the `~/manifest` and `~/health` publishers for `DynamixelHardwareInterface`.
+ * @brief Owns the `~/manifest` and `~/diagnostics` publishers for `DynamixelHardwareInterface`.
  *
  * `~/manifest` is a `diagnostic_msgs::msg::DiagnosticArray` published with transient_local
  * QoS on `on_configure` and after a successful `reboot()`. It carries one bus-level status
  * plus one per joint with static info (motor id, model, firmware, live EEPROM config, declared
  * interfaces).
  *
- * `~/health` is a `diagnostic_msgs::msg::DiagnosticArray` published at ~5 Hz from a timer.
- * Health snapshots are recorded in `read()` (lock-free try_lock; skipped on contention) and
- * the timer publishes the latest. Per joint: torque, decoded hardware error, current operating
- * mode. Bus-wide: e-stop, error counters and thresholds, last successful read, mode-switch flag.
+ * `~/diagnostics` is a `diagnostic_msgs::msg::DiagnosticArray` published at 1 Hz from a timer
+ * — the conventional rate and message type for the diagnostics ecosystem (rqt_robot_monitor,
+ * diagnostic_aggregator). The topic is private-namespaced because each robot runs in its own
+ * namespace; the standard tooling can still pick it up via an aggregator scoped to that robot.
+ * Snapshots are recorded in `read()` (lock-free try_lock; skipped on contention) and the timer
+ * publishes the latest. Per joint: torque, decoded hardware error, current operating mode.
+ * Bus-wide: e-stop, error counters and thresholds, last successful read, mode-switch flag.
  */
 class DynamixelDiagnostics
 {
@@ -69,10 +72,10 @@ public:
   /// hooks or service handlers, not from `read()`/`write()`.
   void publishManifest(const rclcpp::Time& stamp);
 
-  /// @brief Start the 5 Hz health timer. Idempotent.
+  /// @brief Start the 1 Hz diagnostics publish timer. Idempotent.
   void startHealthTimer();
 
-  /// @brief Stop the health timer. Idempotent.
+  /// @brief Stop the diagnostics publish timer. Idempotent.
   void stopHealthTimer();
 
   /// @brief Record a snapshot of runtime state. Safe to call from `read()`; uses try_lock.
@@ -99,7 +102,7 @@ private:
   std::atomic<bool> snapshot_valid_{false};
 
   rclcpp::TimerBase::SharedPtr health_timer_;
-  static constexpr std::chrono::milliseconds HEALTH_PERIOD{200};  // 5 Hz
+  static constexpr std::chrono::milliseconds HEALTH_PERIOD{1000};  // 1 Hz, matches the diagnostics convention
 };
 
 }  // namespace dynamixel_ros_control

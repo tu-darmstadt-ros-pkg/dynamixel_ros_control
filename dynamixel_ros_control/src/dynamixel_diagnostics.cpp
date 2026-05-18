@@ -67,8 +67,11 @@ DynamixelDiagnostics::DynamixelDiagnostics(rclcpp::Node::SharedPtr node, std::st
 {
   rt_manifest_pub_ = std::make_shared<realtime_tools::RealtimePublisher<DiagnosticArray>>(
       node_->create_publisher<DiagnosticArray>("~/manifest", rclcpp::QoS(1).transient_local()));
+  // `~/diagnostics` (volatile, 1 Hz) is the conventional diagnostic topic name. We keep the
+  // private namespace so multi-robot deployments (each robot in its own namespace) don't
+  // collide on a single global /diagnostics topic; a per-robot aggregator can still pick it up.
   rt_health_pub_ = std::make_shared<realtime_tools::RealtimePublisher<DiagnosticArray>>(
-      node_->create_publisher<DiagnosticArray>("~/health", rclcpp::QoS(10)));
+      node_->create_publisher<DiagnosticArray>("~/diagnostics", rclcpp::QoS(10)));
 }
 
 void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)

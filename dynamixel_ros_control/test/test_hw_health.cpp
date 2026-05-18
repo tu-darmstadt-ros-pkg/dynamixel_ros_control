@@ -39,23 +39,23 @@ TEST_F(HardwareInterfaceTest, Health_PublishedPeriodically)
 {
   std::vector<diagnostic_msgs::msg::DiagnosticArray::SharedPtr> messages;
   auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface/health", rclcpp::QoS(10),
+      "/athena_arm_interface/diagnostics", rclcpp::QoS(10),
       [&messages](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { messages.push_back(m); });
 
-  // Expect ≥3 messages within ~1 second at 5 Hz nominal rate.
-  auto deadline = std::chrono::steady_clock::now() + 2s;
+  // 1 Hz nominal rate. Wait up to 4 s for ≥3 messages, leaving margin for startup delay.
+  auto deadline = std::chrono::steady_clock::now() + 4s;
   while (messages.size() < 3 && std::chrono::steady_clock::now() < deadline) {
     executor_->spin_some();
     std::this_thread::sleep_for(50ms);
   }
-  EXPECT_GE(messages.size(), 3u) << "Health publisher should produce ≥3 messages within 2s at 5 Hz";
+  EXPECT_GE(messages.size(), 3u) << "Diagnostics publisher should produce ≥3 messages within 4 s at 1 Hz";
 }
 
 TEST_F(HardwareInterfaceTest, Health_ContainsExpectedFields)
 {
   diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg;
   auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface/health", rclcpp::QoS(10),
+      "/athena_arm_interface/diagnostics", rclcpp::QoS(10),
       [&msg](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { msg = m; });
 
   auto deadline = std::chrono::steady_clock::now() + 5s;
@@ -91,7 +91,7 @@ TEST_F(HardwareInterfaceTest, Health_ReflectsEStopState)
 {
   diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg;
   auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface/health", rclcpp::QoS(10),
+      "/athena_arm_interface/diagnostics", rclcpp::QoS(10),
       [&msg](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { msg = m; });
 
   auto deadline = std::chrono::steady_clock::now() + 5s;
@@ -138,7 +138,7 @@ TEST_F(HardwareInterfaceTest, Health_ReflectsTorqueState)
 {
   diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg;
   auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface/health", rclcpp::QoS(10),
+      "/athena_arm_interface/diagnostics", rclcpp::QoS(10),
       [&msg](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { msg = m; });
 
   auto deadline = std::chrono::steady_clock::now() + 5s;
