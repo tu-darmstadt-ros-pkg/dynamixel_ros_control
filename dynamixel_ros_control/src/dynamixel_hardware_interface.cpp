@@ -215,7 +215,11 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
   // setup controller orchestrator
   controller_orchestrator_ = std::make_shared<controller_orchestrator::ControllerOrchestrator>(node_);
 
+  // Joint state publishers (~/goal_joint_states + optional read/write) and diagnostics
+  // (~/manifest one-shot + ~/diagnostics 1 Hz) are both opt-in observability
   joint_state_publishers_.init(node_, info_.hardware_parameters, joint_names_);
+  diagnostics_ = std::make_unique<DynamixelDiagnostics>(node_, get_name(), joints_, joint_names_, driver_,
+                                                        read_manager_, control_write_manager_);
 
   // set up e-stop subscription
   std::string topic = ns != "/" ? ns + "/soft_e_stop" : "/soft_e_stop";
@@ -296,6 +300,10 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
 
   updateColorLED(hardware_interface::lifecycle_state_names::INACTIVE);
 
+  // Manifest reflects live EEPROM state — publish after motors are connected and the control
+  // tables are loaded.
+  diagnostics_->publishManifest(node_->now());
+
   return CallbackReturn::SUCCESS;
 }
 
@@ -325,12 +333,6 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_cleanup from " << previous_state.label());
-  if (exe_) {
-    exe_->cancel();
-  }
-  if (exe_thread_.joinable()) {
-    exe_thread_.join();
-  }
   return CallbackReturn::SUCCESS;
 }
 
@@ -353,6 +355,7 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
     return CallbackReturn::ERROR;
   }
   updateColorLED(hardware_interface::lifecycle_state_names::ACTIVE);
+  diagnostics_->startHealthTimer();
   return CallbackReturn::SUCCESS;
 }
 
@@ -360,6 +363,7 @@ hardware_interface::CallbackReturn
 DynamixelHardwareInterface::on_deactivate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_deactivate from " << previous_state.label());
+  diagnostics_->stopHealthTimer();
   if (!setTorque(!torque_off_on_shutdown_, {}, true)) {
     DXL_LOG_ERROR("Failed to set torque on deactivation to " << (torque_off_on_shutdown_ ? "ON" : "OFF"));
     return CallbackReturn::ERROR;
@@ -605,6 +609,16 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     DXL_LOG_WARN("Read failed, consecutive errors: " << read_manager_.getErrorCount());
   }
 
+  if (read_ok_this_cycle) {
+    last_successful_read_time_ = time;
+  }
+
+  // Record the snapshot *before* the error early-returns below, otherwise the diagnostics
+  // topic would keep replaying the last healthy snapshot exactly when a fault appears
+  // (sync-read updates hardware_error_status as part of read_manager_.read()).
+  diagnostics_->snapshotHealth(time, e_stop_active_.load(), desired_torque_state_.load(), mode_switch_failed_,
+                               last_successful_read_time_);
+
   // Only return error after exceeding the consecutive error threshold
   if (!read_manager_.isOk()) {
     DXL_LOG_ERROR("Read manager lost connection after " << read_manager_.getErrorCount() << " consecutive errors");
@@ -635,7 +649,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   }
 
   first_read_successful_ = true;
-  last_successful_read_time_ = time;
+
   return hardware_interface::return_type::OK;
 }
 
@@ -938,14 +952,24 @@ bool DynamixelHardwareInterface::reboot()
   }
 
   // Restore desired torque state after reboot (motors default to torque off after reboot)
-  DXL_LOG_INFO("Restoring torque state to " << (desired_torque_state_ ? "ON" : "OFF") << " after reboot.");
-  if (!setTorque(desired_torque_state_, {}, true)) {
+  const bool desired_torque = desired_torque_state_.load();
+  DXL_LOG_INFO("Restoring torque state to " << (desired_torque ? "ON" : "OFF") << " after reboot.");
+  if (!setTorque(desired_torque, {}, true)) {
     DXL_LOG_ERROR("Failed to restore torque state after reboot.");
     return false;
   }
 
   // Ensure LEDs reflect the current state
   updateColorLED();
+
+  // Reboot may have changed EEPROM state (e.g. drive_mode written via writeInitialValues).
+  // Re-publish the manifest so subscribers see the post-reboot snapshot. publishManifest()
+  // issues per-joint register reads on the shared bus; hold the comm mutex to keep it from
+  // racing with read()/write(), which now resume between the reboot work above and here.
+  {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    diagnostics_->publishManifest(node_->now());
+  }
 
   return true;
 }

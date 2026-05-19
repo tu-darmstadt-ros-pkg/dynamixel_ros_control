@@ -17,6 +17,7 @@ _dynamixel_ros_control_ is a [ROS2](https://www.ros.org/) driver for [Robotis Dy
 * Software E-Stop with automatic position hold
 * Hardware error detection with per-motor LED indication
 * Reboot service for error recovery
+* Diagnostics topics (`~/manifest` for static motor info, `~/diagnostics` at 1 Hz for runtime state)
 
 ## Installation
 
@@ -229,6 +230,27 @@ The reboot service:
 * Verifies the hardware error is cleared
 * Releases the E-Stop if successful
 * Restores the previous torque state
+
+### Diagnostics
+
+The hardware interface publishes two `diagnostic_msgs/DiagnosticArray` topics:
+
+* `<hardware_interface>/manifest`: transient_local QoS, published once on `on_configure` and after a successful reboot. Carries static per-motor info read live from EEPROM: model number, firmware version, current `operating_mode` / `drive_mode`, configured limits, declared interfaces.
+* `<hardware_interface>/diagnostics`: 1 Hz, runtime state. Bus-level: e-stop, error counters, last successful read. Per joint: `torque_desired`, decoded `hardware_error_status`, `operating_mode_desired`. Compatible with `rqt_robot_monitor` and `diagnostic_aggregator`.
+
+Note that `operating_mode_desired` (and `torque_desired`) on the diagnostics topic reflects the driver's cached intent; the manifest's `operating_mode` is a live hardware readback.
+
+### Joint State Publishers
+
+Optional `sensor_msgs/JointState` topics, off by default. Enable per hardware interface via URDF hardware parameters:
+
+| Parameter | Topic | Content |
+|---|---|---|
+| `publish_goal_joint_states` | `<hardware_interface>/goal_joint_states` | Joint-space goal (controller intent, pre-transmission) |
+| `publish_read_joint_states` | `<hardware_interface>/read_joint_states` | Actuator-space state (pre state-transmission) |
+| `publish_write_joint_states` | `<hardware_interface>/write_joint_states` | Actuator-space goal (post command-transmission, only published on a successful bus write) |
+
+Intended for debugging the transmission and goal-vs-state pipeline.
 
 ### Bus Watchdog
 

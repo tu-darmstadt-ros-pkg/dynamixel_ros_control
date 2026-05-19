@@ -20,6 +20,8 @@ find_package(hardware_interface REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(dynamixel_sdk REQUIRED)
 find_package(yaml-cpp REQUIRED)
+find_package(diagnostic_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(std_srvs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
@@ -28,11 +30,12 @@ find_package(hector_transmission_interface REQUIRED)
 find_package(hector_transmission_interface_msgs REQUIRED)
 find_package(controller_orchestrator REQUIRED)
 find_package(realtime_tools REQUIRED)
-find_package(sensor_msgs REQUIRED)
 find_package(dynamixel_ros_control_msgs REQUIRED)
 
 set(HEADERS
     include/${PROJECT_NAME}/common.hpp
+    include/${PROJECT_NAME}/diagnostic_state.hpp
+    include/${PROJECT_NAME}/dynamixel_diagnostics.hpp
     include/${PROJECT_NAME}/joint.hpp
     include/${PROJECT_NAME}/dynamixel.hpp
     include/${PROJECT_NAME}/control_table.hpp
@@ -46,6 +49,8 @@ set(HEADERS
 
 set(SOURCES
     src/common.cpp
+    src/diagnostic_state.cpp
+    src/dynamixel_diagnostics.cpp
     src/joint.cpp
     src/dynamixel.cpp
     src/control_table.cpp
@@ -69,6 +74,8 @@ ament_target_dependencies(
   pluginlib
   dynamixel_sdk
   yaml-cpp
+  diagnostic_msgs
+  sensor_msgs
   std_msgs
   std_srvs
   ament_index_cpp
@@ -77,7 +84,6 @@ ament_target_dependencies(
   hector_transmission_interface_msgs
   controller_orchestrator
   realtime_tools
-  sensor_msgs
   dynamixel_ros_control_msgs)
 
 pluginlib_export_plugin_description_file(hardware_interface
@@ -170,19 +176,33 @@ if(BUILD_TESTING)
   target_link_libraries(test_hw_mimic ${PROJECT_NAME})
   ament_target_dependencies(test_hw_mimic ${HW_TEST_DEPS})
 
+  # Test: Manifest topic (transient_local, published on configure / after
+  # reboot)
+  ament_add_gtest(test_hw_manifest test/test_hw_manifest.cpp)
+  set_tests_properties(test_hw_manifest PROPERTIES TIMEOUT 300)
+  target_link_libraries(test_hw_manifest ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_manifest ${HW_TEST_DEPS})
+
+  # Test: Diagnostics topic (~/diagnostics, 1 Hz timer, runtime state)
+  ament_add_gtest(test_hw_health test/test_hw_health.cpp)
+  set_tests_properties(test_hw_health PROPERTIES TIMEOUT 300)
+  target_link_libraries(test_hw_health ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_health ${HW_TEST_DEPS})
+
   # Test: Bus watchdog configuration
   ament_add_gtest(test_hw_bus_watchdog test/test_hw_bus_watchdog.cpp)
   set_tests_properties(test_hw_bus_watchdog PROPERTIES TIMEOUT 60)
   target_link_libraries(test_hw_bus_watchdog ${PROJECT_NAME})
+  ament_target_dependencies(test_hw_bus_watchdog ${HW_TEST_DEPS})
 
   # Test: Realtime joint-state publishers (read/write/goal topics, transmission
-  # cross-check)
+  # cross-check) — jazzy's test_hw_realtime_publishers supersedes my
+  # test_hw_goal_joint_state (it covers the same ~/goal_joint_states topic).
   ament_add_gtest(test_hw_realtime_publishers
                   test/test_hw_realtime_publishers.cpp)
   set_tests_properties(test_hw_realtime_publishers PROPERTIES TIMEOUT 120)
   target_link_libraries(test_hw_realtime_publishers ${PROJECT_NAME})
   ament_target_dependencies(test_hw_realtime_publishers ${HW_TEST_DEPS})
-  ament_target_dependencies(test_hw_bus_watchdog ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder

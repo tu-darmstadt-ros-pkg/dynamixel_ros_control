@@ -352,4 +352,25 @@ ControlMode stringToControlMode(const std::string& str)
   throw std::invalid_argument("Control Mode '" + str + "' is unknown.");
 }
 
+std::string controlModeToString(const ControlMode mode)
+{
+  switch (mode) {
+    case CURRENT:
+      return "current";
+    case VELOCITY:
+      return "velocity";
+    case POSITION:
+      return "position";
+    case EXTENDED_POSITION:
+      return "extended_position";
+    case CURRENT_BASED_POSITION:
+      return "current_based_position";
+    case PWM:
+      return "pwm";
+    case UNDEFINED:
+      return "undefined";
+  }
+  return "unknown";
+}
+
 }  // namespace dynamixel_ros_control
