@@ -82,7 +82,7 @@ TEST_F(HardwareInterfaceTest, Health_ContainsExpectedFields)
     }
   }
   ASSERT_NE(joint_status, nullptr);
-  for (const auto* key : {"motor_id", "torque_desired", "hardware_error_status", "operating_mode"}) {
+  for (const auto* key : {"motor_id", "torque_desired", "hardware_error_status", "operating_mode_desired"}) {
     EXPECT_NE(findValue(*joint_status, key), nullptr) << "Missing joint key '" << key << "'";
   }
 }

@@ -119,6 +119,8 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
       js.values.push_back(kv("firmware_version", "unknown"));
     }
 
+    // Live readback. Diagnostics publishes operating_mode_desired (cached intent) — disagreement
+    // between the two implies a mode-switch write silently failed.
     if (auto v = readInt(dxl, DXL_REGISTER_CONTROL_MODE)) {
       js.values.push_back(kv("operating_mode", controlModeToString(static_cast<ControlMode>(*v))));
       js.values.push_back(kv("operating_mode_raw", std::to_string(*v)));
@@ -261,7 +263,7 @@ void DynamixelDiagnostics::publishHealth()
     s.values.push_back(kv("torque_desired", js.torque_desired ? "true" : "false"));
     s.values.push_back(kv("hardware_error_status", std::to_string(js.hardware_error_status)));
     s.values.push_back(kv("hardware_error_decoded", hardwareErrorToString(js.hardware_error_status)));
-    s.values.push_back(kv("operating_mode", controlModeToString(js.operating_mode)));
+    s.values.push_back(kv("operating_mode_desired", controlModeToString(js.operating_mode)));
     msg.status.push_back(s);
   }
 

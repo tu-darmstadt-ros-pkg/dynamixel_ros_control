@@ -30,7 +30,7 @@ struct JointHealthSnapshot
                                ///< readback — setTorque() flips this before the bus write, so it
                                ///< reflects intent even if the write later fails or retries.
   int32_t hardware_error_status{0};
-  ControlMode operating_mode{UNDEFINED};
+  ControlMode operating_mode{UNDEFINED};  ///< Software cache (intent), not a hardware readback.
 };
 
 /// @brief Bus-wide diagnostics snapshot. Populated each `read()`, consumed by the 1 Hz timer.
