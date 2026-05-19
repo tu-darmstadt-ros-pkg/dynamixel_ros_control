@@ -58,6 +58,9 @@ constexpr int DXL_BUS_WATCHDOG_MAX_TICKS = 127;
 /// @brief Convert string to ControlMode enum.
 ControlMode stringToControlMode(const std::string& str);
 
+/// @brief Convert ControlMode enum to its canonical string ("position", "extended_position", ...).
+std::string controlModeToString(ControlMode mode);
+
 /**
  * @brief Represents a single Dynamixel motor.
  *

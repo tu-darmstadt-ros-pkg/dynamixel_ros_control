@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <mutex>
 
+#include "dynamixel_diagnostics.hpp"
 #include "joint.hpp"
 #include "joint_state_publisher_set.hpp"
 #include "sync_read_manager.hpp"
@@ -15,6 +16,8 @@
 #include <hector_transmission_interface/adjustable_offset_manager.hpp>
 #include <controller_orchestrator/controller_orchestrator.hpp>
 #include <hector_transmission_interface/adjustable_offset_transmission_loader.hpp>
+#include <realtime_tools/realtime_publisher.hpp>
+#include <sensor_msgs/msg/joint_state.hpp>
 #include <std_msgs/msg/bool.hpp>
 #include <dynamixel_ros_control_msgs/srv/set_torque.hpp>
 #include <std_srvs/srv/trigger.hpp>
@@ -138,10 +141,11 @@ private:
   bool torque_off_on_shutdown_{false};
 
   // Runtime state
-  std::atomic<bool> is_torqued_{false};     ///< Current torque state of motors.
-  bool desired_torque_state_{false};        ///< User's desired torque state (restored after reboot).
-  std::atomic<bool> e_stop_active_{false};  ///< True if software E-Stop is engaged.
-  bool mode_switch_failed_{false};          ///< True if control mode switch failed.
+  std::atomic<bool> is_torqued_{false};            ///< Current torque state of motors.
+  std::atomic<bool> desired_torque_state_{false};  ///< User's desired torque state (restored after reboot).
+                                                   ///< Written by SetTorque service, read by read() (snapshotHealth).
+  std::atomic<bool> e_stop_active_{false};         ///< True if software E-Stop is engaged.
+  bool mode_switch_failed_{false};                 ///< True if control mode switch failed.
 
   constexpr static int max_reset_and_verify_retries_ = 5;  ///< Max retries for resetting goal state and verifying.
 
@@ -150,6 +154,11 @@ private:
   rclcpp::Service<dynamixel_ros_control_msgs::srv::SetTorque>::SharedPtr set_torque_service_;
   rclcpp::Service<std_srvs::srv::Trigger>::SharedPtr reboot_service_;
   rclcpp::Subscription<std_msgs::msg::Bool>::SharedPtr soft_e_stop_subscription_;
+
+  /// @brief Owns ~/manifest (transient_local, one-shot per configure/reboot) and ~/diagnostics
+  /// (1 Hz timer). Records diagnostics snapshots from read() via try_lock.
+  std::unique_ptr<DynamixelDiagnostics> diagnostics_;
+
   rclcpp::executors::MultiThreadedExecutor::SharedPtr exe_;
   std::thread exe_thread_;
   std::mutex dynamixel_comm_mutex_;  ///< Protects all Dynamixel communication.

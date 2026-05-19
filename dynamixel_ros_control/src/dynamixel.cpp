@@ -22,21 +22,6 @@ bool Dynamixel::connect()
   }
   DXL_LOG_DEBUG("ID " << getIdInt() << ": Loaded control table for model " << getModelNumber());
 
-  // One-shot diagnostic: log firmware + key EEPROM register state at connect time.
-  // Helps diagnose initial-value write failures by capturing the "before" state.
-  int32_t firmware = 0;
-  int32_t drive_mode = 0;
-  int32_t operating_mode = 0;
-  int32_t hw_error = 0;
-  (void) driver_.readRegister(getId(), /*addr*/ 6, /*len*/ 1, firmware);
-  (void) driver_.readRegister(getId(), /*addr*/ 10, /*len*/ 1, drive_mode);
-  (void) driver_.readRegister(getId(), /*addr*/ 11, /*len*/ 1, operating_mode);
-  if (registerAvailable(DXL_REGISTER_HARDWARE_ERROR)) {
-    (void) readRegister(DXL_REGISTER_HARDWARE_ERROR, hw_error);
-  }
-  DXL_LOG_INFO("ID " << getIdInt() << ": model=" << getModelNumber() << ", firmware=v" << firmware << ", drive_mode="
-                     << drive_mode << ", operating_mode=" << operating_mode << ", hw_error=" << hw_error);
-
   writeInitialValues();
   return true;
 }
@@ -399,6 +384,27 @@ ControlMode stringToControlMode(const std::string& str)
     return PWM;
   }
   throw std::invalid_argument("Control Mode '" + str + "' is unknown.");
+}
+
+std::string controlModeToString(const ControlMode mode)
+{
+  switch (mode) {
+    case CURRENT:
+      return "current";
+    case VELOCITY:
+      return "velocity";
+    case POSITION:
+      return "position";
+    case EXTENDED_POSITION:
+      return "extended_position";
+    case CURRENT_BASED_POSITION:
+      return "current_based_position";
+    case PWM:
+      return "pwm";
+    case UNDEFINED:
+      return "undefined";
+  }
+  return "unknown";
 }
 
 }  // namespace dynamixel_ros_control
