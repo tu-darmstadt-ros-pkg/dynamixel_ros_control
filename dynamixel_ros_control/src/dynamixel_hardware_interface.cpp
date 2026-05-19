@@ -333,15 +333,6 @@ DynamixelHardwareInterface::~DynamixelHardwareInterface()
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_cleanup from " << previous_state.label());
-  // Don't reset diagnostics_: it's constructed once in on_init() and stays valid for the
-  // component's lifetime. cleanup → configure transitions reuse the same instance; resetting
-  // here would null-deref on the next on_configure() / read() / reboot() call.
-  if (exe_) {
-    exe_->cancel();
-  }
-  if (exe_thread_.joinable()) {
-    exe_thread_.join();
-  }
   return CallbackReturn::SUCCESS;
 }
 
@@ -618,6 +609,16 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
     DXL_LOG_WARN("Read failed, consecutive errors: " << read_manager_.getErrorCount());
   }
 
+  if (read_ok_this_cycle) {
+    last_successful_read_time_ = time;
+  }
+
+  // Record the snapshot *before* the error early-returns below, otherwise the diagnostics
+  // topic would keep replaying the last healthy snapshot exactly when a fault appears
+  // (sync-read updates hardware_error_status as part of read_manager_.read()).
+  diagnostics_->snapshotHealth(time, e_stop_active_.load(), desired_torque_state_.load(), mode_switch_failed_,
+                               last_successful_read_time_);
+
   // Only return error after exceeding the consecutive error threshold
   if (!read_manager_.isOk()) {
     DXL_LOG_ERROR("Read manager lost connection after " << read_manager_.getErrorCount() << " consecutive errors");
@@ -648,10 +649,6 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   }
 
   first_read_successful_ = true;
-  last_successful_read_time_ = time;
-
-  diagnostics_->snapshotHealth(time, e_stop_active_.load(), desired_torque_state_.load(), mode_switch_failed_,
-                               last_successful_read_time_);
 
   return hardware_interface::return_type::OK;
 }

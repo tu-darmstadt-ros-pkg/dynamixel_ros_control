@@ -82,7 +82,7 @@ TEST_F(HardwareInterfaceTest, Health_ContainsExpectedFields)
     }
   }
   ASSERT_NE(joint_status, nullptr);
-  for (const auto* key : {"motor_id", "torqued", "hardware_error_status", "operating_mode"}) {
+  for (const auto* key : {"motor_id", "torque_desired", "hardware_error_status", "operating_mode"}) {
     EXPECT_NE(findValue(*joint_status, key), nullptr) << "Missing joint key '" << key << "'";
   }
 }
@@ -148,11 +148,11 @@ TEST_F(HardwareInterfaceTest, Health_ReflectsTorqueState)
   }
   ASSERT_NE(msg, nullptr);
 
-  // Initially torque ON (set on_activate). Find any arm joint and inspect `torqued`.
+  // Initially torque ON (set on_activate). Find any arm joint and inspect `torque_desired`.
   auto torque_value_for = [&](const diagnostic_msgs::msg::DiagnosticArray& m, const std::string& joint) -> std::string {
     for (const auto& s : m.status) {
       if (s.name.find(joint) != std::string::npos) {
-        if (const auto* v = findValue(s, "torqued"))
+        if (const auto* v = findValue(s, "torque_desired"))
           return v->value;
       }
     }

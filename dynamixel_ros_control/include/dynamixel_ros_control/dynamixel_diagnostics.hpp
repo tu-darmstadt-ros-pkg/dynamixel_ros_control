@@ -26,7 +26,9 @@ struct JointHealthSnapshot
 {
   std::string joint_name;
   uint8_t motor_id{0};
-  bool torqued{false};
+  bool torque_desired{false};  ///< User-requested torque state (joint.torque). NOT a hardware
+                               ///< readback — setTorque() flips this before the bus write, so it
+                               ///< reflects intent even if the write later fails or retries.
   int32_t hardware_error_status{0};
   ControlMode operating_mode{UNDEFINED};
 };

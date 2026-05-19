@@ -186,7 +186,7 @@ void DynamixelDiagnostics::snapshotHealth(const rclcpp::Time& stamp, bool e_stop
     const auto& joint = joints_.at(joint_names_[i]);
     auto& js = snapshot_.joints[i];
     js.motor_id = joint.dynamixel->getId();
-    js.torqued = joint.torque;
+    js.torque_desired = joint.torque;
     js.hardware_error_status = joint.dynamixel->hardware_error_status;
     js.operating_mode = joint.getControlMode();
   }
@@ -212,12 +212,21 @@ void DynamixelDiagnostics::publishHealth()
   msg.header.stamp = snap.stamp;
   msg.status.clear();
 
+  // Bus level is the max severity of: bus signals (e-stop, mode-switch fail, error counters)
+  // and any per-joint hardware fault. Otherwise the rollup row can read OK while individual
+  // joints are publishing ERROR — misleading any consumer that doesn't iterate joint statuses.
   uint8_t bus_level = DiagnosticStatus::OK;
   if (snap.read_consecutive_errors >= DEFAULT_ERROR_THRESHOLD ||
-      snap.write_consecutive_errors >= DEFAULT_ERROR_THRESHOLD) {
+      snap.write_consecutive_errors >= DEFAULT_ERROR_THRESHOLD || snap.mode_switch_failed) {
     bus_level = DiagnosticStatus::ERROR;
   } else if (snap.e_stop_active || snap.read_consecutive_errors > 0 || snap.write_consecutive_errors > 0) {
     bus_level = DiagnosticStatus::WARN;
+  }
+  for (const auto& js : snap.joints) {
+    if (js.hardware_error_status != 0) {
+      bus_level = DiagnosticStatus::ERROR;
+      break;
+    }
   }
 
   DiagnosticStatus bus;
@@ -249,7 +258,7 @@ void DynamixelDiagnostics::publishHealth()
       s.message = "OK";
     }
     s.values.push_back(kv("motor_id", std::to_string(static_cast<unsigned>(js.motor_id))));
-    s.values.push_back(kv("torqued", js.torqued ? "true" : "false"));
+    s.values.push_back(kv("torque_desired", js.torque_desired ? "true" : "false"));
     s.values.push_back(kv("hardware_error_status", std::to_string(js.hardware_error_status)));
     s.values.push_back(kv("hardware_error_decoded", hardwareErrorToString(js.hardware_error_status)));
     s.values.push_back(kv("operating_mode", controlModeToString(js.operating_mode)));
