@@ -21,8 +21,8 @@ TEST_F(HardwareInterfaceTest, Torque_DisableTorqueChangesLEDToGreen)
   }
 
   // 2. Call set_torque service to disable torque
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -62,8 +62,8 @@ TEST_F(HardwareInterfaceTest, Torque_DisableTorqueChangesLEDToGreen)
 TEST_F(HardwareInterfaceTest, Torque_EnableTorqueChangesLEDToBlue)
 {
   // 1. First disable torque
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -115,8 +115,8 @@ TEST_F(HardwareInterfaceTest, Torque_EnableTorqueChangesLEDToBlue)
 TEST_F(HardwareInterfaceTest, Torque_CommandsNotExecutedWhenTorqueOff)
 {
   // 1. Disable torque
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -224,8 +224,8 @@ TEST_F(HardwareInterfaceTest, Torque_GoalPositionUpdatedBeforeReEnable)
   }
 
   // 2. Disable torque (this also deactivates the controller)
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -299,8 +299,8 @@ TEST_F(HardwareInterfaceTest, Torque_GoalVelocityZeroBeforeReEnable)
   }
 
   // 2. Disable torque (this also deactivates the controller)
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -359,8 +359,8 @@ TEST_F(HardwareInterfaceTest, Torque_DeactivatesControllersOnDisable)
   ASSERT_TRUE(waitForControllerState("arm_position_controller", "active", 5s));
 
   // 2. Disable torque
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();

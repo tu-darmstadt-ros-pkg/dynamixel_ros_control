@@ -121,7 +121,7 @@ TEST_F(HardwareInterfaceTest, HardwareError_RebootServiceClearsErrorAndReleasesE
   EXPECT_NE(motor1->getHardwareError(), 0) << "Motor 1 should have hardware error set";
 
   // 3. Call reboot service
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
 
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
@@ -277,7 +277,7 @@ TEST_F(HardwareInterfaceTest, HardwareError_RebootOnlyAffectedMotors)
   std::this_thread::sleep_for(1s);
 
   // 3. Call reboot service
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();

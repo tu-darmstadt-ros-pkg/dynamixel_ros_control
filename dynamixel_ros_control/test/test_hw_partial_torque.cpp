@@ -122,7 +122,7 @@ TEST_F(HardwareInterfaceTest, GoalStatePublisher_PublishesOnTopic)
   // Verify that the goal_joint_states topic is published when publish_goal_joint_states is enabled.
   sensor_msgs::msg::JointState::SharedPtr received_msg;
   auto sub = tester_node_->create_subscription<sensor_msgs::msg::JointState>(
-      "/athena_arm_interface/goal_joint_states", rclcpp::SystemDefaultsQoS(),
+      "/athena_arm_interface_node/goal_joint_states", rclcpp::SystemDefaultsQoS(),
       [&received_msg](const sensor_msgs::msg::JointState::SharedPtr msg) { received_msg = msg; });
 
   // Wait for a message
@@ -145,7 +145,7 @@ TEST_F(HardwareInterfaceTest, GoalStatePublisher_ReflectsCommandedGoals)
   sensor_msgs::msg::JointState::SharedPtr received_msg;
   std::mutex msg_mutex;
   auto sub = tester_node_->create_subscription<sensor_msgs::msg::JointState>(
-      "/athena_arm_interface/goal_joint_states", rclcpp::SystemDefaultsQoS(),
+      "/athena_arm_interface_node/goal_joint_states", rclcpp::SystemDefaultsQoS(),
       [&received_msg, &msg_mutex](const sensor_msgs::msg::JointState::SharedPtr msg) {
         std::lock_guard<std::mutex> lock(msg_mutex);
         received_msg = msg;

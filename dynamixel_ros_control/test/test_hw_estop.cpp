@@ -422,8 +422,8 @@ TEST_F(HardwareInterfaceTest, EStop_CannotActivateWhenTorqueOff)
   // Test that e-stop cannot be activated when torque is off
 
   // 1. Disable torque first
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();

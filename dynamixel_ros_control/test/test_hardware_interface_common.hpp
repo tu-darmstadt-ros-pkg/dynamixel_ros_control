@@ -413,7 +413,7 @@ protected:
   createTorqueClient(const std::string& interface_name = "athena_arm_interface")
   {
     auto client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/" + interface_name +
-                                                                                               "/set_torque");
+                                                                                               "_node/set_torque");
     EXPECT_TRUE(client->wait_for_service(*executor_, 5s)) << "Torque service not available";
     return client;
   }

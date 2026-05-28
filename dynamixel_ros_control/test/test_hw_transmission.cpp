@@ -158,7 +158,7 @@ TEST_F(HardwareInterfaceTest, TransmissionOffset_AdjustFlipperOffset)
 
   // 3. Call adjust_transmission_offsets service
   auto offset_client =
-      tester_node_->create_test_client<AdjustOffsets>("/athena_flipper_interface/adjust_transmission_offsets");
+      tester_node_->create_test_client<AdjustOffsets>("/athena_flipper_interface_node/adjust_transmission_offsets");
   ASSERT_TRUE(offset_client->wait_for_service(*executor_, 5s)) << "adjust_transmission_offsets service not available";
 
   auto request = std::make_shared<AdjustOffsets::Request>();
@@ -234,7 +234,7 @@ TEST_F(HardwareInterfaceTest, TransmissionOffset_JointPositionMatchesExternalMea
 
   // 3. Call adjust_transmission_offsets service with specific external measurements
   auto offset_client =
-      tester_node_->create_test_client<AdjustOffsets>("/athena_flipper_interface/adjust_transmission_offsets");
+      tester_node_->create_test_client<AdjustOffsets>("/athena_flipper_interface_node/adjust_transmission_offsets");
   ASSERT_TRUE(offset_client->wait_for_service(*executor_, 5s)) << "adjust_transmission_offsets service not available";
 
   auto request = std::make_shared<AdjustOffsets::Request>();
@@ -324,7 +324,7 @@ TEST_F(HardwareInterfaceTest, TransmissionOffset_ResetToZero)
 
   // 2. Set some non-zero offset first
   auto offset_client =
-      tester_node_->create_test_client<AdjustOffsets>("/athena_flipper_interface/adjust_transmission_offsets");
+      tester_node_->create_test_client<AdjustOffsets>("/athena_flipper_interface_node/adjust_transmission_offsets");
   ASSERT_TRUE(offset_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<AdjustOffsets::Request>();
