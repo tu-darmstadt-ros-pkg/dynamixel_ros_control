@@ -140,6 +140,7 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
     add_int_if("max_position_limit");
     add_int_if("return_delay_time");
     add_int_if("bus_watchdog");
+    add_int_if("homing_offset");
 
     js.values.push_back(kv("command_interfaces", join(joint.getAvailableCommandInterfaces())));
     js.values.push_back(kv("state_interfaces", join(joint.getAvailableStateInterfaces())));
