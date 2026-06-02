@@ -137,14 +137,21 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
     };
 
     // Limit / config registers.
-    constexpr std::array<const char*, 6> kLimitRegisters{"current_limit",      "velocity_limit",
-                                                         "min_position_limit", "max_position_limit",
-                                                         "return_delay_time",  "bus_watchdog"};
+    constexpr std::array<const char*, 7> kLimitRegisters{"current_limit",      "velocity_limit",
+                                                         "acceleration_limit", "min_position_limit",
+                                                         "max_position_limit", "return_delay_time",
+                                                         "bus_watchdog"};
     for (const char* reg : kLimitRegisters) {
       add_int_if(reg);
     }
 
     add_int_if("homing_offset");
+
+    // Motion profile setpoints (RAM, written at runtime by trajectory controllers).
+    constexpr std::array<const char*, 2> kProfileRegisters{"profile_acceleration", "profile_velocity"};
+    for (const char* reg : kProfileRegisters) {
+      add_int_if(reg);
+    }
 
     // Control gains. Older models (PROExt, RH, H42-20-S300-R) expose only a
     // subset; add_int_if() silently skips registers a model does not declare.
