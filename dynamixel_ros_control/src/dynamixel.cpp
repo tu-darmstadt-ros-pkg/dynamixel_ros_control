@@ -287,9 +287,20 @@ void Dynamixel::indirectIndexToAddresses(const unsigned int indirect_address_ind
 
 bool Dynamixel::writeInitialValues()
 {
+  // EEPROM writes are silently rejected by Dynamixel firmware while torque_enable is on
+  // (the bus returns RxPacketError "Writing not available at this address").
+  if (!writeRegister(DXL_REGISTER_CMD_TORQUE, false)) {
+    DXL_LOG_WARN("Failed to disable torque before writing initial values for ID "
+                 << static_cast<int>(getId()) << ". EEPROM writes may be silently rejected.");
+  }
+
   bool success = true;
   for (const auto& [register_name, register_value] : initial_values_) {
-    success &= writeRegister(register_name, register_value);
+    if (!writeRegister(register_name, register_value)) {
+      DXL_LOG_ERROR("Failed to write initial value '" << register_value << "' to register '" << register_name
+                                                      << "' on ID " << static_cast<int>(getId()) << ".");
+      success = false;
+    }
   }
   return success;
 }
