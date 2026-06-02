@@ -3,6 +3,7 @@
 #include "dynamixel_ros_control/diagnostic_state.hpp"
 #include "dynamixel_ros_control/log.hpp"
 
+#include <array>
 #include <optional>
 #include <utility>
 
@@ -134,13 +135,26 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
         js.values.push_back(kv(reg, std::to_string(*v)));
       }
     };
-    add_int_if("current_limit");
-    add_int_if("velocity_limit");
-    add_int_if("min_position_limit");
-    add_int_if("max_position_limit");
-    add_int_if("return_delay_time");
-    add_int_if("bus_watchdog");
+
+    // Limit / config registers.
+    constexpr std::array<const char*, 6> kLimitRegisters{"current_limit",      "velocity_limit",
+                                                         "min_position_limit", "max_position_limit",
+                                                         "return_delay_time",  "bus_watchdog"};
+    for (const char* reg : kLimitRegisters) {
+      add_int_if(reg);
+    }
+
     add_int_if("homing_offset");
+
+    // Control gains. Older models (PROExt, RH, H42-20-S300-R) expose only a
+    // subset; add_int_if() silently skips registers a model does not declare.
+    constexpr std::array<const char*, 7> kControlGainRegisters{"velocity_i_gain",     "velocity_p_gain",
+                                                               "position_d_gain",     "position_i_gain",
+                                                               "position_p_gain",     "feedforward_2nd_gain",
+                                                               "feedforward_1st_gain"};
+    for (const char* reg : kControlGainRegisters) {
+      add_int_if(reg);
+    }
 
     js.values.push_back(kv("command_interfaces", join(joint.getAvailableCommandInterfaces())));
     js.values.push_back(kv("state_interfaces", join(joint.getAvailableStateInterfaces())));
