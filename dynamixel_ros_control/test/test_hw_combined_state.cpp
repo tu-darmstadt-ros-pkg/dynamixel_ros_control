@@ -17,8 +17,8 @@ TEST_F(HardwareInterfaceTest, CombinedState_EStopWhileTorqueOff)
   // (torque off is already a safe state)
 
   // 1. Disable torque first
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -105,8 +105,8 @@ TEST_F(HardwareInterfaceTest, CombinedState_TorqueOffWhileEStopActive)
   EXPECT_EQ(motor->getLedRed(), COLOR_ORANGE_R) << "LED should be orange during E-Stop";
 
   // 2. Disable torque while E-Stop is active
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -180,7 +180,7 @@ TEST_F(HardwareInterfaceTest, CombinedState_CalibrationWhileEStopActive)
   // 3. Attempt calibration service call (should complete but E-Stop prevents movement)
   auto calibration_client =
       tester_node_->create_test_client<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>(
-          "/athena_flipper_interface/adjust_transmission_offsets");
+          "/athena_flipper_interface_node/adjust_transmission_offsets");
   // Service may or may not be available during E-Stop - just ensure no dangerous movement
   bool service_available = calibration_client->wait_for_service(*executor_, 2s);
 
@@ -225,7 +225,7 @@ TEST_F(HardwareInterfaceTest, CombinedState_CalibrationWhileTorqueOff)
 
   // 2. Disable torque (flipper interface service)
   auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_flipper_interface/set_torque");
+      "/athena_flipper_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -252,7 +252,7 @@ TEST_F(HardwareInterfaceTest, CombinedState_CalibrationWhileTorqueOff)
   // 3. Attempt calibration service call
   auto calibration_client =
       tester_node_->create_test_client<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets>(
-          "/athena_flipper_interface/adjust_transmission_offsets");
+          "/athena_flipper_interface_node/adjust_transmission_offsets");
   ASSERT_TRUE(calibration_client->wait_for_service(*executor_, 5s));
 
   auto cal_request = std::make_shared<hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets::Request>();
@@ -331,8 +331,8 @@ TEST_F(HardwareInterfaceTest, CombinedState_NoSuddenMovementOnAnyStateTransition
   std::this_thread::sleep_for(300ms);
   record_positions();
 
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto estop_pub = tester_node_->create_publisher<std_msgs::msg::Bool>("/soft_e_stop", 10);

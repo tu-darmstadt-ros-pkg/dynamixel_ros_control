@@ -223,7 +223,7 @@ TEST_F(HardwareInterfaceTest, RebootService_ResetsMotors)
   // This is used to recover motors from error states
 
   // 1. Create reboot service client
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
 
   // 2. Record initial motor states
@@ -264,7 +264,7 @@ TEST_F(HardwareInterfaceTest, RebootService_OnlyRebootsFaultyMotors)
   // Test that reboot is only called for motors with hardware errors, not healthy ones
 
   // 1. Create reboot service client
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
 
   // 2. Reset reboot counters for all motors
@@ -326,7 +326,7 @@ TEST_F(HardwareInterfaceTest, RebootService_RestoresTorqueOnAndBlueLED)
   // the HW interface remains in inactive state, so LEDs will be pink.
 
   // 1. Setup: torque is ON by default (torque_on_startup: true)
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
 
   // 2. Verify torque is initially on
@@ -387,9 +387,9 @@ TEST_F(HardwareInterfaceTest, RebootService_RestoresTorqueOffAndGreenLED)
   // the HW interface remains in inactive state, so LEDs will be pink.
 
   // 1. Setup clients
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s)) << "Torque service not available";
 
@@ -457,7 +457,7 @@ TEST_F(HardwareInterfaceTest, RebootService_NoRebootWhenNoErrors)
   // Test that when no motors have hardware errors, no reboots occur but LEDs are still updated
 
   // 1. Create reboot service client
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
 
   // 2. Reset reboot counters for all motors (no hardware errors set)

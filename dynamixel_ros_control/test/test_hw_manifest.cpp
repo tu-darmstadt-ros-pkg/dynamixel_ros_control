@@ -30,7 +30,7 @@ TEST_F(HardwareInterfaceTest, Manifest_PublishedOnConfigure)
 {
   diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg;
   auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface/manifest", rclcpp::QoS(1).transient_local(),
+      "/athena_arm_interface_node/manifest", rclcpp::QoS(1).transient_local(),
       [&msg](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { msg = m; });
 
   auto deadline = std::chrono::steady_clock::now() + 10s;
@@ -49,7 +49,7 @@ TEST_F(HardwareInterfaceTest, Manifest_ContainsExpectedJointFields)
 {
   diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg;
   auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface/manifest", rclcpp::QoS(1).transient_local(),
+      "/athena_arm_interface_node/manifest", rclcpp::QoS(1).transient_local(),
       [&msg](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { msg = m; });
 
   auto deadline = std::chrono::steady_clock::now() + 10s;
@@ -81,7 +81,7 @@ TEST_F(HardwareInterfaceTest, Manifest_RepublishedAfterReboot)
   // Latch the first manifest with transient_local QoS.
   std::vector<diagnostic_msgs::msg::DiagnosticArray::SharedPtr> messages;
   auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface/manifest", rclcpp::QoS(1).transient_local(),
+      "/athena_arm_interface_node/manifest", rclcpp::QoS(1).transient_local(),
       [&messages](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { messages.push_back(m); });
 
   auto deadline = std::chrono::steady_clock::now() + 10s;
@@ -98,7 +98,7 @@ TEST_F(HardwareInterfaceTest, Manifest_RepublishedAfterReboot)
   motor->setHardwareError(dynamixel_ros_control::ERROR_OVERLOAD);
   std::this_thread::sleep_for(500ms);
 
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s));
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
   hector_testing_utils::ServiceCallOptions options;
