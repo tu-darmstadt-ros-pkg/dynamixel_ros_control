@@ -270,8 +270,6 @@ Set `bus_watchdog_cycles` to **0** to disable the bus watchdog entirely (the reg
 </ros2_control>
 ```
 
-The computed timeout is clamped to the register's valid range, so very large or small values are capped automatically. Non-positive values are rejected and fall back to the default.
-
 > **Note:** Not all Dynamixel models support the bus watchdog. The older PRO series (non-A variants such as H42-20-S300-R, H54-200-S500-R) and the original RH-P12-RN do not have this register. The hardware interface automatically skips these models. Supported models include all X-series (XM, XL, XC, XH, XD, XW), MX 2.0 series, P-series (PH, PM), PRO+ A-variants (e.g. H42-20-S300-R(A)), and RH-P12-RN(A).
 
 ### Mimic Joints
