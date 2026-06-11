@@ -258,6 +258,8 @@ The hardware interface automatically configures the Dynamixel [Bus Watchdog](htt
 
 The watchdog timeout is set to a multiple of the control loop period (derived from the `<update_rate>` in the URDF `<ros2_control>` tag). The multiple defaults to **4** and can be configured via the `bus_watchdog_cycles` hardware parameter. For example, with an update rate of 50 Hz (20 ms period) and the default of 4 cycles, the watchdog timeout is set to 80 ms. If the motor does not receive any communication within that time, it stops and enters a watchdog error state.
 
+Set `bus_watchdog_cycles` to **0** to disable the bus watchdog entirely (the register is written as `0`, the Dynamixel value that turns the feature off). A negative value is invalid and falls back to the default of 4.
+
 ```xml
 <ros2_control name="..." type="system">
   <hardware>

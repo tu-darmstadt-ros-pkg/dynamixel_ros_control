@@ -123,8 +123,12 @@ protected:
     controllers_yaml_ = std::string(TEST_CONFIG_DIR) + "/controllers.yaml";
     urdf_path_ = std::string(TEST_CONFIG_DIR) + "/athena.urdf";
 
-    const std::string urdf = load_file(urdf_path_);
+    std::string urdf = load_file(urdf_path_);
     ASSERT_FALSE(urdf.empty()) << "Failed to load URDF from " << urdf_path_;
+
+    // Hook allowing subclasses to mutate the URDF (e.g. inject hardware parameters) before the
+    // controller manager is built. Defaults to identity, so existing tests are unaffected.
+    urdf = transformUrdf(std::move(urdf));
 
     // Setup CM options
     auto yaml_options = hector_testing_utils::node_options_from_yaml(controllers_yaml_);
@@ -198,6 +202,13 @@ protected:
     if (!test_home_dir_.empty()) {
       std::filesystem::remove_all(test_home_dir_);
     }
+  }
+
+  // Override point: transform the loaded URDF string before the controller manager is constructed.
+  // The base implementation returns it unchanged.
+  virtual std::string transformUrdf(std::string urdf)
+  {
+    return urdf;
   }
 
   void start_update_loop(bool use_sim_time, int thread_priority)
