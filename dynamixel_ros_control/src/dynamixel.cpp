@@ -289,7 +289,11 @@ bool Dynamixel::writeInitialValues()
 {
   bool success = true;
   for (const auto& [register_name, register_value] : initial_values_) {
-    success &= writeRegister(register_name, register_value);
+    if (!writeRegister(register_name, register_value)) {
+      DXL_LOG_ERROR("Failed to write initial value '" << register_value << "' to register '" << register_name
+                                                      << "' on ID " << static_cast<int>(getId()) << ".");
+      success = false;
+    }
   }
   return success;
 }

@@ -235,7 +235,7 @@ The reboot service:
 
 The hardware interface publishes two `diagnostic_msgs/DiagnosticArray` topics:
 
-* `<hardware_interface>/manifest`: transient_local QoS, published once on `on_configure` and after a successful reboot. Carries static per-motor info read live from EEPROM: model number, firmware version, current `operating_mode` / `drive_mode`, configured limits, declared interfaces.
+* `<hardware_interface>/manifest`: transient_local QoS, published once on `on_configure` and after a successful reboot. Carries static per-motor info read live from EEPROM: model number, firmware version, current `operating_mode` / `drive_mode`, configured limits, `homing_offset`, motion-profile setpoints (`profile_velocity` / `profile_acceleration`), control gains, and declared interfaces. Registers a model does not support are omitted.
 * `<hardware_interface>/diagnostics`: 1 Hz, runtime state. Bus-level: e-stop, error counters, last successful read. Per joint: `torque_desired`, decoded `hardware_error_status`, `operating_mode_desired`. Compatible with `rqt_robot_monitor` and `diagnostic_aggregator`.
 
 Note that `operating_mode_desired` (and `torque_desired`) on the diagnostics topic reflects the driver's cached intent; the manifest's `operating_mode` is a live hardware readback.
@@ -256,7 +256,19 @@ Intended for debugging the transmission and goal-vs-state pipeline.
 
 The hardware interface automatically configures the Dynamixel [Bus Watchdog](https://emanual.robotis.com/docs/en/dxl/x/xm430-w350/#bus-watchdog98) during `on_configure`. The bus watchdog is a safety feature that stops the motor if communication is lost, preventing uncontrolled movement.
 
-The watchdog timeout is set to **4x the control loop period** (derived from the `<update_rate>` in the URDF `<ros2_control>` tag). For example, with an update rate of 50 Hz (20 ms period), the watchdog timeout is set to 80 ms. If the motor does not receive any communication within that time, it stops and enters a watchdog error state.
+The watchdog timeout is set to a multiple of the control loop period (derived from the `<update_rate>` in the URDF `<ros2_control>` tag). The multiple defaults to **4** and can be configured via the `bus_watchdog_cycles` hardware parameter. For example, with an update rate of 50 Hz (20 ms period) and the default of 4 cycles, the watchdog timeout is set to 80 ms. If the motor does not receive any communication within that time, it stops and enters a watchdog error state.
+
+Set `bus_watchdog_cycles` to **0** to disable the bus watchdog entirely (the register is written as `0`, the Dynamixel value that turns the feature off). A negative value is invalid and falls back to the default of 4.
+
+```xml
+<ros2_control name="..." type="system">
+  <hardware>
+    <plugin>dynamixel_ros_control/DynamixelHardwareInterface</plugin>
+    <param name="bus_watchdog_cycles">4</param>
+    <!-- ... -->
+  </hardware>
+</ros2_control>
+```
 
 > **Note:** Not all Dynamixel models support the bus watchdog. The older PRO series (non-A variants such as H42-20-S300-R, H54-200-S500-R) and the original RH-P12-RN do not have this register. The hardware interface automatically skips these models. Supported models include all X-series (XM, XL, XC, XH, XD, XW), MX 2.0 series, P-series (PH, PM), PRO+ A-variants (e.g. H42-20-S300-R(A)), and RH-P12-RN(A).
 
