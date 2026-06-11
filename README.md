@@ -235,7 +235,7 @@ The reboot service:
 
 The hardware interface publishes two `diagnostic_msgs/DiagnosticArray` topics:
 
-* `<hardware_interface>/manifest`: transient_local QoS, published once on `on_configure` and after a successful reboot. Carries static per-motor info read live from EEPROM: model number, firmware version, current `operating_mode` / `drive_mode`, configured limits, declared interfaces.
+* `<hardware_interface>/manifest`: transient_local QoS, published once on `on_configure` and after a successful reboot. Carries static per-motor info read live from EEPROM: model number, firmware version, current `operating_mode` / `drive_mode`, configured limits, `homing_offset`, motion-profile setpoints (`profile_velocity` / `profile_acceleration`), control gains, and declared interfaces. Registers a model does not support are omitted.
 * `<hardware_interface>/diagnostics`: 1 Hz, runtime state. Bus-level: e-stop, error counters, last successful read. Per joint: `torque_desired`, decoded `hardware_error_status`, `operating_mode_desired`. Compatible with `rqt_robot_monitor` and `diagnostic_aggregator`.
 
 Note that `operating_mode_desired` (and `torque_desired`) on the diagnostics topic reflects the driver's cached intent; the manifest's `operating_mode` is a live hardware readback.

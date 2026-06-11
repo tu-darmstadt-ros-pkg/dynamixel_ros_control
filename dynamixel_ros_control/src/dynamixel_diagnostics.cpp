@@ -136,30 +136,15 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
       }
     };
 
-    // Limit / config registers.
-    constexpr std::array<const char*, 7> kLimitRegisters{"current_limit",      "velocity_limit",
-                                                         "acceleration_limit", "min_position_limit",
-                                                         "max_position_limit", "return_delay_time",
-                                                         "bus_watchdog"};
-    for (const char* reg : kLimitRegisters) {
-      add_int_if(reg);
-    }
-
-    add_int_if("homing_offset");
-
-    // Motion profile setpoints (RAM, written at runtime by trajectory controllers).
-    constexpr std::array<const char*, 2> kProfileRegisters{"profile_acceleration", "profile_velocity"};
-    for (const char* reg : kProfileRegisters) {
-      add_int_if(reg);
-    }
-
-    // Control gains. Older models (PROExt, RH, H42-20-S300-R) expose only a
-    // subset; add_int_if() silently skips registers a model does not declare.
-    constexpr std::array<const char*, 7> kControlGainRegisters{"velocity_i_gain",     "velocity_p_gain",
-                                                               "position_d_gain",     "position_i_gain",
-                                                               "position_p_gain",     "feedforward_2nd_gain",
-                                                               "feedforward_1st_gain"};
-    for (const char* reg : kControlGainRegisters) {
+    // Limits/config, homing offset, motion-profile setpoints, and control gains. add_int_if() skips
+    // any register a model does not declare (e.g. older PROExt/RH/H42-20-S300-R lack some gains).
+    constexpr std::array kManifestRegisters{"current_limit",        "velocity_limit",      "acceleration_limit",
+                                            "min_position_limit",   "max_position_limit",  "return_delay_time",
+                                            "bus_watchdog",         "homing_offset",       "profile_acceleration",
+                                            "profile_velocity",     "velocity_i_gain",     "velocity_p_gain",
+                                            "position_d_gain",      "position_i_gain",     "position_p_gain",
+                                            "feedforward_2nd_gain", "feedforward_1st_gain"};
+    for (const char* reg : kManifestRegisters) {
       add_int_if(reg);
     }
 
