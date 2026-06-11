@@ -23,27 +23,24 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
   std::mutex mtx;
   sensor_msgs::msg::JointState::SharedPtr last_read, last_write, last_goal;
 
-  auto sub_read =
-      tester_node_->create_subscription<sensor_msgs::msg::JointState>("/athena_flipper_interface/read_joint_states",
-                                                                      rclcpp::SystemDefaultsQoS(),
-                                                                      [&](sensor_msgs::msg::JointState::SharedPtr m) {
-                                                                        std::lock_guard<std::mutex> l(mtx);
-                                                                        last_read = m;
-                                                                      });
-  auto sub_write =
-      tester_node_->create_subscription<sensor_msgs::msg::JointState>("/athena_flipper_interface/write_joint_states",
-                                                                      rclcpp::SystemDefaultsQoS(),
-                                                                      [&](sensor_msgs::msg::JointState::SharedPtr m) {
-                                                                        std::lock_guard<std::mutex> l(mtx);
-                                                                        last_write = m;
-                                                                      });
-  auto sub_goal =
-      tester_node_->create_subscription<sensor_msgs::msg::JointState>("/athena_flipper_interface/goal_joint_states",
-                                                                      rclcpp::SystemDefaultsQoS(),
-                                                                      [&](sensor_msgs::msg::JointState::SharedPtr m) {
-                                                                        std::lock_guard<std::mutex> l(mtx);
-                                                                        last_goal = m;
-                                                                      });
+  auto sub_read = tester_node_->create_subscription<sensor_msgs::msg::JointState>(
+      "/athena_flipper_interface_node/read_joint_states", rclcpp::SystemDefaultsQoS(),
+      [&](sensor_msgs::msg::JointState::SharedPtr m) {
+        std::lock_guard<std::mutex> l(mtx);
+        last_read = m;
+      });
+  auto sub_write = tester_node_->create_subscription<sensor_msgs::msg::JointState>(
+      "/athena_flipper_interface_node/write_joint_states", rclcpp::SystemDefaultsQoS(),
+      [&](sensor_msgs::msg::JointState::SharedPtr m) {
+        std::lock_guard<std::mutex> l(mtx);
+        last_write = m;
+      });
+  auto sub_goal = tester_node_->create_subscription<sensor_msgs::msg::JointState>(
+      "/athena_flipper_interface_node/goal_joint_states", rclcpp::SystemDefaultsQoS(),
+      [&](sensor_msgs::msg::JointState::SharedPtr m) {
+        std::lock_guard<std::mutex> l(mtx);
+        last_goal = m;
+      });
 
   auto cmd_pub =
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_position_controller/commands", 10);

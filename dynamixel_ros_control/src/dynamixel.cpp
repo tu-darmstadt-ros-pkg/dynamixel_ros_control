@@ -318,10 +318,8 @@ bool Dynamixel::writeInitialValues()
       continue;
     }
     if (!writeRegister(register_name, register_value)) {
-      // writeRegister already logged the failure with full context; just record
-      // that this particular initial-value write didn't take.
-      DXL_LOG_DEBUG("Initial value '" << register_value << "' for register '" << register_name << "' on motor ID "
-                                      << getIdInt() << " was not applied (see error above).");
+      DXL_LOG_ERROR("Failed to write initial value '" << register_value << "' to register '" << register_name
+                                                      << "' on ID " << static_cast<int>(getId()) << ".");
       success = false;
     }
   }

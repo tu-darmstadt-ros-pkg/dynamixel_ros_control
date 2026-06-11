@@ -17,9 +17,9 @@
 
 namespace {
 
-// Multiplier applied to the control-loop period to derive the watchdog timeout.
-// Allows a few missed cycles before the watchdog trips.
-constexpr double BUS_WATCHDOG_PERIOD_MULTIPLIER = 4.0;
+// Default number of control cycles without communication before the bus watchdog trips.
+// Used as the fallback when the "bus_watchdog_cycles" hardware parameter is not set.
+constexpr double DEFAULT_BUS_WATCHDOG_CYCLES = 4.0;
 
 std::unordered_map<std::string, std::string> loadInterfaceRegisterTranslationMap(const YAML::Node& node)
 {
@@ -167,10 +167,11 @@ DynamixelHardwareInterface::on_init(const hardware_interface::HardwareComponentI
 
   // create and spinn a ros2 node in a separate thread
   // (making sure it gets a separate name but the same namespace as the controller manager)
+
   auto tmp_node = rclcpp::Node::make_shared("dynamixel_ros_control_node");
   auto ns = std::string(tmp_node->get_namespace());
-  node_ =
-      std::make_shared<rclcpp::Node>(param.hardware_info.name, ns, rclcpp::NodeOptions().use_global_arguments(false));
+  node_ = std::make_shared<rclcpp::Node>(param.hardware_info.name + "_node", ns,
+                                         rclcpp::NodeOptions().use_global_arguments(false));
   exe_ = std::make_shared<rclcpp::executors::MultiThreadedExecutor>();
   exe_->add_node(node_);
   exe_thread_ = std::thread([this] { exe_->spin(); });
@@ -264,7 +265,17 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
 
   // Configure bus watchdog for all motors that support it.
   // The bus watchdog stops the motor if communication is lost for longer than the configured timeout.
-  // Timeout is set to 4x the control loop period to allow for occasional missed cycles.
+  // Timeout is set to a multiple of the control loop period to allow for occasional missed cycles.
+  // The multiple is configurable via the "bus_watchdog_cycles" hardware parameter. A value of 0
+  // disables the watchdog (writes 0 to the register); a negative value is invalid and falls back to
+  // the default.
+  double bus_watchdog_cycles;
+  getParameter(info_.hardware_parameters, "bus_watchdog_cycles", bus_watchdog_cycles, DEFAULT_BUS_WATCHDOG_CYCLES);
+  if (bus_watchdog_cycles < 0.0) {
+    DXL_LOG_WARN("Invalid bus_watchdog_cycles=" << bus_watchdog_cycles << ", falling back to default "
+                                                << DEFAULT_BUS_WATCHDOG_CYCLES);
+    bus_watchdog_cycles = DEFAULT_BUS_WATCHDOG_CYCLES;
+  }
   if (info_.rw_rate > 0) {
     const double dt_ms = 1000.0 / static_cast<double>(info_.rw_rate);
     // Set to a multiple of the cycle time, clamped to the valid register range.
@@ -272,10 +283,13 @@ DynamixelHardwareInterface::on_configure(const rclcpp_lifecycle::State& previous
     for (auto& [name, joint] : joints_) {
       if (joint.dynamixel->registerAvailable(DXL_REGISTER_BUS_WATCHDOG)) {
         const double ms_per_tick = joint.dynamixel->getItem(DXL_REGISTER_BUS_WATCHDOG).dxlValueToUnitRatio();
-        // Compute in ticks using ceil to avoid setting watchdog shorter than intended
+        // cycles == 0 disables the watchdog: write 0 ticks directly, bypassing the [MIN, MAX] clamp.
+        // Otherwise compute in ticks using ceil to avoid setting the watchdog shorter than intended.
         const int watchdog_ticks =
-            std::clamp(static_cast<int>(std::ceil(dt_ms * BUS_WATCHDOG_PERIOD_MULTIPLIER / ms_per_tick)),
-                       DXL_BUS_WATCHDOG_MIN_TICKS, DXL_BUS_WATCHDOG_MAX_TICKS);
+            bus_watchdog_cycles == 0.0 ?
+                0 :
+                std::clamp(static_cast<int>(std::ceil(dt_ms * bus_watchdog_cycles / ms_per_tick)),
+                           DXL_BUS_WATCHDOG_MIN_TICKS, DXL_BUS_WATCHDOG_MAX_TICKS);
         const double watchdog_ms = watchdog_ticks * ms_per_tick;
         // Clear any existing bus watchdog error first
         if (!joint.dynamixel->writeRegister(DXL_REGISTER_BUS_WATCHDOG, 0.0)) {

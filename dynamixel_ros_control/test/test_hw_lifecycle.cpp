@@ -13,8 +13,8 @@ TEST_F(HardwareInterfaceTest, Lifecycle_TorqueServiceAvailableWhenActive)
 {
   // Test that torque service is available and works when hardware interface is active
 
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s)) << "Torque service should be available when active";
 
   // Toggle torque off and on
@@ -44,7 +44,7 @@ TEST_F(HardwareInterfaceTest, Lifecycle_CalibrationServiceAvailableWhenActive)
   using hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets;
 
   auto calibration_client = tester_node_->create_test_client<AdjustTransmissionOffsets>(
-      "/athena_flipper_interface/adjust_transmission_offsets");
+      "/athena_flipper_interface_node/adjust_transmission_offsets");
   ASSERT_TRUE(calibration_client->wait_for_service(*executor_, 5s))
       << "Calibration service should be available when active";
 

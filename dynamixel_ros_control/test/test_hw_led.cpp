@@ -29,8 +29,8 @@ TEST_F(HardwareInterfaceTest, LED_BlueWhenActiveAndTorqueOn)
 TEST_F(HardwareInterfaceTest, LED_GreenWhenTorqueOff)
 {
   // Disable torque and verify LED is green
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
@@ -173,8 +173,8 @@ TEST_F(HardwareInterfaceTest, LED_BluAfterReactivation)
       tester_node_->create_test_client<SetHardwareComponentState>("/controller_manager/set_hardware_component_state");
   ASSERT_TRUE(hw_state_client->wait_for_service(*executor_, 5s));
 
-  auto torque_client =
-      tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>("/athena_arm_interface/set_torque");
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
 
   hector_testing_utils::ServiceCallOptions options;
