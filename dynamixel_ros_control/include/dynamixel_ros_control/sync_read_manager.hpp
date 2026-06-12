@@ -3,7 +3,6 @@
 
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/dynamixel.hpp>
-#include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_ros_control/sdk_wrapper.hpp>
 #include <rclcpp/rclcpp.hpp>
 #include <set>
