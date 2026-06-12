@@ -278,6 +278,18 @@ bool Dynamixel::setIndirectAddress(const unsigned int indirect_address_index, co
   return success;
 }
 
+bool Dynamixel::indirectAddressesInRam() const
+{
+  // Conservative: if any indirect-address block lives in RAM, the motor needs a
+  // post-reboot rewrite. All current models use a single, uniform block.
+  for (const IndirectAddressInfo& info : control_table_->getIndirectAddressInfo()) {
+    if (info.memory_type == RAM) {
+      return true;
+    }
+  }
+  return false;
+}
+
 void Dynamixel::setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values)
 {
   initial_values_ = values;

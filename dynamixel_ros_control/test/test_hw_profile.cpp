@@ -70,7 +70,7 @@ TEST_F(HardwareInterfaceTest, Profile_RegistersRestoredAfterReboot)
   std::this_thread::sleep_for(1s);
 
   // 3. Call reboot service
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
@@ -98,18 +98,17 @@ TEST_F(HardwareInterfaceTest, Profile_RegistersRestoredAfterReboot)
 
 TEST_F(HardwareInterfaceTest, Profile_IndirectMappingsValidAfterReboot)
 {
-  // Regression test for a bug where the post-reboot path in DynamixelHardwareInterface
-  // forgot to re-apply the SyncReadManager / SyncWriteManager indirect address
-  // mappings. A real Dynamixel reboot wipes RAM (including the indirect-address
-  // pointer registers); without re-writing them the very first post-reboot read
-  // resolves through stale mappings, isHardwareOk() returns wrong values, and the
-  // reboot service itself ends up reporting failure.
+  // The arm motors in this fixture are PH-series (model 2020), whose indirect-address
+  // pointer registers live in EEPROM and therefore survive a reboot. The production
+  // reboot path skips rewriteIndirectAddresses for such motors (see
+  // Dynamixel::indirectAddressesInRam), and the mock leaves their pointers intact.
   //
-  // The load-bearing assertion is `resp->success`: with the bug present (verified
-  // by temporarily disabling rewriteIndirectAddresses), the reboot service returns
-  // false with "Hardware still reports errors after reboot." With the fix, the
-  // service succeeds. The pointer-byte check below is a belt-and-braces secondary
-  // assertion that nails down the exact mechanism.
+  // This test verifies the end-to-end result either way: after a reboot the indirect
+  // mappings must still be valid so that the verifying read succeeds. The load-bearing
+  // assertion is `resp->success` — the reboot service handler performs a post-reboot
+  // read through the (preserved) indirect mappings and only returns success if it
+  // resolves correctly. The X-series RAM-wipe-and-rewrite path is covered separately
+  // in test_mock_dynamixel.cpp (IndirectAddressMappingsClearedOnRebootXSeries).
 
   auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
   ASSERT_NE(motor, nullptr);
@@ -126,7 +125,7 @@ TEST_F(HardwareInterfaceTest, Profile_IndirectMappingsValidAfterReboot)
   // verifying read, and only then returns. So `resp->success == true` is itself
   // a strong assertion that the post-reboot read succeeded through valid indirect
   // mappings.
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface/reboot");
+  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s));
 
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
@@ -141,16 +140,17 @@ TEST_F(HardwareInterfaceTest, Profile_IndirectMappingsValidAfterReboot)
                              << "'Hardware still reports errors after reboot.'  Service message: " << resp->message;
 
   // 3. Direct mock-state assertion (no timing dependency): after a successful reboot,
-  // the indirect-address pointer registers must be non-zero. resetRAMRegisters in
-  // the mock clears them; rewriteIndirectAddresses in the production code restores
-  // them. Both happen synchronously inside the reboot service handler, so this
-  // does not race with the update loop.
+  // the indirect-address pointer registers must be non-zero so post-reboot reads
+  // resolve to the intended registers (a zeroed pointer would target address 0 =
+  // model_number). On PH series the pointers are EEPROM-resident and survive the
+  // reboot untouched; the mock preserves them and the production code skips the
+  // rewrite. Either way the mapping must be intact here.
   // Address 168 is indirect_address_1 on PH series (devices/models/PH.yaml).
   constexpr uint16_t INDIRECT_ADDRESS_1 = 168;
   EXPECT_NE(motor->read2Byte(INDIRECT_ADDRESS_1), 0)
-      << "indirect_address_1 must be re-written after reboot; reading 0 means the "
-      << "SyncReadManager mapping was not restored and post-reboot reads target "
-      << "address 0 (model_number) instead of the intended register.";
+      << "indirect_address_1 must be valid after reboot; reading 0 means the indirect "
+      << "mapping was lost and post-reboot reads target address 0 (model_number) "
+      << "instead of the intended register.";
 }
 
 }  // namespace dynamixel_ros_control::test

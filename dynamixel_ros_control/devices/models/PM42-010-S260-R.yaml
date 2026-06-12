@@ -10,8 +10,8 @@ unit_conversions: # dxl value to unit ratio
   ms_20: 20.0
 
 indirect_addresses:
-# address start | data start  | count
-  - 168          | 634         | 128
+# address start | data start  | count | memory
+  - 168          | 634         | 128   | EEPROM
 
 control_table:
 # addr  | item name                | length | access | memory | unit/type

@@ -243,10 +243,12 @@ public:
             else
               parts.push_back("");
           }
-          if (parts.size() >= 3) {
+          if (parts.size() >= 4) {
             indirect_address_start_ = std::stoi(parts[0]);
             indirect_data_start_ = std::stoi(parts[1]);
             indirect_count_ = std::stoi(parts[2]);
+            // Pointer registers in RAM are wiped by a reboot; in EEPROM they survive.
+            indirect_in_ram_ = (parts[3] == "RAM");
           }
         }
       }
@@ -360,18 +362,22 @@ public:
         }
       }
     }
-    // Clear the indirect-address pointer + data regions unconditionally. On X-series
-    // motors these are RAM and a real reboot wipes them; on P-series they're EEPROM
-    // and survive. Wiping them in the mock regardless lets a single test (using any
-    // model) exercise the production-side rewrite path.
     if (indirect_count_ > 0) {
-      const size_t pointer_bytes = static_cast<size_t>(indirect_count_) * 2;
-      for (size_t i = 0; i < pointer_bytes; ++i) {
-        const size_t addr = static_cast<size_t>(indirect_address_start_) + i;
-        if (addr < memory_.size()) {
-          memory_[addr] = 0;
+      // The indirect-address *pointer* registers are wiped only when they live in RAM
+      // (X-series). On P-/PRO-series they live in EEPROM and a real reboot leaves them
+      // intact, so the mock must preserve them too — otherwise the EEPROM-skip path in
+      // production code could never be distinguished from a no-op rewrite.
+      if (indirect_in_ram_) {
+        const size_t pointer_bytes = static_cast<size_t>(indirect_count_) * 2;
+        for (size_t i = 0; i < pointer_bytes; ++i) {
+          const size_t addr = static_cast<size_t>(indirect_address_start_) + i;
+          if (addr < memory_.size()) {
+            memory_[addr] = 0;
+          }
         }
       }
+      // The indirect *data* registers always live in the RAM area, so they are wiped
+      // regardless of where the pointer registers reside.
       for (size_t i = 0; i < indirect_count_; ++i) {
         const size_t addr = static_cast<size_t>(indirect_data_start_) + i;
         if (addr < memory_.size()) {
@@ -812,6 +818,7 @@ private:
   uint16_t indirect_address_start_ = 0;
   uint16_t indirect_data_start_ = 0;
   uint16_t indirect_count_ = 0;
+  bool indirect_in_ram_ = false;  // True if the indirect pointer registers live in RAM (X-series)
 
   // Helper to resolve indirect addresses
   uint16_t resolveAddress(uint16_t address) const

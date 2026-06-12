@@ -948,19 +948,29 @@ bool DynamixelHardwareInterface::reboot()
     // Wait for motors to come back online after reboot.
     get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
 
-    // Reboot wipes RAM. Re-apply indirect address mappings and restore
-    // configured initial register values before the first read. The rewrite
-    // runs unconditionally: on X-series the pointers live in RAM and must
-    // be rewritten; on P-series they live in EEPROM and readWriteRegister
-    // skips the write when the value already matches.
-    if (!read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
-        !cmd_read_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
-        !control_write_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
-        !torque_write_manager_.rewriteIndirectAddresses(rebooted_dxls) ||
-        !led_write_manager_.rewriteIndirectAddresses(rebooted_dxls)) {
-      DXL_LOG_ERROR("Failed to restore indirect address mappings after reboot.");
-      return false;
+    // Reboot wipes RAM. The indirect-address pointer registers only need rewriting
+    // on motors that hold them in RAM (X-series); on P-/PRO-series they live in
+    // EEPROM and survive the reboot, so we skip those to avoid redundant bus traffic.
+    std::set<Dynamixel*> dxls_needing_rewrite;
+    for (Dynamixel* dxl : rebooted_dxls) {
+      if (dxl->indirectAddressesInRam()) {
+        dxls_needing_rewrite.insert(dxl);
+      }
     }
+    if (!dxls_needing_rewrite.empty()) {
+      DXL_LOG_DEBUG("Rewriting indirect address mappings for " << dxls_needing_rewrite.size() << " of "
+                                                               << rebooted_dxls.size()
+                                                               << " rebooted motors (RAM-resident pointers).");
+      if (!read_manager_.rewriteIndirectAddresses(dxls_needing_rewrite) ||
+          !cmd_read_manager_.rewriteIndirectAddresses(dxls_needing_rewrite) ||
+          !control_write_manager_.rewriteIndirectAddresses(dxls_needing_rewrite) ||
+          !torque_write_manager_.rewriteIndirectAddresses(dxls_needing_rewrite) ||
+          !led_write_manager_.rewriteIndirectAddresses(dxls_needing_rewrite)) {
+        DXL_LOG_ERROR("Failed to restore indirect address mappings after reboot.");
+        return false;
+      }
+    }
+    // Restore configured initial register values before the first read.
     for (const auto& name : rebooted_joints) {
       if (!joints_.at(name).dynamixel->writeInitialValues()) {
         DXL_LOG_WARN("Failed to restore initial register values for joint '" << name << "' after reboot.");

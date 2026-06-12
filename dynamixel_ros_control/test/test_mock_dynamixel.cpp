@@ -18,12 +18,21 @@ constexpr uint16_t ADDR_PRESENT_POSITION = 580;
 constexpr uint16_t ADDR_PRESENT_VELOCITY = 576;
 constexpr uint16_t ADDR_HARDWARE_ERROR = 518;
 
-// PH Series Indirect Addresses (from PH.yaml indirect_addresses section)
+// PH Series Indirect Addresses (from PH.yaml indirect_addresses section).
+// On PH the pointer registers live in EEPROM (address 168 < RAM start 512).
 constexpr uint16_t ADDR_INDIRECT_ADDRESS_START = 168;
 constexpr uint16_t ADDR_INDIRECT_DATA_START = 634;
 
+// XM Series Indirect Addresses (from XM.yaml). On XM the pointer registers live in
+// RAM (address 578 >= RAM start 64), so a reboot wipes them.
+constexpr uint16_t ADDR_XM_INDIRECT_ADDRESS_START = 578;
+constexpr uint16_t ADDR_XM_TORQUE_ENABLE = 64;
+
 // Model number for PH series (PH54-200-S500-R)
 constexpr uint16_t MODEL_PH = 2020;
+
+// Model number for XM series (XM430-W350)
+constexpr uint16_t MODEL_XM = 1020;
 
 /**
  * @brief Test fixture that resets the MockDynamixelManager between tests
@@ -428,14 +437,44 @@ TEST_F(MockDynamixelTest, ClearHardwareErrorOnReboot)
   EXPECT_EQ(motor->read1Byte(ADDR_HARDWARE_ERROR), 0);
 }
 
-TEST_F(MockDynamixelTest, IndirectAddressMappingsClearedOnReboot)
+TEST_F(MockDynamixelTest, IndirectAddressMappingsClearedOnRebootXSeries)
 {
-  // On real hardware a reboot wipes all RAM, including the indirect-address pointer
-  // registers. Without this behavior in the mock, tests for the production-side
-  // re-write path would falsely pass.
+  // On X-series motors the indirect-address pointer registers live in RAM, so a real
+  // reboot wipes them. The mock must reproduce this, otherwise the production-side
+  // rewriteIndirectAddresses path would have nothing to restore and tests for it could
+  // not detect regressions.
   //
   // This test is synchronous and single-threaded — no executor, no service calls,
   // no sleep — so it is not subject to timing flakes.
+  DynamixelDriver driver;
+  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
+
+  driver.addDummyMotor(1, MODEL_XM);
+
+  auto motor = MockDynamixelManager::instance().getMotor(1);
+  ASSERT_NE(motor, nullptr);
+
+  // Write a non-zero indirect-address pointer (slot 0 -> torque_enable). The pointer
+  // registers live below the indirect-data window (XM: 578..633 vs 634..661), so reads
+  // and writes here are direct memory accesses, not subject to resolveAddress redirection.
+  motor->write2Byte(ADDR_XM_INDIRECT_ADDRESS_START, ADDR_XM_TORQUE_ENABLE);
+  ASSERT_EQ(motor->read2Byte(ADDR_XM_INDIRECT_ADDRESS_START), ADDR_XM_TORQUE_ENABLE);
+
+  // Reboot.
+  EXPECT_TRUE(driver.reboot(1));
+
+  // The pointer must be cleared, matching real X-series reboot behavior.
+  EXPECT_EQ(motor->read2Byte(ADDR_XM_INDIRECT_ADDRESS_START), 0)
+      << "X-series indirect address pointer must be cleared on reboot, otherwise tests "
+      << "for the production-side rewriteIndirectAddresses path cannot detect regressions.";
+}
+
+TEST_F(MockDynamixelTest, IndirectAddressMappingsSurviveRebootPSeries)
+{
+  // On P-/PRO-series motors the indirect-address pointer registers live in EEPROM, so a
+  // real reboot leaves them intact. The mock must preserve them too — otherwise the
+  // EEPROM-skip path in production code (which deliberately does NOT rewrite these
+  // motors) could not be distinguished from a no-op.
   DynamixelDriver driver;
   ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
 
@@ -444,20 +483,19 @@ TEST_F(MockDynamixelTest, IndirectAddressMappingsClearedOnReboot)
   auto motor = MockDynamixelManager::instance().getMotor(1);
   ASSERT_NE(motor, nullptr);
 
-  // Write a non-zero indirect-address pointer (slot 0 -> torque_enable).
-  // The pointer registers themselves live below the indirect-data window
-  // (PH series: 168..223 vs 634..661), so reads/writes here are direct
-  // memory accesses, not subject to resolveAddress redirection.
+  // Write a non-zero indirect-address pointer (slot 0 -> torque_enable). PH pointer
+  // registers live below the indirect-data window (168..223 vs 634..661), so accesses
+  // here are direct memory, not subject to resolveAddress redirection.
   motor->write2Byte(ADDR_INDIRECT_ADDRESS_START, ADDR_TORQUE_ENABLE);
   ASSERT_EQ(motor->read2Byte(ADDR_INDIRECT_ADDRESS_START), ADDR_TORQUE_ENABLE);
 
   // Reboot.
   EXPECT_TRUE(driver.reboot(1));
 
-  // The pointer must be cleared, matching real-hardware reboot behavior.
-  EXPECT_EQ(motor->read2Byte(ADDR_INDIRECT_ADDRESS_START), 0)
-      << "Indirect address pointer must be cleared on reboot, otherwise tests for "
-      << "the production-side rewriteIndirectAddresses path cannot detect regressions.";
+  // The EEPROM-resident pointer must survive the reboot unchanged.
+  EXPECT_EQ(motor->read2Byte(ADDR_INDIRECT_ADDRESS_START), ADDR_TORQUE_ENABLE)
+      << "P-series indirect address pointer lives in EEPROM and must survive a reboot; "
+      << "wiping it in the mock would make the production EEPROM-skip path untestable.";
 }
 
 TEST_F(MockDynamixelTest, WriteInitialValuesSkipsUnavailableRegister)

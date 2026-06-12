@@ -9,8 +9,8 @@ unit_conversions: # dxl value to unit ratio
   12bit_ADC_V: 0.000805861
 
 indirect_addresses:
-# address start | data start  | count
-  - 49          | 634         | 256
+# address start | data start  | count | memory
+  - 49          | 634         | 256   | EEPROM
 
 control_table:
 # addr  | item name                | length | access | memory | unit/type
