@@ -1127,23 +1127,6 @@ bool DynamixelHardwareInterface::setTorque(const bool do_enable, const std::vect
       }
     }
     if (success) {
-      // Re-sync goal = present AFTER torque is enabled. The goal written by
-      // resetGoalStateAndVerify above happened while torque was still OFF; on some motors
-      // (observed on the RH-P12-RN gripper in current-based position mode) the position loop
-      // does not honor a goal latched torque-off and drives to a default target on torque-on.
-      // Re-issuing goal=present here, with the loop live, pins the motor to its current pose.
-      // Idempotent for joints that already hold the correct goal.
-      if (do_enable) {
-        std::vector<std::string> joints_to_reset;
-        for (const auto& name : joint_names_) {
-          if (!is_ignored(name))
-            joints_to_reset.emplace_back(name);
-        }
-        if (!resetGoalStateAndVerify(joints_to_reset, max_reset_and_verify_retries_)) {
-          DXL_LOG_ERROR("Failed to re-sync goal state after enabling torque.");
-          return false;
-        }
-      }
       is_torqued_ = do_enable;
       updateColorLED();
       return true;

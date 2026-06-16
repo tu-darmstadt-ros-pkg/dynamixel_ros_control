@@ -250,8 +250,11 @@ void Joint::resetGoalState(const std::string& interface_name)
     // command. Defaulting it to velocity_limit arms a motion profile that drives the motor toward
     // its goal on torque-on (observed on the RH-P12-RN gripper sweeping fully open). Per the
     // datasheet, Goal Velocity = 0 disables the profile, so the motor holds instead of sweeping.
+    // Check preferred_position_control_mode_ (known at load time) as well as the live mode: at
+    // startup the first reset runs before the control mode is read (control_mode_ == UNDEFINED),
+    // so relying on control_mode_ alone would miss it and still arm the profile.
     if (control_mode_ == VELOCITY || next_control_mode == VELOCITY || control_mode_ == CURRENT_BASED_POSITION ||
-        next_control_mode == CURRENT_BASED_POSITION) {
+        next_control_mode == CURRENT_BASED_POSITION || preferred_position_control_mode_ == CURRENT_BASED_POSITION) {
       value = 0.0;
     } else {
       value = default_goal_values_.at(hardware_interface::HW_IF_VELOCITY);
