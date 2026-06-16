@@ -246,7 +246,12 @@ void Joint::resetGoalState(const std::string& interface_name)
       value = 0;
     }
   } else if (interface_name == hardware_interface::HW_IF_VELOCITY) {
-    if (control_mode_ == VELOCITY || next_control_mode == VELOCITY) {
+    // In current-based position mode, Goal Velocity is the PROFILE speed limit, not a velocity
+    // command. Defaulting it to velocity_limit arms a motion profile that drives the motor toward
+    // its goal on torque-on (observed on the RH-P12-RN gripper sweeping fully open). Per the
+    // datasheet, Goal Velocity = 0 disables the profile, so the motor holds instead of sweeping.
+    if (control_mode_ == VELOCITY || next_control_mode == VELOCITY || control_mode_ == CURRENT_BASED_POSITION ||
+        next_control_mode == CURRENT_BASED_POSITION) {
       value = 0.0;
     } else {
       value = default_goal_values_.at(hardware_interface::HW_IF_VELOCITY);
