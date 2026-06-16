@@ -217,6 +217,27 @@ bool SyncReadManager::read(rclcpp::Time& packet_receive_time)
   return true;
 }
 
+std::vector<IndirectReadDebugEntry>
+SyncReadManager::getIndirectDebugEntries(const Dynamixel& dxl, const std::vector<std::string>& register_names) const
+{
+  std::vector<IndirectReadDebugEntry> debug_entries;
+  debug_entries.reserve(register_names.size());
+  for (const auto& register_name : register_names) {
+    const auto it = read_entries_.find(register_name);
+    if (it == read_entries_.end()) {
+      continue;
+    }
+    const auto& entry = it->second;
+    const bool contains_dxl = std::any_of(entry.dxl_value_pairs.begin(), entry.dxl_value_pairs.end(),
+                                          [&dxl](const auto& pair) { return pair.first == &dxl; });
+    if (!contains_dxl) {
+      continue;
+    }
+    debug_entries.push_back({entry.register_name, entry.indirect_index, entry.indirect_data_address, entry.data_length});
+  }
+  return debug_entries;
+}
+
 bool SyncReadManager::isOk() const
 {
   return subsequent_error_count_ < error_threshold_;

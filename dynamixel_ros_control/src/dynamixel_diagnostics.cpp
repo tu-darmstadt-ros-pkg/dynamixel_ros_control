@@ -5,6 +5,7 @@
 
 #include <array>
 #include <optional>
+#include <sstream>
 #include <utility>
 
 namespace dynamixel_ros_control {
@@ -18,6 +19,7 @@ namespace {
 // Sync managers default to error_threshold_=25; not exposed via a public getter. If/when the
 // threshold becomes configurable, expose it through SyncRead/WriteManager and read it here.
 constexpr unsigned int DEFAULT_ERROR_THRESHOLD = 25;
+constexpr uint8_t TARGET_POINTER_DUMP_ID = 18;
 
 KeyValue kv(std::string key, std::string value)
 {
@@ -50,6 +52,54 @@ std::string join(const std::vector<std::string>& strs, const std::string& sep = 
     out += strs[i];
   }
   return out;
+}
+
+std::string joinAddresses(const std::vector<uint16_t>& addresses)
+{
+  std::ostringstream ss;
+  for (size_t i = 0; i < addresses.size(); ++i) {
+    if (i > 0) {
+      ss << ",";
+    }
+    ss << addresses[i];
+  }
+  return ss.str();
+}
+
+std::vector<uint16_t> expectedAddresses(const Dynamixel& dxl, const std::string& register_name,
+                                        const uint8_t data_length)
+{
+  std::vector<uint16_t> addresses;
+  const auto& item = dxl.getItem(register_name);
+  addresses.reserve(data_length);
+  for (uint8_t i = 0; i < data_length; ++i) {
+    addresses.push_back(item.address() + i);
+  }
+  return addresses;
+}
+
+template <typename DebugEntry>
+void logIndirectPointerEntries(const Dynamixel& dxl, const std::string& joint_name, const std::string& phase,
+                               const char* path, const std::vector<DebugEntry>& entries)
+{
+  for (const auto& entry : entries) {
+    std::vector<uint16_t> actual_addresses;
+    uint16_t indirect_address = 0;
+    uint16_t indirect_data_address = 0;
+    if (!dxl.readIndirectAddressTargets(entry.indirect_index, entry.data_length, indirect_address,
+                                        indirect_data_address, actual_addresses)) {
+      DXL_LOG_WARN("[INDIRECT_PTR:" << phase << "] joint '" << joint_name << "' id=" << dxl.getIdInt() << " path="
+                                    << path << " reg=" << entry.register_name << " failed to read raw pointer window.");
+      continue;
+    }
+
+    const auto expected = expectedAddresses(dxl, entry.register_name, entry.data_length);
+    DXL_LOG_DEBUG("[INDIRECT_PTR:" << phase << "] joint '" << joint_name << "' id=" << dxl.getIdInt()
+                                   << " path=" << path << " reg=" << entry.register_name
+                                   << " idx=" << entry.indirect_index << " ptr_addr=" << indirect_address
+                                   << " data_addr=" << indirect_data_address << " expected=[" << joinAddresses(expected)
+                                   << "] actual=[" << joinAddresses(actual_addresses) << "]");
+  }
 }
 
 }  // namespace
@@ -155,6 +205,54 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
   }
 
   rt_manifest_pub_->unlockAndPublish();
+}
+
+void DynamixelDiagnostics::logManifest(const std::string& phase) const
+{
+  static const std::vector<std::string> kReadRegisters{DXL_REGISTER_POSITION, DXL_REGISTER_VELOCITY,
+                                                       DXL_REGISTER_EFFORT, DXL_REGISTER_HARDWARE_ERROR};
+  static const std::vector<std::string> kWriteRegisters{DXL_REGISTER_CMD_POSITION, DXL_REGISTER_CMD_VELOCITY,
+                                                        DXL_REGISTER_CMD_EFFORT, DXL_REGISTER_CMD_TORQUE};
+  // Direct register reads (NOT via the indirect-address sync window). If the indirect pointers
+  // are stale/misaligned, these direct values will disagree with the sync-read values logged the
+  // same cycle — that disagreement is the smoking gun for indirect-address corruption.
+  for (const auto& joint_name : joint_names_) {
+    const Dynamixel& dxl = *joints_.at(joint_name).dynamixel;
+    std::ostringstream ss;
+    ss << "[MANIFEST:" << phase << "] joint '" << joint_name << "' id=" << dxl.getIdInt()
+       << " model=" << dxl.getModelNumber();
+
+    auto add = [&](const char* label, const char* reg) {
+      if (auto v = readInt(dxl, reg)) {
+        ss << " " << label << "=" << *v;
+      }
+    };
+    if (auto v = readInt(dxl, DXL_REGISTER_CONTROL_MODE)) {
+      ss << " operating_mode=" << *v;
+    }
+    // Direct reads of exactly the registers implicated in the gripper sweep: where the motor
+    // thinks it is, where it is told to go, the homing reference, and the position clamp.
+    add("present_position", "present_position");
+    add("goal_position", "goal_position");
+    add("present_velocity", "present_velocity");
+    add("goal_velocity", "goal_velocity");
+    add("present_current", "present_current");
+    add("goal_current", "goal_current");
+    add("homing_offset", "homing_offset");
+    add("min_position_limit", "min_position_limit");
+    add("max_position_limit", "max_position_limit");
+    add("torque_enable", "torque_enable");
+    DXL_LOG_DEBUG(ss.str());
+
+    if (dxl.getId() != TARGET_POINTER_DUMP_ID) {
+      continue;
+    }
+
+    logIndirectPointerEntries(dxl, joint_name, phase, "read",
+                              read_manager_.getIndirectDebugEntries(dxl, kReadRegisters));
+    logIndirectPointerEntries(dxl, joint_name, phase, "write",
+                              write_manager_.getIndirectDebugEntries(dxl, kWriteRegisters));
+  }
 }
 
 void DynamixelDiagnostics::startHealthTimer()

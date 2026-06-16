@@ -1,6 +1,7 @@
 #include "dynamixel_ros_control/log.hpp"
 
 #include <dynamixel_ros_control/sync_write_manager.hpp>
+#include <sstream>
 
 namespace dynamixel_ros_control {
 
@@ -49,6 +50,7 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   for (auto& [dxl, write_entries] : write_entries_) {
     unsigned int indirect_address_index = indirect_address_index_;
     for (auto& entry : write_entries) {
+      entry.indirect_index = indirect_address_index;
       if (!dxl->setIndirectAddress(indirect_address_index, entry.register_name, entry.indirect_data_address)) {
         DXL_LOG_ERROR("Failed to set indirect address mapping");
         return false;
@@ -118,11 +120,13 @@ bool SyncWriteManager::write()
         const double unit_value = *entry.d_value + entry.offset;
         dxl_value = dxl->unitToDxlValue(entry.register_name, unit_value);
         DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value
-                                  << ", converted: " << *entry.d_value);
+                                  << ", converted: " << *entry.d_value
+                                  << ", indirect_data_address: " << entry.indirect_data_address);
       } else if (entry.b_value) {
         dxl_value = dxl->boolToDxlValue(entry.register_name, *entry.b_value);
         DXL_LOG_DEBUG("[WRITING " << entry.register_name << "] id " << dxl->getIdInt() << ", value: " << dxl_value
-                                  << ", converted: " << *entry.b_value);
+                                  << ", converted: " << *entry.b_value
+                                  << ", indirect_data_address: " << entry.indirect_data_address);
       } else {
         DXL_LOG_ERROR("No value set");
         dxl_value = 0;
@@ -135,12 +139,44 @@ bool SyncWriteManager::write()
 
   const int result = sync_write_->txPacket();
   if (result != COMM_SUCCESS) {
-    DXL_LOG_ERROR("Sync Write failed with error: " << driver_->communicationErrorToString(result));
+    std::ostringstream ids;
+    for (const auto& [dxl, write_entries] : write_entries_) {
+      ids << " id" << dxl->getIdInt() << "[";
+      for (const auto& entry : write_entries) {
+        ids << entry.register_name << "@" << entry.indirect_data_address << ",";
+      }
+      ids << "]";
+    }
+    DXL_LOG_ERROR("Sync Write failed with error: " << driver_->communicationErrorToString(result)
+                                                   << ". Affected motors/registers:" << ids.str());
     subsequent_error_count_++;
     return false;
   }
   subsequent_error_count_ = 0;
   return true;
+}
+
+std::vector<IndirectWriteDebugEntry>
+SyncWriteManager::getIndirectDebugEntries(const Dynamixel& dxl, const std::vector<std::string>& register_names) const
+{
+  std::vector<IndirectWriteDebugEntry> debug_entries;
+  debug_entries.reserve(register_names.size());
+  const auto it = write_entries_.find(const_cast<Dynamixel*>(&dxl));
+  if (it == write_entries_.end()) {
+    return debug_entries;
+  }
+  const auto& entries = it->second;
+  for (const auto& register_name : register_names) {
+    const auto entry_it = std::find_if(entries.begin(), entries.end(), [&register_name](const auto& entry) {
+      return entry.register_name == register_name;
+    });
+    if (entry_it == entries.end()) {
+      continue;
+    }
+    debug_entries.push_back(
+        {entry_it->register_name, entry_it->indirect_index, entry_it->indirect_data_address, entry_it->data_length});
+  }
+  return debug_entries;
 }
 
 bool SyncWriteManager::isOk() const

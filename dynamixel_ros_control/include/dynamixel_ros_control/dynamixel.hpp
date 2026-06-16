@@ -4,6 +4,7 @@
 #include <rclcpp/rclcpp.hpp>
 #include <dynamixel_ros_control/control_table.hpp>
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
+#include <vector>
 
 namespace dynamixel_ros_control {
 
@@ -140,6 +141,12 @@ public:
   /// True for X-series (pointers are wiped by a reboot and must be re-written),
   /// false for P-/PRO-series (pointers live in EEPROM and survive a reboot).
   [[nodiscard]] bool indirectAddressesInRam() const;
+
+  /// @brief Read the raw target addresses currently stored in an indirect pointer window.
+  /// Not RT-safe — intended for debug/instrumentation only.
+  [[nodiscard]] bool readIndirectAddressTargets(unsigned int indirect_address_index, uint8_t data_length,
+                                                uint16_t& indirect_address, uint16_t& indirect_data_address,
+                                                std::vector<uint16_t>& target_addresses) const;
 
   /// @brief Get human-readable description of current hardware error.
   [[nodiscard]] std::string getHardwareErrorStatusString() const;

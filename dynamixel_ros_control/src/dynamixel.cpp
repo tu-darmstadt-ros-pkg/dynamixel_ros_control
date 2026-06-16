@@ -21,7 +21,7 @@ bool Dynamixel::connect()
     return false;
   }
   DXL_LOG_DEBUG("ID " << getIdInt() << ": Loaded control table for model " << getModelNumber());
-
+  // TODO: if torqued on we cannot write any eprom values -> What should we do?
   writeInitialValues();
   return true;
 }
@@ -288,6 +288,23 @@ bool Dynamixel::indirectAddressesInRam() const
     }
   }
   return false;
+}
+
+bool Dynamixel::readIndirectAddressTargets(const unsigned int indirect_address_index, const uint8_t data_length,
+                                           uint16_t& indirect_address, uint16_t& indirect_data_address,
+                                           std::vector<uint16_t>& target_addresses) const
+{
+  indirectIndexToAddresses(indirect_address_index, indirect_address, indirect_data_address);
+  target_addresses.clear();
+  target_addresses.reserve(data_length);
+  for (uint8_t i = 0; i < data_length; ++i) {
+    int32_t raw_target_address = 0;
+    if (!readRegister(indirect_address + static_cast<uint16_t>(2 * i), sizeof(uint16_t), raw_target_address)) {
+      return false;
+    }
+    target_addresses.push_back(static_cast<uint16_t>(raw_target_address));
+  }
+  return true;
 }
 
 void Dynamixel::setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values)

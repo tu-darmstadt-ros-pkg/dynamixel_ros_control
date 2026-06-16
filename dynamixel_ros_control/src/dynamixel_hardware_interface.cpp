@@ -353,9 +353,20 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_cleanup(const 
 hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const rclcpp_lifecycle::State& previous_state)
 {
   DXL_LOG_DEBUG("DynamixelHardwareInterface::on_activate from " << previous_state.label());
+  // Diagnostic snapshot (direct register reads) before torque is applied. Compare against the
+  // post-torque snapshot below and the per-cycle sync-read values to localize any indirect-address
+  // misalignment / unexpected motion at torque-on.
+  if (debug_) {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    diagnostics_->logManifest("on_activate:pre_torque");
+  }
   if (!setTorque(torque_on_startup_, {}, true)) {
     DXL_LOG_ERROR("Failed to set torque on activation to " << (torque_on_startup_ ? "ON" : "OFF"));
     return hardware_interface::CallbackReturn::ERROR;
+  }
+  if (debug_) {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    diagnostics_->logManifest("on_activate:post_torque");
   }
   // make sure position control mode is active (safer than leaving it in whatever mode it was before)
   // imagine, torque on startup but actuator from last shutdown in current mode & no controller running
@@ -367,6 +378,10 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
   is_torqued_ = torque_on_startup_;
   if (!resetGoalStateAndVerify(joint_names_, max_reset_and_verify_retries_)) {
     return CallbackReturn::ERROR;
+  }
+  if (debug_) {
+    std::lock_guard<std::mutex> lock(dynamixel_comm_mutex_);
+    diagnostics_->logManifest("on_activate:post_reset");
   }
   updateColorLED(hardware_interface::lifecycle_state_names::ACTIVE);
   diagnostics_->startHealthTimer();

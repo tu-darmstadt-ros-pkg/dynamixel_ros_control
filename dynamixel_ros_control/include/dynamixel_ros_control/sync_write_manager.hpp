@@ -9,9 +9,18 @@
 
 namespace dynamixel_ros_control {
 
+struct IndirectWriteDebugEntry
+{
+  std::string register_name;
+  unsigned int indirect_index{0};
+  uint16_t indirect_data_address{0};
+  uint8_t data_length{0};
+};
+
 struct WriteEntry
 {
   std::string register_name;
+  unsigned int indirect_index{0};
   uint8_t data_length;
   uint16_t indirect_data_address;
   double* d_value{nullptr};
@@ -39,6 +48,9 @@ public:
 
   [[nodiscard]] bool release() const;
   [[nodiscard]] bool write();
+
+  [[nodiscard]] std::vector<IndirectWriteDebugEntry>
+  getIndirectDebugEntries(const Dynamixel& dxl, const std::vector<std::string>& register_names) const;
 
   [[nodiscard]] bool isOk() const;
   [[nodiscard]] unsigned int getErrorCount() const
