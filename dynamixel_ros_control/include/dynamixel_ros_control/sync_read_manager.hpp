@@ -27,14 +27,6 @@ struct DxlValue
 
 using DxlValueMappingList = std::vector<std::pair<Dynamixel*, DxlValue>>;
 
-struct IndirectReadDebugEntry
-{
-  std::string register_name;
-  unsigned int indirect_index;
-  uint16_t indirect_data_address;
-  uint8_t data_length;
-};
-
 struct ReadEntry
 {
   std::string register_name;
@@ -79,9 +71,6 @@ public:
 
   [[nodiscard]] bool read();
   [[nodiscard]] bool read(rclcpp::Time& packet_receive_time);
-
-  [[nodiscard]] std::vector<IndirectReadDebugEntry>
-  getIndirectDebugEntries(const Dynamixel& dxl, const std::vector<std::string>& register_names) const;
 
   [[nodiscard]] bool isOk() const;
   [[nodiscard]] unsigned int getErrorCount() const

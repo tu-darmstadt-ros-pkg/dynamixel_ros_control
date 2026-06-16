@@ -74,12 +74,6 @@ public:
   /// hooks or service handlers, not from `read()`/`write()`.
   void publishManifest(const rclcpp::Time& stamp);
 
-  /// @brief Read live register state (direct, bypassing the indirect-address window) and dump it
-  /// to the debug log, tagged with @p phase. Diagnostic aid for indirect-address corruption:
-  /// compare these direct reads against the sync-read (indirect) values logged the same cycle.
-  /// Not RT-safe — call from lifecycle hooks only.
-  void logManifest(const std::string& phase) const;
-
   /// @brief Start the 1 Hz diagnostics publish timer. Idempotent.
   void startHealthTimer();
 

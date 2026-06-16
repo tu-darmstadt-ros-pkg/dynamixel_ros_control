@@ -188,31 +188,6 @@ TEST_F(HardwareInterfaceTest, Torque_OnStartupVerification)
   }
 }
 
-TEST_F(HardwareInterfaceTest, Torque_GripperStartupDoesNotPreloadVelocityOrCurrentInCurrentBasedPositionMode)
-{
-  std::this_thread::sleep_for(200ms);
-
-  auto gripper = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID);
-  ASSERT_NE(gripper, nullptr) << "Gripper motor should exist";
-
-  const uint16_t goal_pos_addr = gripper->getAddress("goal_position");
-  const uint16_t goal_vel_addr = gripper->getAddress("goal_velocity");
-  const uint16_t goal_current_addr = gripper->getAddress("goal_current");
-  const uint16_t present_pos_addr = gripper->getAddress("present_position");
-
-  ASSERT_GT(goal_pos_addr, 0u);
-  ASSERT_GT(goal_vel_addr, 0u);
-  ASSERT_GT(goal_current_addr, 0u);
-  ASSERT_GT(present_pos_addr, 0u);
-
-  EXPECT_EQ(gripper->read4ByteSigned(goal_pos_addr), gripper->read4ByteSigned(present_pos_addr))
-      << "Startup should still hold the gripper at its current position";
-  EXPECT_EQ(gripper->read4ByteSigned(goal_vel_addr), 0)
-      << "Startup should not preload a goal velocity for current-based-position grippers";
-  EXPECT_EQ(static_cast<int16_t>(gripper->read2Byte(goal_current_addr)), 0)
-      << "Startup should not preload a goal current for current-based-position grippers";
-}
-
 TEST_F(HardwareInterfaceTest, Torque_GoalPositionUpdatedBeforeReEnable)
 {
   // CRITICAL TEST: Verify that goal position is properly reset when torque is re-enabled

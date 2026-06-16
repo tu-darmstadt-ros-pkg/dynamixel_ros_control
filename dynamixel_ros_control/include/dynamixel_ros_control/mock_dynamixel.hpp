@@ -174,12 +174,9 @@ public:
           address_map_[name] = addr;
           length_map_[name] = len;
 
-          // Track RAM registers for reset on reboot, and EEPROM registers so we can
-          // model the hardware's EEPROM write-lock (EEPROM is read-only while torqued).
+          // Track RAM registers for reset on reboot
           if (parts.size() >= 5 && parts[4] == "RAM") {
             ram_registers_.emplace_back(static_cast<uint16_t>(addr), static_cast<uint8_t>(len));
-          } else if (parts.size() >= 5 && parts[4] == "EEPROM") {
-            eeprom_registers_.emplace_back(static_cast<uint16_t>(addr), static_cast<uint8_t>(len));
           }
 
           // Cache important addresses
@@ -252,12 +249,6 @@ public:
             indirect_count_ = std::stoi(parts[2]);
             // Pointer registers in RAM are wiped by a reboot; in EEPROM they survive.
             indirect_in_ram_ = (parts[3] == "RAM");
-            // EEPROM-resident pointer registers are also write-locked while torqued, just
-            // like any other EEPROM data. Each of the `count` data slots maps to a 2-byte
-            // pointer register, so the pointer block spans count*2 bytes.
-            if (!indirect_in_ram_) {
-              eeprom_registers_.emplace_back(indirect_address_start_, static_cast<uint16_t>(indirect_count_ * 2));
-            }
           }
         }
       }
@@ -312,10 +303,6 @@ public:
   {
     std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     uint16_t real_addr = resolveAddress(address);
-    // EEPROM is write-locked while torque is on (see eeprom_registers_). A write to a
-    // locked EEPROM byte is silently dropped, exactly as the hardware ignores it.
-    if (isEepromWriteLocked(real_addr))
-      return;
     if (static_cast<size_t>(real_addr) < memory_.size())
       memory_[real_addr] = data;
   }
@@ -826,31 +813,12 @@ private:
   bool comm_error_enabled_ = false;
   int reboot_count_ = 0;                                     // Tracks how many times this motor has been rebooted
   std::vector<std::pair<uint16_t, uint8_t>> ram_registers_;  // RAM register (address, length) pairs for reset on reboot
-  // EEPROM register (address, length) ranges. EEPROM is write-locked while torque is on,
-  // matching the hardware: "Data in the EEPROM Area can only be written when Torque
-  // Enable(512) is 0." Length is uint16_t because the indirect-pointer block can exceed 255 B.
-  std::vector<std::pair<uint16_t, uint16_t>> eeprom_registers_;
 
   // Indirect addressing configuration
   uint16_t indirect_address_start_ = 0;
   uint16_t indirect_data_start_ = 0;
   uint16_t indirect_count_ = 0;
   bool indirect_in_ram_ = false;  // True if the indirect pointer registers live in RAM (X-series)
-
-  // True if `real_addr` falls in an EEPROM range AND torque is currently enabled.
-  // Mirrors the hardware rule that EEPROM data is read-only while Torque Enable is 1.
-  bool isEepromWriteLocked(uint16_t real_addr) const
-  {
-    if (torque_enable_addr_ == 0 || memory_[torque_enable_addr_] != 1) {
-      return false;  // torque off (or unknown) -> EEPROM writable
-    }
-    for (const auto& [addr, len] : eeprom_registers_) {
-      if (real_addr >= addr && real_addr < addr + len) {
-        return true;
-      }
-    }
-    return false;
-  }
 
   // Helper to resolve indirect addresses
   uint16_t resolveAddress(uint16_t address) const

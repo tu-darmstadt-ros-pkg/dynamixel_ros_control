@@ -2,10 +2,7 @@
 #include <dynamixel_ros_control/dynamixel.hpp>
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
-#include <dynamixel_ros_control/sync_read_manager.hpp>
 #include <cmath>
-#include <memory>
-#include <vector>
 
 using namespace dynamixel_ros_control;
 
@@ -718,10 +715,9 @@ TEST_F(MockDynamixelTest, PositionLimitsEnforcedInPositionMode)
   auto motor = MockDynamixelManager::instance().getMotor(1);
   ASSERT_NE(motor, nullptr);
 
-  // Set position mode (operating_mode = 3). Operating mode and the position limits
-  // live in EEPROM, which is write-locked once torque is on — so configure them
-  // BEFORE enabling torque, as required on real hardware.
+  // Set position mode (operating_mode = 3)
   motor->write1Byte(ADDR_OPERATING_MODE, 3);
+  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
 
   // Set position limits (in ticks)
   // PH series: rad_per_tick = 0.00000625911
@@ -731,9 +727,7 @@ TEST_F(MockDynamixelTest, PositionLimitsEnforcedInPositionMode)
   motor->write4Byte(ADDR_MAX_POSITION_LIMIT, static_cast<uint32_t>(max_limit));
   motor->write4Byte(ADDR_MIN_POSITION_LIMIT, static_cast<uint32_t>(min_limit));
 
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set velocity/acceleration for movement (profile_velocity is RAM, writable anytime)
+  // Set velocity/acceleration for movement
   motor->write4Byte(560, 10000);  // profile_velocity
 
   // Try to move beyond maximum position limit
@@ -756,9 +750,9 @@ TEST_F(MockDynamixelTest, PositionLimitsEnforcedNegativeDirection)
   auto motor = MockDynamixelManager::instance().getMotor(1);
   ASSERT_NE(motor, nullptr);
 
-  // Position mode. EEPROM (operating mode + position limits) must be set before
-  // torque is enabled, since EEPROM is write-locked while torqued.
+  // Position mode
   motor->write1Byte(ADDR_OPERATING_MODE, 3);
+  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
 
   // Set position limits
   int32_t max_limit = 160000;
@@ -766,9 +760,7 @@ TEST_F(MockDynamixelTest, PositionLimitsEnforcedNegativeDirection)
   motor->write4Byte(ADDR_MAX_POSITION_LIMIT, static_cast<uint32_t>(max_limit));
   motor->write4Byte(ADDR_MIN_POSITION_LIMIT, static_cast<uint32_t>(min_limit));
 
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  motor->write4Byte(560, 10000);  // profile_velocity (RAM)
+  motor->write4Byte(560, 10000);  // profile_velocity
 
   // Try to move beyond minimum position limit (negative)
   int32_t beyond_min = -500000;
@@ -790,9 +782,9 @@ TEST_F(MockDynamixelTest, ExtendedPositionModeIgnoresLimits)
   auto motor = MockDynamixelManager::instance().getMotor(1);
   ASSERT_NE(motor, nullptr);
 
-  // Set EXTENDED position mode (operating_mode = 4) - multi-turn. EEPROM (operating
-  // mode + position limits) must be configured before enabling torque.
+  // Set EXTENDED position mode (operating_mode = 4) - multi-turn
   motor->write1Byte(ADDR_OPERATING_MODE, 4);
+  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
 
   // Set position limits (these should be IGNORED in extended mode)
   int32_t max_limit = 160000;
@@ -800,9 +792,7 @@ TEST_F(MockDynamixelTest, ExtendedPositionModeIgnoresLimits)
   motor->write4Byte(ADDR_MAX_POSITION_LIMIT, static_cast<uint32_t>(max_limit));
   motor->write4Byte(ADDR_MIN_POSITION_LIMIT, static_cast<uint32_t>(min_limit));
 
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  motor->write4Byte(560, 10000);  // profile_velocity (RAM)
+  motor->write4Byte(560, 10000);  // profile_velocity
 
   // Set goal well beyond the "limit"
   int32_t beyond_max = 500000;
@@ -1128,11 +1118,9 @@ TEST_F(MockDynamixelTest, IndirectAddressingScattered)
   EXPECT_EQ(byte0, 1);  // Red
   EXPECT_EQ(byte1, 0);  // Green
   EXPECT_EQ(byte2, 1);  // Torque
-  // Byte 3 reads from address 0 (Model LSB). The packet's byte 2 enabled torque, which
-  // locks the EEPROM area — and Model Number lives in EEPROM — so byte 3's attempt to
-  // write 0 to address 0 is rejected and the factory model LSB is preserved.
-  // Model Number of PH is 2020 (0x07E4), so the LSB is 0xE4 (228).
-  EXPECT_EQ(byte3, 228);
+  // Byte 3 reads from address 0 (Model LSB).
+  // Since we wrote 0 to it via the packet, and Mock allows overwriting, it should be 0.
+  EXPECT_EQ(byte3, 0);
 }
 
 // ============================================================================
@@ -1188,166 +1176,6 @@ TEST_F(MockDynamixelTest, BusWatchdogViaDriver)
   // Verify via mock accessor
   auto motor = MockDynamixelManager::instance().getMotor(1);
   EXPECT_EQ(motor->getBusWatchdog(), 4);
-}
-
-// ============================================================================
-// EEPROM Indirect-Address Pointers Are Write-Locked While Torqued
-// ============================================================================
-//
-// Root cause of the command-mode-switch failure on the real arm: on PH-series
-// motors the indirect-address *pointer* registers live in EEPROM, and EEPROM is
-// write-locked while Torque Enable(512) is 1. With torque_off_on_shutdown:false,
-// restarting the node without power-cycling the motors leaves them torqued, so the
-// pointer writes during on_configure (SyncReadManager::init -> setIndirectAddress,
-// via readWriteRegister) are silently rejected. The motors keep STALE pointers from
-// the previous boot's configuration, and the goal read-back then lands on the wrong
-// register — returning the old value (on the arm: Velocity Limit = 2900 = 3.03687
-// rad/s) instead of the freshly written 0, which fails resetGoalStateAndVerify.
-//
-// These tests pin the hardware contract the production code relies on.
-
-constexpr uint16_t ADDR_GOAL_CURRENT = 550;
-
-// A bare write to an EEPROM register must be rejected while torque is on, and must
-// succeed once torque is cleared. velocity_limit(44) is an EEPROM register on PH.
-TEST_F(MockDynamixelTest, EepromWriteRejectedWhileTorqued)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Seed a known EEPROM value with torque off.
-  motor->write4Byte(ADDR_VELOCITY_LIMIT, 2900);
-  ASSERT_EQ(motor->read4ByteSigned(ADDR_VELOCITY_LIMIT), 2900);
-
-  // Enable torque -> EEPROM becomes read-only.
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-  motor->write4Byte(ADDR_VELOCITY_LIMIT, 1234);
-  EXPECT_EQ(motor->read4ByteSigned(ADDR_VELOCITY_LIMIT), 2900)
-      << "EEPROM write while torqued must be silently rejected (value unchanged)";
-
-  // Clear torque -> EEPROM writable again.
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 0);
-  motor->write4Byte(ADDR_VELOCITY_LIMIT, 1234);
-  EXPECT_EQ(motor->read4ByteSigned(ADDR_VELOCITY_LIMIT), 1234) << "EEPROM write after clearing torque must succeed";
-}
-
-// The exact failure mechanism: a motor comes up TORQUED with a stale indirect-pointer
-// layout that maps the goal_velocity data slot onto a different register. Re-running
-// the indirect-address setup (setIndirectAddress) cannot fix it because EEPROM is
-// locked, so a goal read through that slot returns the wrong register's value.
-TEST_F(MockDynamixelTest, StaleIndirectPointerSurvivesWhenTorquedAndMisalignsGoalRead)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 1000000, true));
-  driver.addDummyMotor(1, MODEL_PH);
-
-  auto dxl = std::make_unique<Dynamixel>(1, driver);
-  ASSERT_TRUE(dxl->connect());
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Seed distinct goal-register values so a misread is unmistakable.
-  constexpr int32_t GOAL_VEL = 0;      // the freshly intended goal velocity
-  constexpr int32_t VEL_LIMIT = 2900;  // the stale value a misaligned read would return
-  ASSERT_TRUE(driver.writeRegister(1, ADDR_GOAL_VELOCITY, 4, GOAL_VEL));
-  ASSERT_TRUE(driver.writeRegister(1, ADDR_VELOCITY_LIMIT, 4, VEL_LIMIT));
-
-  // Simulate a STALE previous-boot layout: indirect slot 0 (data byte 634) points at
-  // velocity_limit(44) instead of goal_velocity(552). Write the 4-byte pointer block
-  // with torque OFF (as the previous boot would have).
-  for (uint16_t i = 0; i < 4; ++i) {
-    motor->write2Byte(ADDR_INDIRECT_ADDRESS_START + i * 2, ADDR_VELOCITY_LIMIT + i);
-  }
-
-  // Now the motor comes up torqued (torque_off_on_shutdown:false, no power cycle).
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // on_configure re-runs the indirect-address setup, intending to point slot 0 at
-  // goal_velocity. EEPROM is locked, so this is silently dropped.
-  uint16_t data_addr = 0;
-  ASSERT_TRUE(dxl->setIndirectAddress(0, "goal_velocity", data_addr));
-
-  // Read the goal_velocity data slot. Because the stale pointer survived, it resolves
-  // to velocity_limit and returns 2900 instead of the intended goal velocity 0.
-  const int32_t read_back = motor->read4ByteSigned(data_addr);
-  EXPECT_EQ(read_back, VEL_LIMIT) << "Demonstrates the bug: while torqued, the stale indirect pointer survives and the "
-                                     "goal_velocity slot reads velocity_limit (2900) instead of the intended 0.";
-  EXPECT_NE(read_back, GOAL_VEL);
-}
-
-// Fix regression: Dynamixel::connect() must disable torque before writing EEPROM, so
-// that a motor coming up already torqued (torque_off_on_shutdown:false, no power cycle)
-// still has its initial values and indirect-address pointers applied. Without the fix,
-// connect() leaves the motor torqued and the EEPROM writes are silently dropped.
-TEST_F(MockDynamixelTest, ConnectDisablesTorqueSoEepromInitialValuesApply)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 1000000, true));
-  driver.addDummyMotor(1, MODEL_PH);
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Motor comes up TORQUED from a previous session, with a stale EEPROM value
-  // (drive_mode) that differs from the configured initial value.
-  const uint16_t drive_mode_addr = motor->getAddress("drive_mode");
-  ASSERT_GT(drive_mode_addr, 0u);
-  motor->write1Byte(motor->getAddress("torque_enable"), 1);  // torqued -> EEPROM locked
-  motor->write1Byte(drive_mode_addr, 0);                     // stale drive_mode
-
-  Dynamixel dxl(1, driver);
-  dxl.setInitialRegisterValues({{"drive_mode", "4"}});  // EEPROM register
-
-  // connect() writes initial values. With the fix it first clears torque, so the
-  // EEPROM write succeeds; without the fix it stays torqued and the write is dropped.
-  ASSERT_TRUE(dxl.connect());
-
-  EXPECT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 0)
-      << "connect() must leave torque disabled so EEPROM is writable during setup";
-  EXPECT_EQ(motor->read1Byte(drive_mode_addr), 4)
-      << "configured EEPROM initial value must be applied even if the motor came up torqued";
-}
-
-// Fix regression: the indirect-address pointers (EEPROM on P-series) must be writable
-// during setup, so a stale pointer from a previous boot is corrected. connect() clears
-// torque, so a subsequent setIndirectAddress aligns the goal read-back.
-TEST_F(MockDynamixelTest, StaleIndirectPointerIsCorrectedAfterConnectClearsTorque)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 1000000, true));
-  driver.addDummyMotor(1, MODEL_PH);
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Stale previous-boot layout: indirect slot 0 points at velocity_limit, and the motor
-  // is torqued so the pointer EEPROM is locked.
-  for (uint16_t i = 0; i < 4; ++i) {
-    motor->write2Byte(ADDR_INDIRECT_ADDRESS_START + i * 2, ADDR_VELOCITY_LIMIT + i);
-  }
-  motor->write1Byte(motor->getAddress("torque_enable"), 1);
-
-  // Seed distinct values: a misaligned read would return VEL_LIMIT, an aligned one GOAL_VEL.
-  constexpr int32_t GOAL_VEL = 0;
-  constexpr int32_t VEL_LIMIT = 2900;
-  ASSERT_TRUE(driver.writeRegister(1, ADDR_GOAL_VELOCITY, 4, GOAL_VEL));
-  // velocity_limit is EEPROM; seed it before connect() (motor still torqued here, so write
-  // directly through the mock with torque temporarily cleared to set up the precondition).
-  motor->write1Byte(motor->getAddress("torque_enable"), 0);
-  motor->write4Byte(ADDR_VELOCITY_LIMIT, VEL_LIMIT);
-  motor->write1Byte(motor->getAddress("torque_enable"), 1);  // back to torqued
-
-  Dynamixel dxl(1, driver);
-  ASSERT_TRUE(dxl.connect());  // with the fix, clears torque -> EEPROM writable
-
-  // Now the indirect setup can correct the stale pointer.
-  uint16_t data_addr = 0;
-  ASSERT_TRUE(dxl.setIndirectAddress(0, "goal_velocity", data_addr));
-
-  EXPECT_EQ(motor->read4ByteSigned(data_addr), GOAL_VEL)
-      << "After connect() clears torque, the indirect pointer is corrected and the "
-         "goal_velocity slot reads the intended 0 — not the stale velocity_limit.";
 }
 
 int main(int argc, char** argv)

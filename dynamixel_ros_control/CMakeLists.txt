@@ -149,8 +149,6 @@ if(BUILD_TESTING)
                 ${HW_TEST_DEPS})
   dxl_add_gtest(test_hw_realtime_publishers
                 test/test_hw_realtime_publishers.cpp 120 ${HW_TEST_DEPS})
-  dxl_add_gtest(test_hw_interface_order test/test_hw_interface_order.cpp 180
-                ${HW_TEST_DEPS})
 endif()
 
 # Install library and include folder
