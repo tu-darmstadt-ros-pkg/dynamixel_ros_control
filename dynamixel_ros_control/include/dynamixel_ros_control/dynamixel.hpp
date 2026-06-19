@@ -136,6 +136,11 @@ public:
   [[nodiscard]] bool setIndirectAddress(unsigned int indirect_address_index, const std::string& register_name,
                                         uint16_t& indirect_data_address) const;
 
+  /// @brief Whether this motor's indirect-address pointer registers live in RAM.
+  /// True for X-series (pointers are wiped by a reboot and must be re-written),
+  /// false for P-/PRO-series (pointers live in EEPROM and survive a reboot).
+  [[nodiscard]] bool indirectAddressesInRam() const;
+
   /// @brief Get human-readable description of current hardware error.
   [[nodiscard]] std::string getHardwareErrorStatusString() const;
 
@@ -147,10 +152,12 @@ public:
   /// @brief Get configured initial register values.
   const std::unordered_map<std::string, std::string>& getInitialRegisterValues() const;
 
+  /// @brief Write all configured initial register values to hardware.
+  bool writeInitialValues();
+
 private:
   void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address,
                                 uint16_t& indirect_data_address) const;
-  bool writeInitialValues();
 
   DynamixelDriver& driver_;
   ControlTable* control_table_{nullptr};

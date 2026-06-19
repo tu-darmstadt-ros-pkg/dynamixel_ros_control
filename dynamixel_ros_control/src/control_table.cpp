@@ -63,8 +63,9 @@ bool ControlTable::loadIndirectAddressInfo(const YAML::Node& node)
     removeWhitespace(line);
     std::vector<std::string> parts;
     boost::split(parts, line, boost::is_any_of("|"));
-    if (parts.size() != 3) {
-      DXL_LOG_ERROR("Indirect address line has invalid size " << parts.size());
+    if (parts.size() != 4) {
+      DXL_LOG_ERROR("Indirect address line has invalid size " << parts.size() << " (expected 4: address start | "
+                                                              << "data start | count | memory).");
       continue;
     }
     IndirectAddressInfo info{};
@@ -90,6 +91,12 @@ bool ControlTable::loadIndirectAddressInfo(const YAML::Node& node)
     }
     catch (const std::invalid_argument&) {
       DXL_LOG_ERROR("Indirect address count '" << parts[2] << "' is not an integer.");
+      continue;
+    }
+    // Load memory area of the pointer registers (EEPROM survives reboot, RAM does not).
+    // Whitespace was already stripped from the whole line above, so parts[3] is clean.
+    if (!stringToMemoryType(parts[3], info.memory_type)) {
+      DXL_LOG_ERROR("Indirect address memory type '" << parts[3] << "' is invalid (expected RAM or EEPROM).");
       continue;
     }
     DXL_LOG_DEBUG("Added indirect address: " << std::endl << info.toString());

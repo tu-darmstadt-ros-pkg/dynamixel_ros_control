@@ -26,9 +26,8 @@ bool SyncReadManager::addRegister(std::string register_name, const DxlValueMappi
     offsets.resize(dynamixels_.size(), 0.0);
   } else {
     if (dxl_value_pairs.size() != offsets.size()) {
-      DXL_LOG_ERROR("Size of offsets (" << dxl_value_pairs.size()
-                                        << ") does not match number of Dynamixel-Value pairs (" << offsets.size()
-                                        << ")");
+      DXL_LOG_ERROR("Size of offsets (" << offsets.size() << ") does not match number of Dynamixel-Value pairs ("
+                                        << dxl_value_pairs.size() << ")");
       return false;
     }
   }
@@ -124,6 +123,28 @@ bool SyncReadManager::init(DynamixelDriver& driver)
   for (const auto& dxl : dynamixels_) {
     if (!sync_read_->addParam(dxl->getId()))
       return false;
+  }
+  return true;
+}
+
+bool SyncReadManager::rewriteIndirectAddresses(const std::set<Dynamixel*>& motors)
+{
+  if (motors.empty() || read_entries_.empty()) {
+    return true;
+  }
+  for (auto& [register_name, read_entry] : read_entries_) {
+    const unsigned int indirect_address_index = read_entry.indirect_index;
+    for (auto& [dxl, value] : read_entry.dxl_value_pairs) {
+      if (motors.find(dxl) == motors.end()) {
+        continue;
+      }
+      uint16_t indirect_data_address;
+      if (!dxl->setIndirectAddress(indirect_address_index, register_name, indirect_data_address)) {
+        DXL_LOG_ERROR("Failed to rewrite indirect address mapping for register '" << register_name << "' on motor ID "
+                                                                                  << dxl->getIdInt() << ".");
+        return false;
+      }
+    }
   }
   return true;
 }

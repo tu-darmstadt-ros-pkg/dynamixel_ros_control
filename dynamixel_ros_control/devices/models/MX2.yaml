@@ -11,9 +11,9 @@ unit_conversions: # dxl value to unit ratio
   ms_20: 20.0
 
 indirect_addresses:
-# address start | data start  | count
-  #- 168        | 224         | 28
-  - 578         | 634         | 28
+# address start | data start  | count | memory
+  #- 168        | 224         | 28   | RAM
+  - 578         | 634         | 28   | RAM
 
 control_table:
 # addr  | item name                | length | access | memory | unit/type

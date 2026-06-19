@@ -76,6 +76,28 @@ bool SyncWriteManager::init(DynamixelDriver& driver)
   return true;
 }
 
+bool SyncWriteManager::rewriteIndirectAddresses(const std::set<Dynamixel*>& motors)
+{
+  if (motors.empty() || write_entries_.empty()) {
+    return true;
+  }
+  for (auto& [dxl, dxl_write_entries] : write_entries_) {
+    if (motors.find(dxl) == motors.end()) {
+      continue;
+    }
+    unsigned int indirect_address_index = indirect_address_index_;
+    for (auto& entry : dxl_write_entries) {
+      if (!dxl->setIndirectAddress(indirect_address_index, entry.register_name, entry.indirect_data_address)) {
+        DXL_LOG_ERROR("Failed to rewrite indirect address mapping for register '"
+                      << entry.register_name << "' on motor ID " << dxl->getIdInt() << ".");
+        return false;
+      }
+      indirect_address_index += entry.data_length;
+    }
+  }
+  return true;
+}
+
 bool SyncWriteManager::release() const
 {
   return total_data_length_ == 0 || driver_->releaseIndirectAddresses(total_data_length_, indirect_address_index_);

@@ -174,6 +174,11 @@ public:
           address_map_[name] = addr;
           length_map_[name] = len;
 
+          // Track RAM registers for reset on reboot
+          if (parts.size() >= 5 && parts[4] == "RAM") {
+            ram_registers_.emplace_back(static_cast<uint16_t>(addr), static_cast<uint8_t>(len));
+          }
+
           // Cache important addresses
           if (name == "torque_enable")
             torque_enable_addr_ = addr;
@@ -217,6 +222,8 @@ public:
             led_blue_addr_ = addr;
           else if (name == "bus_watchdog")
             bus_watchdog_addr_ = addr;
+          else if (name == "drive_mode")
+            drive_mode_addr_ = addr;
         }
       }
 
@@ -236,10 +243,12 @@ public:
             else
               parts.push_back("");
           }
-          if (parts.size() >= 3) {
+          if (parts.size() >= 4) {
             indirect_address_start_ = std::stoi(parts[0]);
             indirect_data_start_ = std::stoi(parts[1]);
             indirect_count_ = std::stoi(parts[2]);
+            // Pointer registers in RAM are wiped by a reboot; in EEPROM they survive.
+            indirect_in_ram_ = (parts[3] == "RAM");
           }
         }
       }
@@ -249,9 +258,22 @@ public:
     }
   }
 
-  // Memory access methods
+  // Memory access methods.
+  //
+  // The mock simulates a serial bus: in production the DynamixelHardwareInterface
+  // serializes all bus access via dynamixel_comm_mutex_. The test fixture however
+  // drives the physics update loop (MockDynamixelManager::update -> per-motor
+  // update()) on a separate thread, while controller_manager calls into read()
+  // and services on its own thread — both reach into memory_ concurrently
+  // through the mock. memory_mutex_ closes that mock-side race that would
+  // otherwise cause TSan warnings (and on weakly-ordered hardware, real torn
+  // reads of multi-byte registers).
+  //
+  // recursive_mutex because update() drives several read/write paths that
+  // re-enter read1Byte / write1Byte transitively.
   uint8_t read1Byte(uint16_t address) const
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     uint16_t real_addr = resolveAddress(address);
     if (static_cast<size_t>(real_addr) >= memory_.size())
       return 0;
@@ -260,11 +282,13 @@ public:
 
   uint16_t read2Byte(uint16_t address) const
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     return static_cast<uint16_t>(read1Byte(address)) | (static_cast<uint16_t>(read1Byte(address + 1)) << 8);
   }
 
   uint32_t read4Byte(uint16_t address) const
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     return static_cast<uint32_t>(read1Byte(address)) | (static_cast<uint32_t>(read1Byte(address + 1)) << 8) |
            (static_cast<uint32_t>(read1Byte(address + 2)) << 16) |
            (static_cast<uint32_t>(read1Byte(address + 3)) << 24);
@@ -277,6 +301,7 @@ public:
 
   void write1Byte(uint16_t address, uint8_t data)
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     uint16_t real_addr = resolveAddress(address);
     if (static_cast<size_t>(real_addr) < memory_.size())
       memory_[real_addr] = data;
@@ -284,12 +309,14 @@ public:
 
   void write2Byte(uint16_t address, uint16_t data)
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     write1Byte(address, data & 0xFF);
     write1Byte(address + 1, (data >> 8) & 0xFF);
   }
 
   void write4Byte(uint16_t address, uint32_t data)
   {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     write1Byte(address, data & 0xFF);
     write1Byte(address + 1, (data >> 8) & 0xFF);
     write1Byte(address + 2, (data >> 16) & 0xFF);
@@ -322,6 +349,42 @@ public:
   uint8_t getHardwareError() const
   {
     return hardware_error_;
+  }
+
+  // Reset all RAM registers to 0 (simulates power cycle on reboot)
+  void resetRAMRegisters()
+  {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
+    for (const auto& [addr, len] : ram_registers_) {
+      for (uint8_t i = 0; i < len; ++i) {
+        if (static_cast<size_t>(addr + i) < memory_.size()) {
+          memory_[addr + i] = 0;
+        }
+      }
+    }
+    if (indirect_count_ > 0) {
+      // The indirect-address *pointer* registers are wiped only when they live in RAM
+      // (X-series). On P-/PRO-series they live in EEPROM and a real reboot leaves them
+      // intact, so the mock must preserve them too — otherwise the EEPROM-skip path in
+      // production code could never be distinguished from a no-op rewrite.
+      if (indirect_in_ram_) {
+        const size_t pointer_bytes = static_cast<size_t>(indirect_count_) * 2;
+        for (size_t i = 0; i < pointer_bytes; ++i) {
+          const size_t addr = static_cast<size_t>(indirect_address_start_) + i;
+          if (addr < memory_.size()) {
+            memory_[addr] = 0;
+          }
+        }
+      }
+      // The indirect *data* registers always live in the RAM area, so they are wiped
+      // regardless of where the pointer registers reside.
+      for (size_t i = 0; i < indirect_count_; ++i) {
+        const size_t addr = static_cast<size_t>(indirect_data_start_) + i;
+        if (addr < memory_.size()) {
+          memory_[addr] = 0;
+        }
+      }
+    }
   }
 
   // Reboot tracking
@@ -457,11 +520,22 @@ private:
     return default_velocity_limit_;
   }
 
-  // For position mode: profile_velocity is the dynamic velocity limit
+  // drive_mode bit 2 (0x04) selects time-based profile mode, in which profile_velocity
+  // is a duration in ms rather than a velocity tick value.
+  bool isTimeBasedProfile() const
+  {
+    if (drive_mode_addr_ == 0)
+      return false;
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
+    return (memory_[drive_mode_addr_] & 0x04) != 0;
+  }
+
+  // For position mode: profile_velocity is the dynamic velocity limit (only in
+  // velocity-based profile mode — in time-based mode it has different semantics).
   double getPositionModeVelocityLimit() const
   {
     // First check profile_velocity (dynamic limit during position moves)
-    if (profile_velocity_addr_ > 0) {
+    if (profile_velocity_addr_ > 0 && !isTimeBasedProfile()) {
       int32_t profile_vel = read4ByteSigned(profile_velocity_addr_);
       if (profile_vel > 0) {
         return static_cast<double>(profile_vel) * rad_per_s_per_tick_;
@@ -502,7 +576,7 @@ private:
         return static_cast<double>(limit_ticks);  // Units vary by model
       }
     }
-    if (profile_acceleration_addr_ > 0) {
+    if (profile_acceleration_addr_ > 0 && !isTimeBasedProfile()) {
       int32_t profile_acc = read4ByteSigned(profile_acceleration_addr_);
       if (profile_acc > 0) {
         return static_cast<double>(profile_acc);
@@ -690,6 +764,9 @@ private:
   uint8_t id_;
   uint16_t model_number_;
   std::vector<uint8_t> memory_;
+  // recursive_mutex: update() drives several read/write paths that re-enter
+  // read1Byte / write1Byte transitively. mutable so const accessors can lock.
+  mutable std::recursive_mutex memory_mutex_;
   std::map<std::string, uint16_t> address_map_;
   std::map<std::string, uint8_t> length_map_;
 
@@ -715,6 +792,7 @@ private:
   uint16_t led_green_addr_ = 0;
   uint16_t led_blue_addr_ = 0;
   uint16_t bus_watchdog_addr_ = 0;
+  uint16_t drive_mode_addr_ = 0;
 
   // Unit conversions
   double rad_per_tick_ = 0.00002068538;  // Default for H42 series
@@ -733,12 +811,14 @@ private:
   // Error state
   uint8_t hardware_error_ = 0;
   bool comm_error_enabled_ = false;
-  int reboot_count_ = 0;  // Tracks how many times this motor has been rebooted
+  int reboot_count_ = 0;                                     // Tracks how many times this motor has been rebooted
+  std::vector<std::pair<uint16_t, uint8_t>> ram_registers_;  // RAM register (address, length) pairs for reset on reboot
 
   // Indirect addressing configuration
   uint16_t indirect_address_start_ = 0;
   uint16_t indirect_data_start_ = 0;
   uint16_t indirect_count_ = 0;
+  bool indirect_in_ram_ = false;  // True if the indirect pointer registers live in RAM (X-series)
 
   // Helper to resolve indirect addresses
   uint16_t resolveAddress(uint16_t address) const
@@ -922,6 +1002,7 @@ public:
       return COMM_RX_TIMEOUT;
 
     motor->incrementRebootCount();
+    motor->resetRAMRegisters();
     motor->clearHardwareError();
     if (error)
       *error = 0;

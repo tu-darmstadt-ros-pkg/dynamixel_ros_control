@@ -17,6 +17,29 @@ namespace dynamixel_ros_control {
 std::string interfaceNameToRegister(const std::string& interface_name);
 
 /**
+ * @brief Outcome of a single-register read/write on the bus.
+ *
+ * `comm_result` is the SDK's COMM_* code (transport-level: timeout, CRC, ...).
+ * `packet_error` is the motor's protocol-level error byte (out-of-range,
+ * overload, etc.). `success` is true only when both indicate no error.
+ *
+ * Callers that just want a yes/no can use `operator bool()`; callers that
+ * want to log a specific failure can pass the whole struct to
+ * `describeError()`.
+ */
+struct RegisterAccessResult
+{
+  bool success{false};
+  int comm_result{0};
+  uint8_t packet_error{0};
+
+  explicit operator bool() const
+  {
+    return success;
+  }
+};
+
+/**
  * @brief Low-level driver for Dynamixel communication.
  *
  * Handles serial port management, packet handling, and provides methods for
@@ -52,11 +75,18 @@ public:
   /// @brief Register a mock motor for testing (use_dummy must be true).
   void addDummyMotor(uint8_t id, uint16_t model_number);
 
-  /// @brief Write a value to a motor register.
-  [[nodiscard]] bool writeRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t value) const;
+  /// @brief Write a value to a motor register. Does not log on failure;
+  /// callers are expected to log with their own context.
+  [[nodiscard]] RegisterAccessResult writeRegister(uint8_t id, uint16_t address, uint8_t data_length,
+                                                   int32_t value) const;
 
-  /// @brief Read a value from a motor register.
-  [[nodiscard]] bool readRegister(uint8_t id, uint16_t address, uint8_t data_length, int32_t& value_out) const;
+  /// @brief Read a value from a motor register. Does not log on failure;
+  /// callers are expected to log with their own context.
+  [[nodiscard]] RegisterAccessResult readRegister(uint8_t id, uint16_t address, uint8_t data_length,
+                                                  int32_t& value_out) const;
+
+  /// @brief Human-readable description of a RegisterAccessResult (empty if success).
+  [[nodiscard]] std::string describeError(const RegisterAccessResult& result) const;
 
   /// @brief Create a GroupSyncWrite for efficient bulk writes.
   [[nodiscard]] std::shared_ptr<GroupSyncWrite> setSyncWrite(uint16_t address, uint8_t data_length) const;
