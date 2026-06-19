@@ -95,6 +95,13 @@ private:
   /// @brief Reboot motors with hardware errors and restore torque state.
   bool reboot();
 
+  /// @brief Ping every motor individually and log which ones respond and which do not.
+  /// Called after the bus is declared lost (consecutive read/write failures or a failed
+  /// post-reboot read) to localize a loose connection ("Wackelkontakt") to a specific motor.
+  /// Must be called while holding dynamixel_comm_mutex_; @p context labels the originating
+  /// operation in the log (e.g. "read", "write", "reboot").
+  void logBusConnectivity(const std::string& context) const;
+
   /// @brief Enable or disable torque on all motors (optionally ignoring specific joints).
   bool setTorque(bool do_enable, const std::vector<std::string>& ignore_joints = {},
                  bool skip_controller_unloading = false, int retries = 5, bool direct_write = false);
