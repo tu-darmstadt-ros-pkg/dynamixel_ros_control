@@ -190,6 +190,8 @@ public:
             goal_velocity_addr_ = addr;
           else if (name == "goal_torque" || name == "goal_current")
             goal_current_addr_ = addr;
+          else if (name == "current_limit")
+            current_limit_addr_ = addr;
           else if (name == "present_position")
             present_position_addr_ = addr;
           else if (name == "present_velocity")
@@ -312,6 +314,28 @@ public:
     std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     write1Byte(address, data & 0xFF);
     write1Byte(address + 1, (data >> 8) & 0xFF);
+    clampGoalCurrentToLimit();
+  }
+
+  // Mimic DYNAMIXEL firmware: Goal Current is clamped in magnitude to the Current Limit
+  // register. A goal beyond the limit reads back clamped, not as written. This reproduces
+  // the PH-series behaviour that resetGoalStateAndVerify must tolerate (the register-reported
+  // limit can exceed the actually enforced goal current). Called after every write path so it
+  // covers both direct (write2Byte) and sync writes (MockGroupSyncWrite::txPacket).
+  void clampGoalCurrentToLimit()
+  {
+    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
+    if (goal_current_addr_ == 0 || current_limit_addr_ == 0)
+      return;
+    const auto limit = static_cast<int16_t>(read2Byte(current_limit_addr_));
+    if (limit <= 0)
+      return;
+    const auto goal = static_cast<int16_t>(read2Byte(goal_current_addr_));
+    const auto clamped = std::clamp<int16_t>(goal, static_cast<int16_t>(-limit), limit);
+    if (clamped != goal) {
+      write1Byte(goal_current_addr_, static_cast<uint16_t>(clamped) & 0xFF);
+      write1Byte(goal_current_addr_ + 1, (static_cast<uint16_t>(clamped) >> 8) & 0xFF);
+    }
   }
 
   void write4Byte(uint16_t address, uint32_t data)
@@ -776,6 +800,7 @@ private:
   uint16_t goal_position_addr_ = 0;
   uint16_t goal_velocity_addr_ = 0;
   uint16_t goal_current_addr_ = 0;
+  uint16_t current_limit_addr_ = 0;
   uint16_t present_position_addr_ = 0;
   uint16_t present_velocity_addr_ = 0;
   uint16_t present_current_addr_ = 0;
@@ -1278,6 +1303,8 @@ public:
         for (size_t i = 0; i < data.size(); ++i) {
           motor->write1Byte(start_address_ + i, data[i]);
         }
+        // write1Byte bypasses write2Byte, so re-apply the Goal Current clamp here.
+        motor->clampGoalCurrentToLimit();
       }
     }
     return COMM_SUCCESS;

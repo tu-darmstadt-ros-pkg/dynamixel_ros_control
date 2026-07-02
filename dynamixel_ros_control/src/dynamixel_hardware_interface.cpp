@@ -3,6 +3,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <sstream>
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <boost/algorithm/string/classification.hpp>
@@ -636,6 +637,7 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   // Only return error after exceeding the consecutive error threshold
   if (!read_manager_.isOk()) {
     DXL_LOG_ERROR("Read manager lost connection after " << read_manager_.getErrorCount() << " consecutive errors");
+    logBusConnectivity("read");
     return hardware_interface::return_type::ERROR;
   }
 
@@ -712,6 +714,7 @@ hardware_interface::return_type DynamixelHardwareInterface::write(const rclcpp::
   if (!control_write_manager_.isOk()) {
     DXL_LOG_ERROR("Write manager lost connection after " << control_write_manager_.getErrorCount()
                                                          << " consecutive errors");
+    logBusConnectivity("write");
     return hardware_interface::return_type::ERROR;
   }
 
@@ -921,6 +924,39 @@ std::vector<std::string> DynamixelHardwareInterface::getJointsWithHardwareError(
   return joints_with_error;
 }
 
+void DynamixelHardwareInterface::logBusConnectivity(const std::string& context) const
+{
+  // The sync read/write groups cannot tell us which actuator dropped out: on the first
+  // non-responding ID the SDK aborts and reports a single bus-wide error. Now that the bus is
+  // already declared lost, actively ping each actuator once to find the culprit (e.g. a loose
+  // connection).
+  // the caller must holds dynamixel_comm_mutex_ and no cyclic read/write is in flight.
+  std::stringstream responding, dead;
+  unsigned int dead_count = 0;
+  unsigned int total = 0;
+  for (const auto& [name, joint] : joints_) {
+    total++;
+    if (driver_.ping(joint.dynamixel->getId())) {
+      responding << name << "(id " << joint.dynamixel->getIdInt() << ") ";
+    } else {
+      dead << name << "(id " << joint.dynamixel->getIdInt() << ") ";
+      dead_count++;
+    }
+  }
+
+  if (total == 0) {
+    return;
+  }
+  if (dead_count == total) {
+    DXL_LOG_ERROR("[" << context << "] No actuator responded to ping (" << total
+                      << " expected). Likely a bus-wide fault (power or cable to the bus).");
+  } else {
+    DXL_LOG_ERROR("[" << context << "] Bus connectivity ping: responding [ " << responding.str()
+                      << "], NOT responding [ " << dead.str() << "] (" << dead_count << "/" << total
+                      << " not responding).");
+  }
+}
+
 bool DynamixelHardwareInterface::reboot()
 {
   std::vector<std::string> rebooted_joints;
@@ -986,6 +1022,7 @@ bool DynamixelHardwareInterface::reboot()
       get_clock()->sleep_for(rclcpp::Duration(0, REBOOT_WAIT_NS));
       if (!read_manager_.read() || !read_manager_.isOk()) {
         DXL_LOG_ERROR("Failed to read hardware status after reboot.");
+        logBusConnectivity("reboot");
         return false;
       }
     }
@@ -1173,11 +1210,21 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify(const std::vector<std::
         return false;
       }
       const auto& interface_value = joint.read_goal_values_.at(interface_name);
-      if (std::abs(interface_value - joint.getActuatorState().goal[interface_name]) > 1e-2) {
+      const double target_value = joint.getActuatorState().goal[interface_name];
+      bool mismatch;
+      if (interface_name == hardware_interface::HW_IF_CURRENT || interface_name == hardware_interface::HW_IF_EFFORT) {
+        // Firmware may silently clamp the goal current below the requested value (e.g. PH54: the
+        // enforced goal-current ceiling can be lower than the current_limit register that seeds
+        // the default goal, and sync writes carry no status reply). A read-back smaller in
+        // magnitude than the request is a valid clamp, not a failed write.
+        mismatch = std::abs(interface_value) > std::abs(target_value) + 1e-2;
+      } else {
+        mismatch = std::abs(interface_value - target_value) > 1e-2;
+      }
+      if (mismatch) {
         DXL_LOG_ERROR("[resetGoalStateAndVerify] Joint '"
                       << name << "' goal of interface " << interface_name << " does not match read goal value. "
-                      << "(Target Goal Value: " << joint.getActuatorState().goal[interface_name]
-                      << ", Read Goal Value: " << interface_value);
+                      << "(Target Goal Value: " << target_value << ", Read Goal Value: " << interface_value);
         return false;
       }
     }
