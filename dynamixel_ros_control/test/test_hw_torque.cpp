@@ -386,6 +386,58 @@ TEST_F(HardwareInterfaceTest, Torque_DeactivatesControllersOnDisable)
       << "Controller should be deactivated when torque is disabled";
 }
 
+TEST_F(HardwareInterfaceTest, Torque_ReEnableAcceptsFirmwareClampedGoalCurrent)
+{
+  // Regression test for the athena arm reactivation abort: the default goal current is read
+  // from the current_limit register at configure. If the motor later enforces a lower
+  // goal-current ceiling (sync writes carry no status reply, so the clamp is silent), the
+  // reset write reads back below the target. resetGoalStateAndVerify must accept a clamped
+  // read-back for current/effort instead of aborting the torque enable / activation.
+  std::this_thread::sleep_for(200ms);
+
+  // arm_joint_4 is the only test joint with registers.current_limit set (22 A), so its
+  // default goal current is non-zero.
+  auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_4_ID);
+  ASSERT_NE(motor, nullptr);
+  const uint16_t current_limit_addr = motor->getAddress("current_limit");
+  const uint16_t goal_current_addr = motor->getAddress("goal_current");
+  ASSERT_NE(current_limit_addr, 0);
+  ASSERT_NE(goal_current_addr, 0);
+  const auto configured_limit = static_cast<int16_t>(motor->read2Byte(current_limit_addr));
+  ASSERT_EQ(configured_limit, 22000) << "registers.current_limit from the test URDF should be applied";
+
+  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
+      "/athena_arm_interface_node/set_torque");
+  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 5s;
+  options.response_timeout = 5s;
+
+  // 1. Disable torque
+  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
+  request->enable = false;
+  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
+      torque_client->get(), request, *executor_, options);
+  ASSERT_NE(resp, nullptr);
+  ASSERT_TRUE(resp->success);
+
+  // 2. The motor now enforces a ceiling below the default goal current read at configure:
+  //    every subsequent goal_current write is clamped to it by the mock firmware.
+  const int16_t lowered_limit = 15000;  // 15 A < 22 A default
+  motor->write2Byte(current_limit_addr, static_cast<uint16_t>(lowered_limit));
+
+  // 3. Re-enabling torque resets the goal state to the (higher) default and verifies the
+  //    read-back. The clamped value must be accepted.
+  request->enable = true;
+  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
+                                                                                        *executor_, options);
+  ASSERT_NE(resp, nullptr);
+  EXPECT_TRUE(resp->success) << "Torque enable must tolerate a goal current clamped below the requested default";
+
+  // 4. The register holds the clamped ceiling, not the requested default
+  EXPECT_EQ(static_cast<int16_t>(motor->read2Byte(goal_current_addr)), lowered_limit);
+}
+
 }  // namespace dynamixel_ros_control::test
 
 int main(int argc, char** argv)

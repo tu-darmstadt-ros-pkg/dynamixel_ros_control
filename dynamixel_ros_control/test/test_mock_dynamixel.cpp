@@ -317,6 +317,47 @@ TEST_F(MockDynamixelTest, CurrentModeBasic)
   EXPECT_GT(std::abs(velocity), 0.0);
 }
 
+// Firmware clamps Goal Current in magnitude to the Current Limit register. A goal beyond the
+// limit must read back clamped, not as written — this is the behaviour resetGoalStateAndVerify
+// relies on (read-back current goal <= requested goal is accepted, not treated as a mismatch).
+TEST_F(MockDynamixelTest, GoalCurrentClampedToCurrentLimit)
+{
+  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
+  auto motor = MockDynamixelManager::instance().getMotor(1);
+  ASSERT_NE(motor, nullptr);
+
+  const uint16_t current_limit_addr = motor->getAddress("current_limit");
+  const uint16_t goal_current_addr = motor->getAddress("goal_current");
+  ASSERT_NE(current_limit_addr, 0);
+  ASSERT_NE(goal_current_addr, 0);
+
+  // Enforce a limit of 20000 ticks.
+  motor->write2Byte(current_limit_addr, 20000);
+
+  // Direct write above the limit clamps down.
+  motor->write2Byte(goal_current_addr, 22740);
+  EXPECT_EQ(static_cast<int16_t>(motor->read2Byte(goal_current_addr)), 20000);
+
+  // A goal within the limit is written through unchanged.
+  motor->write2Byte(goal_current_addr, 15000);
+  EXPECT_EQ(static_cast<int16_t>(motor->read2Byte(goal_current_addr)), 15000);
+
+  // Negative goal is clamped by magnitude.
+  motor->write2Byte(goal_current_addr, static_cast<uint16_t>(static_cast<int16_t>(-22740)));
+  EXPECT_EQ(static_cast<int16_t>(motor->read2Byte(goal_current_addr)), -20000);
+
+  // Sync write (byte-wise path) is clamped too.
+  DynamixelDriver driver;
+  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
+  auto sync_write = driver.setSyncWrite(goal_current_addr, 2);
+  ASSERT_NE(sync_write, nullptr);
+  uint16_t over_limit = 21000;
+  auto* bytes = reinterpret_cast<uint8_t*>(&over_limit);
+  sync_write->addParam(1, bytes);
+  EXPECT_EQ(sync_write->txPacket(), COMM_SUCCESS);
+  EXPECT_EQ(static_cast<int16_t>(motor->read2Byte(goal_current_addr)), 20000);
+}
+
 // ============================================================================
 // Sync Read/Write Tests
 // ============================================================================

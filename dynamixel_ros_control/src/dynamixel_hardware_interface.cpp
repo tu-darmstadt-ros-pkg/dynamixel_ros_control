@@ -1210,11 +1210,21 @@ bool DynamixelHardwareInterface::resetGoalStateAndVerify(const std::vector<std::
         return false;
       }
       const auto& interface_value = joint.read_goal_values_.at(interface_name);
-      if (std::abs(interface_value - joint.getActuatorState().goal[interface_name]) > 1e-2) {
+      const double target_value = joint.getActuatorState().goal[interface_name];
+      bool mismatch;
+      if (interface_name == hardware_interface::HW_IF_CURRENT || interface_name == hardware_interface::HW_IF_EFFORT) {
+        // Firmware may silently clamp the goal current below the requested value (e.g. PH54: the
+        // enforced goal-current ceiling can be lower than the current_limit register that seeds
+        // the default goal, and sync writes carry no status reply). A read-back smaller in
+        // magnitude than the request is a valid clamp, not a failed write.
+        mismatch = std::abs(interface_value) > std::abs(target_value) + 1e-2;
+      } else {
+        mismatch = std::abs(interface_value - target_value) > 1e-2;
+      }
+      if (mismatch) {
         DXL_LOG_ERROR("[resetGoalStateAndVerify] Joint '"
                       << name << "' goal of interface " << interface_name << " does not match read goal value. "
-                      << "(Target Goal Value: " << joint.getActuatorState().goal[interface_name]
-                      << ", Read Goal Value: " << interface_value);
+                      << "(Target Goal Value: " << target_value << ", Read Goal Value: " << interface_value);
         return false;
       }
     }
