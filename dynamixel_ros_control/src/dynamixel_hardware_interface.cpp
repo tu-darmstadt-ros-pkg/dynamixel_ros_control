@@ -650,7 +650,10 @@ hardware_interface::return_type DynamixelHardwareInterface::read(const rclcpp::T
   }
 
   for (auto& [name, joint] : joints_) {
-    if (joint.state_transmission) {
+    // Only propagate state transmissions on a successful bus read. Frozen values carry no
+    // new information, and transmissions that detect actuator position resets (e.g. 2pi
+    // jump detection) rely on being called only for valid, temporally adjacent measurements.
+    if (read_ok_this_cycle && joint.state_transmission) {
       joint.state_transmission->actuator_to_joint();
     }
 
