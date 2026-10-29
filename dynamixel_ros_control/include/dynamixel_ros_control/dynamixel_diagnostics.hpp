@@ -98,6 +98,8 @@ private:
 
   std::shared_ptr<realtime_tools::RealtimePublisher<diagnostic_msgs::msg::DiagnosticArray>> rt_manifest_pub_;
   std::shared_ptr<realtime_tools::RealtimePublisher<diagnostic_msgs::msg::DiagnosticArray>> rt_health_pub_;
+  diagnostic_msgs::msg::DiagnosticArray manifest_msg_;
+  diagnostic_msgs::msg::DiagnosticArray health_msg_;
 
   std::mutex snapshot_mutex_;
   HealthSnapshot snapshot_;

@@ -10,10 +10,10 @@
         type: velocity_to_position_command_controller/VelocityToPositionCommandController
 
       velocity_controller:
-        type: velocity_controllers/JointGroupVelocityController
+        type: forward_command_controller/ForwardCommandController
 
       position_controller:
-        type: position_controllers/JointGroupPositionController
+        type: forward_command_controller/ForwardCommandController
 
       trajectory_controller:
         type: joint_trajectory_controller/JointTrajectoryController
@@ -38,11 +38,13 @@
 
   velocity_controller:
     ros__parameters:
+      interface_name: velocity
       joints:
         - joint_1
 
   position_controller:
     ros__parameters:
+      interface_name: position
       joints:
         - joint_1
 

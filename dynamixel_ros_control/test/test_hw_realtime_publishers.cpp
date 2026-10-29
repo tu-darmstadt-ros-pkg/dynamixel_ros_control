@@ -86,7 +86,7 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
       if (last_goal && last_write && last_read) {
         // goal and write are published from the same write() cycle and therefore share a
         // header.stamp; require equality so we never pair a goal with a write from a
-        // different cycle (e.g. when one publisher's trylock() failed once).
+        // different cycle (e.g. when one publisher's try_publish() dropped a message once).
         const bool same_write_cycle = last_goal->header.stamp == last_write->header.stamp;
         bool all_match = same_write_cycle;
         for (const auto& j : joints) {

@@ -52,9 +52,15 @@ public:
                     const std::vector<std::string>& joint_names);
 
 private:
-  std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> goal_;
-  std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> read_;
-  std::shared_ptr<realtime_tools::RealtimePublisher<sensor_msgs::msg::JointState>> write_;
+  struct Publisher
+  {
+    realtime_tools::RealtimePublisherSharedPtr<sensor_msgs::msg::JointState> publisher;
+    sensor_msgs::msg::JointState msg;
+  };
+
+  std::unique_ptr<Publisher> goal_;
+  std::unique_ptr<Publisher> read_;
+  std::unique_ptr<Publisher> write_;
 };
 
 }  // namespace dynamixel_ros_control

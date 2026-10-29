@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.16)
 project(dynamixel_ros_control_msgs)
 
 find_package(ament_cmake REQUIRED)

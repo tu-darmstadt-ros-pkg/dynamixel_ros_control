@@ -85,11 +85,7 @@ DynamixelDiagnostics::DynamixelDiagnostics(rclcpp::Node::SharedPtr node, std::st
 
 void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
 {
-  if (!rt_manifest_pub_->trylock()) {
-    DXL_LOG_WARN("Manifest publisher busy; skipping publish.");
-    return;
-  }
-  auto& msg = rt_manifest_pub_->msg_;
+  auto& msg = manifest_msg_;
   msg.header.stamp = stamp;
   msg.status.clear();
 
@@ -154,7 +150,9 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
     msg.status.push_back(js);
   }
 
-  rt_manifest_pub_->unlockAndPublish();
+  if (!rt_manifest_pub_->try_publish(msg)) {
+    DXL_LOG_WARN("Manifest publisher busy; skipping publish.");
+  }
 }
 
 void DynamixelDiagnostics::startHealthTimer()
@@ -214,10 +212,7 @@ void DynamixelDiagnostics::publishHealth()
     snap = snapshot_;
   }
 
-  if (!rt_health_pub_->trylock()) {
-    return;
-  }
-  auto& msg = rt_health_pub_->msg_;
+  auto& msg = health_msg_;
   msg.header.stamp = snap.stamp;
   msg.status.clear();
 
@@ -274,7 +269,7 @@ void DynamixelDiagnostics::publishHealth()
     msg.status.push_back(s);
   }
 
-  rt_health_pub_->unlockAndPublish();
+  rt_health_pub_->try_publish(msg);
 }
 
 }  // namespace dynamixel_ros_control

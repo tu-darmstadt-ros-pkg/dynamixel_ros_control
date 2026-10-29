@@ -5,7 +5,7 @@
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
 
 #include <dynamixel_ros_control/common.hpp>
-#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <ament_index_cpp/get_package_share_path.hpp>
 #include <hardware_interface/types/hardware_interface_type_values.hpp>
 #include <yaml-cpp/yaml.h>
 
@@ -24,7 +24,7 @@ bool DynamixelDriver::init(const std::string& port_name, const int baud_rate, bo
   baud_rate_ = baud_rate;
 
   // Get package path
-  package_path_ = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
+  package_path_ = ament_index_cpp::get_package_share_path("dynamixel_ros_control").string();
   if (package_path_.empty()) {
     DXL_LOG_FATAL("Could not find own package path.");
     return false;

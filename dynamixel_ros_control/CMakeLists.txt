@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.8)
+cmake_minimum_required(VERSION 3.16)
 project(dynamixel_ros_control)
 
 # Default to C++17
@@ -64,27 +64,26 @@ include_directories(include)
 
 add_library(${PROJECT_NAME} SHARED ${SOURCES} ${HEADERS})
 target_link_libraries(${PROJECT_NAME} PUBLIC yaml-cpp)
-ament_target_dependencies(
+target_link_libraries(
   ${PROJECT_NAME}
-  PUBLIC
-  rclcpp
-  rclcpp_lifecycle
-  lifecycle_msgs
-  hardware_interface
-  pluginlib
-  dynamixel_sdk
-  yaml-cpp
-  diagnostic_msgs
-  sensor_msgs
-  std_msgs
-  std_srvs
-  ament_index_cpp
-  transmission_interface
-  hector_transmission_interface
-  hector_transmission_interface_msgs
-  controller_orchestrator
-  realtime_tools
-  dynamixel_ros_control_msgs)
+  PUBLIC rclcpp::rclcpp
+         rclcpp_lifecycle::rclcpp_lifecycle
+         lifecycle_msgs::lifecycle_msgs
+         hardware_interface::hardware_interface
+         pluginlib::pluginlib
+         dynamixel_sdk::dynamixel_sdk
+         yaml-cpp::yaml-cpp
+         diagnostic_msgs::diagnostic_msgs
+         sensor_msgs::sensor_msgs
+         std_msgs::std_msgs
+         std_srvs::std_srvs
+         ament_index_cpp::ament_index_cpp
+         transmission_interface::transmission_interface
+         hector_transmission_interface::hector_transmission_interface
+         hector_transmission_interface_msgs::hector_transmission_interface_msgs
+         controller_orchestrator::controller_orchestrator
+         realtime_tools::realtime_tools
+         dynamixel_ros_control_msgs::dynamixel_ros_control_msgs)
 
 pluginlib_export_plugin_description_file(hardware_interface
                                          dynamixel_ros_control.xml)
@@ -107,14 +106,15 @@ if(BUILD_TESTING)
     set(_dxl_sanitizer_timeout_factor 10)
   endif()
 
-  # Register a gtest with the project library linked, optional ament
-  # dependencies (variadic), and a TIMEOUT scaled by the sanitizer factor.
+  # Register a gtest with the project library linked, optional package
+  # dependencies (variadic, linked as <pkg>::<pkg>), and a TIMEOUT scaled by the
+  # sanitizer factor.
   function(dxl_add_gtest test_name source_file base_timeout)
     ament_add_gtest(${test_name} ${source_file})
     target_link_libraries(${test_name} ${PROJECT_NAME})
-    if(NOT "${ARGN}" STREQUAL "")
-      ament_target_dependencies(${test_name} ${ARGN})
-    endif()
+    foreach(dep IN LISTS ARGN)
+      target_link_libraries(${test_name} ${dep}::${dep})
+    endforeach()
     math(EXPR scaled_timeout
          "${base_timeout} * ${_dxl_sanitizer_timeout_factor}")
     set_tests_properties(${test_name} PROPERTIES TIMEOUT ${scaled_timeout})

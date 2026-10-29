@@ -12,7 +12,7 @@
 #include <cmath>
 #include <algorithm>
 #include <yaml-cpp/yaml.h>
-#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <ament_index_cpp/get_package_share_path.hpp>
 
 namespace dynamixel_ros_control {
 
@@ -128,7 +128,7 @@ public:
 
   void loadModelSpecs(uint16_t model_number)
   {
-    std::string package_path = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
+    std::string package_path = ament_index_cpp::get_package_share_path("dynamixel_ros_control").string();
     std::string list_path = package_path + "/devices/model_list.yaml";
 
     try {

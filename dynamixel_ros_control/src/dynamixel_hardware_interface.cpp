@@ -4,7 +4,7 @@
 #include <algorithm>
 #include <cmath>
 
-#include <ament_index_cpp/get_package_share_directory.hpp>
+#include <ament_index_cpp/get_package_share_path.hpp>
 #include <boost/algorithm/string/classification.hpp>
 #include <boost/algorithm/string/split.hpp>
 #include <dynamixel_ros_control/dynamixel_hardware_interface.hpp>
@@ -44,7 +44,7 @@ bool loadInterfaceRegisterNameTranslation(std::unordered_map<std::string, std::s
                                           std::unordered_map<std::string, std::string>& command_interface_to_register,
                                           std::unordered_map<std::string, std::string>& interface_to_register_limits)
 {
-  std::string package_path_ = ament_index_cpp::get_package_share_directory("dynamixel_ros_control");
+  std::string package_path_ = ament_index_cpp::get_package_share_path("dynamixel_ros_control").string();
   const std::string path = package_path_ + "/devices/interface_to_register_names.yaml";
   YAML::Node config;
   try {

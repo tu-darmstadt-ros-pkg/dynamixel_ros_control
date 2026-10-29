@@ -9,23 +9,23 @@
 
       # Flipper Controllers
       flipper_position_controller:
-        type: position_controllers/JointGroupPositionController
+        type: forward_command_controller/ForwardCommandController
       flipper_velocity_controller:
-        type: velocity_controllers/JointGroupVelocityController
+        type: forward_command_controller/ForwardCommandController
       flipper_trajectory_controller:
         type: joint_trajectory_controller/JointTrajectoryController
 
       # Arm Controllers
       arm_position_controller:
-        type: position_controllers/JointGroupPositionController
+        type: forward_command_controller/ForwardCommandController
       arm_velocity_controller:
-        type: velocity_controllers/JointGroupVelocityController
+        type: forward_command_controller/ForwardCommandController
       arm_trajectory_controller:
         type: joint_trajectory_controller/JointTrajectoryController
 
       # Gripper Controllers
       gripper_position_controller:
-        type: position_controllers/JointGroupPositionController
+        type: forward_command_controller/ForwardCommandController
       gripper_trajectory_controller:
         type: joint_trajectory_controller/JointTrajectoryController
 
@@ -36,6 +36,7 @@
   # --- Flipper Configurations ---
   flipper_position_controller:
     ros__parameters:
+      interface_name: position
       joints:
         - flipper_fl_joint
         - flipper_fr_joint
@@ -44,6 +45,7 @@
 
   flipper_velocity_controller:
     ros__parameters:
+      interface_name: velocity
       joints:
         - flipper_fl_joint
         - flipper_fr_joint
@@ -66,6 +68,7 @@
   # --- Arm Configurations ---
   arm_position_controller:
     ros__parameters:
+      interface_name: position
       joints:
         - arm_joint_1
         - arm_joint_2
@@ -77,6 +80,7 @@
 
   arm_velocity_controller:
     ros__parameters:
+      interface_name: velocity
       joints:
         - arm_joint_1
         - arm_joint_2
@@ -105,6 +109,7 @@
   # --- Gripper Configurations ---
   gripper_position_controller:
     ros__parameters:
+      interface_name: position
       joints:
         - gripper_servo_joint
 
