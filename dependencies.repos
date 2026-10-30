@@ -6,4 +6,4 @@ repositories:
   hector_controller_spawner:
     type: git
     url: https://github.com/tu-darmstadt-ros-pkg/hector_controller_spawner.git
-    version: jazzy
+    version: lyrical
