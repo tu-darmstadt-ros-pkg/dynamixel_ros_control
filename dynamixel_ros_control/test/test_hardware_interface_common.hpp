@@ -146,6 +146,19 @@ protected:
     controller_manager_ = std::make_shared<controller_manager::ControllerManager>(cm_executor_, urdf, true,
                                                                                   "controller_manager", "", cm_options);
 
+    // The controller manager does not forward its own --params-file to controller nodes, so point
+    // every configured controller at the YAML via <controller>.params_file.
+    const std::string type_suffix = ".type";
+    for (const auto& name : controller_manager_->list_parameters({}, 0).names) {
+      if (name.size() > type_suffix.size() &&
+          name.compare(name.size() - type_suffix.size(), type_suffix.size(), type_suffix) == 0) {
+        const std::string controller = name.substr(0, name.size() - type_suffix.size());
+        if (controller.find('.') == std::string::npos) {
+          controller_manager_->declare_parameter(controller + ".params_file", controllers_yaml_);
+        }
+      }
+    }
+
     cm_executor_->add_node(controller_manager_);
 
     // Setup update loop
