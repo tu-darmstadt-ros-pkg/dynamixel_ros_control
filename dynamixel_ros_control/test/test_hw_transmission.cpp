@@ -1,7 +1,11 @@
 // Copyright (c) 2024 Team Hector, TU Darmstadt
 // SPDX-License-Identifier: BSD-3-Clause
 
-#include "test_hardware_interface_common.hpp"
+#include "direct_hardware_fixture.hpp"
+
+#include <cstdint>
+#include <limits>
+#include <optional>
 
 namespace dynamixel_ros_control::test {
 
@@ -20,12 +24,7 @@ TEST_F(HardwareInterfaceTest, Transmission_FlipperVelocityReduction)
   auto pub =
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_velocity_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // Record initial positions
   std::vector<uint8_t> flipper_ids = {FLIPPER_FL_ID, FLIPPER_FR_ID, FLIPPER_BL_ID, FLIPPER_BR_ID};
@@ -75,12 +74,7 @@ TEST_F(HardwareInterfaceTest, Transmission_FlipperPositionReduction)
   auto pub =
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // First send to position 0 and wait
   std_msgs::msg::Float64MultiArray cmd;
@@ -123,8 +117,8 @@ TEST_F(HardwareInterfaceTest, Transmission_FlipperPositionReduction)
 TEST_F(HardwareInterfaceTest, TransmissionOffset_AdjustFlipperOffset)
 {
   // Test that calling adjust_transmission_offsets service:
-  // 1. Deactivates active flipper controllers
-  // 2. Adjusts offset so position jumps to external measurement
+  // 1. Is refused while a controller commands the flippers, and leaves the controller running
+  // 2. Adjusts offset so position jumps to external measurement once it is stopped
   // 3. Position should not change during service call
 
   using AdjustOffsets = hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets;
@@ -135,12 +129,7 @@ TEST_F(HardwareInterfaceTest, TransmissionOffset_AdjustFlipperOffset)
   auto pub =
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // Move to initial position
   std_msgs::msg::Float64MultiArray cmd;
@@ -162,29 +151,24 @@ TEST_F(HardwareInterfaceTest, TransmissionOffset_AdjustFlipperOffset)
   ASSERT_TRUE(offset_client->wait_for_service(*executor_, 5s)) << "adjust_transmission_offsets service not available";
 
   auto request = std::make_shared<AdjustOffsets::Request>();
-  // Set external measurement - this is the "true" joint position from external sensor
+  // Set external measurement. This is the "true" joint position from external sensor
   request->external_joint_measurements.name = {"flipper_fl_joint", "flipper_fr_joint", "flipper_bl_joint",
                                                "flipper_br_joint"};
   double external_position = 1.5708;  // ~90 degrees
   request->external_joint_measurements.position = {external_position, external_position, external_position,
                                                    external_position};
 
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp = hector_testing_utils::call_service<AdjustOffsets>(offset_client->get(), request, *executor_, options);
+  auto resp = callService<AdjustOffsets>(offset_client, request, 10s);
+  ASSERT_NE(resp, nullptr) << "Service call failed";
+  EXPECT_FALSE(resp->success) << "Offset adjustment went through while a controller commands the flippers";
+  EXPECT_TRUE(waitForControllerState("flipper_position_controller", "active", 1s))
+      << "The offset service stopped the controller behind the controller manager's back";
 
+  // 4. Stopped, the adjustment goes through
+  ASSERT_TRUE(switch_controllers({}, {"flipper_position_controller"}));
+  resp = callService<AdjustOffsets>(offset_client, request, 10s);
   ASSERT_NE(resp, nullptr) << "Service call failed";
   EXPECT_TRUE(resp->success) << "Offset adjustment should succeed: " << resp->message;
-
-  // 4. Verify controller was deactivated during adjustment
-  // (The pre_callback deactivates controllers)
-  auto list_resp = list_controllers();
-  ASSERT_NE(list_resp, nullptr);
-  auto states = states_from_list(*list_resp);
-  // Controller should be inactive after offset adjustment (deactivated by pre_callback)
-  EXPECT_EQ(states["flipper_position_controller"], "inactive")
-      << "Controller should be deactivated after offset adjustment";
 
   // 5. Verify actuator positions didn't change (only offset changed)
   for (uint8_t id : flipper_ids) {
@@ -238,17 +222,14 @@ TEST_F(HardwareInterfaceTest, TransmissionOffset_JointPositionMatchesExternalMea
   ASSERT_TRUE(offset_client->wait_for_service(*executor_, 5s)) << "adjust_transmission_offsets service not available";
 
   auto request = std::make_shared<AdjustOffsets::Request>();
-  // Set external measurement - this is the "true" joint position from external sensor
+  // Set external measurement. This is the "true" joint position from external sensor
   std::vector<std::string> flipper_joints = {"flipper_fl_joint", "flipper_fr_joint", "flipper_bl_joint",
                                              "flipper_br_joint"};
   std::vector<double> external_positions = {0.7854, -0.5236, 1.0472, -0.3491};  // Different values for each
   request->external_joint_measurements.name = flipper_joints;
   request->external_joint_measurements.position = external_positions;
 
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp = hector_testing_utils::call_service<AdjustOffsets>(offset_client->get(), request, *executor_, options);
+  auto resp = callService<AdjustOffsets>(offset_client, request, 10s);
 
   ASSERT_NE(resp, nullptr) << "Service call failed";
   EXPECT_TRUE(resp->success) << "Offset adjustment should succeed: " << resp->message;
@@ -296,63 +277,228 @@ TEST_F(HardwareInterfaceTest, TransmissionOffset_JointPositionMatchesExternalMea
   }
 }
 
-TEST_F(HardwareInterfaceTest, TransmissionOffset_ResetToZero)
+// The flipper's state transmission absorbs 2pi jumps of the actuator so a lost multi-turn count
+// after a power cut does not move the joint. It must not absorb a real turn, and whatever it
+// decides, the command side has to agree with it. These tests share the gap setup: the flipper
+// interface is deactivated, something happens to the motor, it is reactivated.
+class FlipperGapTest : public HardwareInterfaceTest
 {
-  // Test that flipper transmission offsets can be reset by providing zero as external measurement
-  // while motors are at position zero
+protected:
+  const std::vector<std::string> flipper_joints = {"flipper_fl_joint", "flipper_fr_joint", "flipper_bl_joint",
+                                                   "flipper_br_joint"};  // the position controller's order
+  sensor_msgs::msg::JointState::SharedPtr latest_joint_state_;
+  std::mutex joint_state_mutex_;
+  rclcpp::Subscription<sensor_msgs::msg::JointState>::SharedPtr joint_state_sub_;
 
-  using AdjustOffsets = hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets;
-
-  // 1. First activate flipper controller and move to position zero
-  ASSERT_TRUE(loadAndActivateController("flipper_position_controller"));
-
-  auto pub =
-      tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_position_controller/commands", 10);
-
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
+  void startListening()
+  {
+    ASSERT_TRUE(loadAndActivateController("joint_state_broadcaster"));
+    joint_state_sub_ = tester_node_->create_subscription<sensor_msgs::msg::JointState>(
+        "/joint_states", 10, [this](sensor_msgs::msg::JointState::SharedPtr msg) {
+          std::lock_guard<std::mutex> lock(joint_state_mutex_);
+          latest_joint_state_ = msg;
+        });
   }
-  ASSERT_GT(pub->get_subscription_count(), 0);
 
-  // Move to position zero
-  std_msgs::msg::Float64MultiArray cmd;
-  cmd.data = {0.0, 0.0, 0.0, 0.0};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(2s);
+  /// The flipper joint positions from a joint_states message published after this call.
+  std::optional<std::vector<double>> freshFlipperPositions(std::chrono::seconds timeout = 5s)
+  {
+    {
+      std::lock_guard<std::mutex> lock(joint_state_mutex_);
+      latest_joint_state_.reset();
+    }
+    const auto deadline = std::chrono::steady_clock::now() + timeout;
+    while (std::chrono::steady_clock::now() < deadline) {
+      executor_->spin_some();
+      {
+        std::lock_guard<std::mutex> lock(joint_state_mutex_);
+        if (latest_joint_state_) {
+          std::vector<double> positions;
+          for (const auto& joint : flipper_joints) {
+            const auto it = std::find(latest_joint_state_->name.begin(), latest_joint_state_->name.end(), joint);
+            if (it == latest_joint_state_->name.end()) {
+              break;
+            }
+            positions.push_back(latest_joint_state_->position[std::distance(latest_joint_state_->name.begin(), it)]);
+          }
+          if (positions.size() == flipper_joints.size()) {
+            return positions;
+          }
+        }
+      }
+      std::this_thread::sleep_for(20ms);
+    }
+    return std::nullopt;
+  }
 
-  // 2. Set some non-zero offset first
-  auto offset_client =
-      tester_node_->create_test_client<AdjustOffsets>("/athena_flipper_interface_node/adjust_transmission_offsets");
-  ASSERT_TRUE(offset_client->wait_for_service(*executor_, 5s));
+  void deactivateFlippers()
+  {
+    ASSERT_TRUE(setHardwareComponentState("athena_flipper_interface",
+                                          lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE, "inactive"));
+    std::this_thread::sleep_for(300ms);
+  }
 
-  auto request = std::make_shared<AdjustOffsets::Request>();
-  request->external_joint_measurements.name = {"flipper_fl_joint", "flipper_fr_joint", "flipper_bl_joint",
-                                               "flipper_br_joint"};
-  request->external_joint_measurements.position = {1.0, 1.0, 1.0, 1.0};  // Set non-zero offset
+  void reactivateFlippers()
+  {
+    ASSERT_TRUE(setHardwareComponentState("athena_flipper_interface", lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE,
+                                          "active"));
+    ASSERT_TRUE(waitForHardwareInterfacesActive(10s));
+  }
 
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp = hector_testing_utils::call_service<AdjustOffsets>(offset_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  ASSERT_TRUE(resp->success) << "First offset adjustment should succeed";
+  /// Command every flipper to the position the joint state reports, as any teleop or controller
+  /// seeding from the state would, and return how far the FL actuator moved as a result.
+  double actuatorMoveOnHold(MockDynamixel& motor)
+  {
+    const auto held = freshFlipperPositions();
+    EXPECT_TRUE(held.has_value());
+    if (!held) {
+      return std::numeric_limits<double>::quiet_NaN();
+    }
+    const double before = motor.getCurrentPosition();
+    EXPECT_TRUE(loadAndActivateController("flipper_position_controller"));
+    auto pub =
+        tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_position_controller/commands", 10);
+    EXPECT_TRUE(waitForSubscribers(pub, 5s));
+    std_msgs::msg::Float64MultiArray cmd;
+    cmd.data = *held;
+    pub->publish(cmd);
+    std::this_thread::sleep_for(1500ms);
+    return motor.getCurrentPosition() - before;
+  }
+};
 
-  std::this_thread::sleep_for(300ms);
+// A flipper turned one actuator turn by hand (~180 degrees on the flipper, as for transport) while
+// the motor is powered but not driving is a move: the joint state must show it, and a hold command
+// built from that state must not move it.
+TEST_F(FlipperGapTest, HandTurnWhilePoweredIsReportedAndHoldDoesNotMove)
+{
+  startListening();
+  const auto before = freshFlipperPositions();
+  ASSERT_TRUE(before.has_value());
+  auto motor = MockDynamixelManager::instance().getMotor(FLIPPER_FL_ID);
+  ASSERT_NE(motor, nullptr);
 
-  // 3. Now reset to zero offset by providing zero external measurement
-  request->external_joint_measurements.position = {0.0, 0.0, 0.0, 0.0};
-  resp = hector_testing_utils::call_service<AdjustOffsets>(offset_client->get(), request, *executor_, options);
+  deactivateFlippers();
+  motor->powerCycle();  // the power cut turns torque off. The position, small so far, is unchanged by the wrap
+  motor->moveByHand(2.0 * M_PI);
+  reactivateFlippers();
 
-  ASSERT_NE(resp, nullptr) << "Service call failed";
-  EXPECT_TRUE(resp->success) << "Reset offset adjustment should succeed: " << resp->message;
+  const auto after = freshFlipperPositions();
+  ASSERT_TRUE(after.has_value());
+  // FL's reduction is -2: one actuator turn is -pi on the joint.
+  EXPECT_NEAR((*after)[0] - (*before)[0], -M_PI, 0.05)
+      << "The flipper was turned by hand while the interface was inactive, but the joint state does not "
+         "show the move: the jump detector took it for a power cycle.";
+
+  EXPECT_NEAR(actuatorMoveOnHold(*motor), 0.0, 0.1)
+      << "A hold-position command built from the joint state moved the actuator: state and command "
+         "transmissions disagree on the joint's offset.";
+}
+
+// A power cut while the actuator sits three turns out brings it back reporting its single-turn
+// absolute position. That is a lost count, not a move: the joint state must not change.
+TEST_F(FlipperGapTest, PowerCutThreeTurnsOutKeepsTheJointWhereItWas)
+{
+  startListening();
+  auto motor = MockDynamixelManager::instance().getMotor(FLIPPER_FL_ID);
+  ASSERT_NE(motor, nullptr);
+
+  // Get three turns out the honest way: a hand move, powered, that the detector reports as one.
+  deactivateFlippers();
+  motor->powerCycle();
+  motor->moveByHand(3 * 2.0 * M_PI + 0.3);
+  reactivateFlippers();
+  const auto before = freshFlipperPositions();
+  ASSERT_TRUE(before.has_value());
+  ASSERT_GT(std::abs(motor->getCurrentPosition()), 2 * M_PI) << "Test premise: the actuator is several turns out";
+
+  deactivateFlippers();
+  motor->powerCycle();
+  ASSERT_LT(std::abs(motor->getCurrentPosition()), M_PI) << "Test premise: the mock came back within one turn";
+  reactivateFlippers();
+
+  const auto after = freshFlipperPositions();
+  ASSERT_TRUE(after.has_value());
+  EXPECT_NEAR((*after)[0], (*before)[0], 0.05)
+      << "The actuator lost its turn count in a power cut and the joint state followed it instead of "
+         "being corrected.";
+
+  EXPECT_NEAR(actuatorMoveOnHold(*motor), 0.0, 0.1)
+      << "A hold-position command built from the joint state moved the actuator after the correction.";
+}
+
+// Current is a motor quantity, so it passes a transmission unchanged whatever the reduction. A current
+// limit lost in SimpleTransmission left arm_joint_1 and arm_joint_7 on athena at their full current.
+class CurrentPassThroughTest : public DirectHardwareTest
+{
+protected:
+  /// max_current in place of current, under a 5 A limit on arm_joint_1 and flipper_fl_joint, since a
+  /// fresh mock holds 0 in its limits
+  static std::string capped(std::string urdf)
+  {
+    const std::string current = "<command_interface name=\"current\"/>";
+    for (auto pos = urdf.find(current); pos != std::string::npos; pos = urdf.find(current, pos)) {
+      urdf.replace(pos, current.size(), "<command_interface name=\"max_current\"/>");
+    }
+    for (const std::string id : {"<param name=\"id\">11</param>", "<param name=\"id\">1</param>"}) {
+      urdf.insert(urdf.find(id) + id.size(), "<param name=\"registers.current_limit\">5</param>");
+    }
+    return urdf;
+  }
+
+  void expectCurrentPassesUnchanged(const std::string& joint, const uint8_t id)
+  {
+    const auto motor = MockDynamixelManager::instance().getMotor(id);
+    ASSERT_NE(motor, nullptr);
+    ASSERT_EQ(hardware_->perform_command_mode_switch({joint + "/position", joint + "/max_current"}, {}),
+              hardware_interface::return_type::OK);
+    setCommand(joint + "/position", states_.at(joint + "/position")->get_optional().value());
+    setCommand(joint + "/max_current", 0.5);
+    cycles(3);
+    EXPECT_EQ(static_cast<int16_t>(motor->read2Byte(motor->getAddress("goal_current"))), 500)
+        << "the claimed current did not reach the servo unchanged";
+    // The read of the cycle sees it before the mock's physics overwrites it
+    motor->write2Byte(motor->getAddress("present_current"), static_cast<uint16_t>(-300));
+    ASSERT_EQ(cycle(), hardware_interface::return_type::OK);
+    const auto current = states_.at(joint + "/current")->get_optional();
+    ASSERT_TRUE(current.has_value());
+    EXPECT_NEAR(*current, -0.3, 1e-9) << "the present current did not reach the joint unchanged";
+  }
+};
+
+TEST_F(CurrentPassThroughTest, ThroughASimpleTransmission)
+{
+  // Effort is a transmission interface, current is not, and both read the same register
+  startComponent("athena_arm_interface", [](std::string urdf) {
+    const std::string effort = "<state_interface name=\"effort\"/>";
+    for (auto pos = urdf.find(effort); pos != std::string::npos; pos = urdf.find(effort, pos)) {
+      urdf.replace(pos, effort.size(), "<state_interface name=\"current\"/>");
+    }
+    return capped(urdf);
+  });
+  expectCurrentPassesUnchanged("arm_joint_1", ARM_JOINT_1_ID);
+}
+
+// Reduction -2, so scaling or a sign flip shows
+TEST_F(CurrentPassThroughTest, ThroughAnAdjustableOffsetTransmission)
+{
+  startComponent("athena_flipper_interface", capped);
+  expectCurrentPassesUnchanged("flipper_fl_joint", FLIPPER_FL_ID);
+}
+
+// Unclaimed, the current goal is the limit the plugin reset it to, not the joint side's zero
+TEST_F(CurrentPassThroughTest, AnUnclaimedCurrentKeepsItsLimitThroughASimpleTransmission)
+{
+  startComponent("athena_arm_interface", [](std::string urdf) {
+    const std::string anchor = "<param name=\"id\">11</param>";
+    urdf.insert(urdf.find(anchor) + anchor.size(), "<param name=\"registers.current_limit\">5</param>");
+    return urdf;
+  });
+  const auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  ASSERT_NE(motor, nullptr);
+  startInterface("arm_joint_1/position", states_.at("arm_joint_1/position")->get_optional().value());
+  cycles(3);
+  EXPECT_EQ(static_cast<int16_t>(motor->read2Byte(motor->getAddress("goal_current"))), 5000);
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

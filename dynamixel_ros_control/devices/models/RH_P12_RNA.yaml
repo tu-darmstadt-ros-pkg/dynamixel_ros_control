@@ -9,6 +9,9 @@ unit_conversions: # dxl value to unit ratio
   A: 0.00402
   ms_20: 20.0
 
+# Operating modes in which Goal Current limits the current (e-Manual)
+current_cap_modes: [current_based_position]
+
 indirect_addresses:
 # address start | data start  | count | memory
   - 168          | 634         | 128   | EEPROM

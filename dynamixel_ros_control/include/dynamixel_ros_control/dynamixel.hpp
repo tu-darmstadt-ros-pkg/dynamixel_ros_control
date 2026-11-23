@@ -1,11 +1,24 @@
 #ifndef DYNAMIXEL_ROS_CONTROL_DYNAMIXEL_H
 #define DYNAMIXEL_ROS_CONTROL_DYNAMIXEL_H
 
+#include <optional>
+
 #include <rclcpp/rclcpp.hpp>
 #include <dynamixel_ros_control/control_table.hpp>
 #include <dynamixel_ros_control/dynamixel_driver.hpp>
 
 namespace dynamixel_ros_control {
+
+/// @brief Convert a physical value to the nearest raw tick, or nothing if it has no raw equivalent.
+///
+/// Empty for a non-finite value and for one whose tick count leaves the int32 the wire carries,
+/// where a number would substitute a real setpoint for an impossible one. Silent, because the
+/// cyclic write calls it, so the caller reports.
+[[nodiscard]] std::optional<int32_t> unitToDxlValue(double unit_value, double ratio);
+
+/// @brief Decode a hardware-error-status bitfield (Dynamixel error byte) into a comma-separated
+/// human-readable string. Returns "ok" when no bits are set.
+[[nodiscard]] std::string hardwareErrorToString(int32_t error_status);
 
 /// @brief Dynamixel operating modes (protocol 2.0).
 enum ControlMode
@@ -18,6 +31,11 @@ enum ControlMode
   PWM = 16,
   UNDEFINED = 255
 };
+
+[[nodiscard]] inline bool isPositionMode(const ControlMode mode)
+{
+  return mode == POSITION || mode == EXTENDED_POSITION || mode == CURRENT_BASED_POSITION;
+}
 
 /// @brief Hardware error status flags (can be combined).
 enum HardwareErrorStatus
@@ -37,6 +55,9 @@ constexpr char DXL_REGISTER_CMD_POSITION[] = "goal_position";
 constexpr char DXL_REGISTER_CMD_VELOCITY[] = "goal_velocity";
 constexpr char DXL_REGISTER_CMD_EFFORT[] = "goal_current";  // All models use current (A), never real torque
 constexpr char DXL_REGISTER_CONTROL_MODE[] = "operating_mode";
+constexpr char DXL_REGISTER_HOMING_OFFSET[] = "homing_offset";
+constexpr char DXL_REGISTER_DRIVE_MODE[] = "drive_mode";
+constexpr int32_t DXL_DRIVE_MODE_TIME_BASED_PROFILE = 0x04;
 
 constexpr char DXL_REGISTER_POSITION[] = "present_position";
 constexpr char DXL_REGISTER_VELOCITY[] = "present_velocity";
@@ -54,6 +75,19 @@ constexpr char DXL_REGISTER_BUS_WATCHDOG[] = "bus_watchdog";
 // model YAMLs). Values >127 are reserved/invalid per the Dynamixel control table spec.
 constexpr int DXL_BUS_WATCHDOG_MIN_TICKS = 1;
 constexpr int DXL_BUS_WATCHDOG_MAX_TICKS = 127;
+
+/**
+ * @brief Outcome of a bus watchdog operation.
+ *
+ * UNSUPPORTED is distinct from FAILED on purpose: a model without the register is a valid
+ * configuration (mixed buses), so callers must not treat it as an error.
+ */
+enum class WatchdogResult : uint8_t
+{
+  SUCCESS,
+  UNSUPPORTED,
+  FAILED
+};
 
 /// @brief Convert string to ControlMode enum.
 ControlMode stringToControlMode(const std::string& str);
@@ -73,11 +107,20 @@ class Dynamixel
 public:
   Dynamixel(uint8_t id, DynamixelDriver& driver);
 
+  [[nodiscard]] const rclcpp::Logger& dxlLogger() const
+  {
+    return driver_.dxlLogger();
+  }
+
   /// @brief Ping the motor and load its control table based on model number.
   [[nodiscard]] bool connect();
 
-  /// @brief Check if the motor responds to ping.
-  [[nodiscard]] bool ping() const;
+  /// @brief Whether connect() has loaded this motor's control table. Register access on a motor
+  /// that has not fails rather than reaching for a table that is not there.
+  [[nodiscard]] bool isConnected() const
+  {
+    return control_table_ != nullptr;
+  }
 
   /// @brief Reboot the motor (clears hardware errors, resets torque to off).
   [[nodiscard]] bool reboot() const;
@@ -94,38 +137,38 @@ public:
   [[nodiscard]] bool readRegister(const std::string& register_name, int32_t& value_out) const;
   [[nodiscard]] bool readRegister(uint16_t address, uint8_t data_length, int32_t& value_out) const;
 
-  /// @brief Read register first; only write if value differs. Reduces bus traffic.
-  [[nodiscard]] bool readWriteRegister(uint16_t address, uint8_t data_length, int32_t value) const;
+  /// @brief Clear a latched trip by writing 0, which also restores goal-register write access.
+  ///
+  /// The one addressed watchdog operation, for connect(): it runs before any sync group exists, and
+  /// a latch left in place would silently swallow every initial register write. Arming belongs to
+  /// BusWatchdog, which does it for the whole bus in one transaction per step.
+  /// @param was_tripped Optional out: true if the register read back negative (latched) before clearing.
+  [[nodiscard]] WatchdogResult clearBusWatchdog(bool* was_tripped = nullptr) const;
 
-  /// @brief Template version of readWriteRegister for named registers.
-  template <typename T>
-  [[nodiscard]] bool readWriteRegister(std::string register_name, T value) const
-  {
-    T register_value;
-    if (!readRegister(register_name, register_value)) {
-      return false;
-    }
-    if (register_value != value) {
-      if (!writeRegister(register_name, value)) {
-        return false;
-      }
-    }
-    return true;
-  }
-
-  /// @brief Write control mode register (optionally disabling torque first).
-  [[nodiscard]] bool writeControlMode(ControlMode mode, bool disable_torque = false) const;
+  /// @brief Convert a configured string value ("true", "3.14", ...) to the raw register value
+  /// using the register's unit (bool or scaled double).
+  [[nodiscard]] bool stringToDxlValue(const std::string& register_name, const std::string& value,
+                                      int32_t& dxl_value_out) const;
 
   // Unit conversion
   [[nodiscard]] double dxlValueToUnit(const std::string& register_name, int32_t value) const;
-  [[nodiscard]] bool dxlValueToBool(const std::string& register_name, int32_t value) const;
-  [[nodiscard]] int32_t unitToDxlValue(const std::string& register_name, double unit_value) const;
-  [[nodiscard]] int32_t boolToDxlValue(const std::string& register_name, bool b) const;
+  /// @brief Read a raw value as a bool, or nothing if the register is not of type bool. Empty
+  /// rather than false, which is a legitimate reading and would hide the mistake.
+  [[nodiscard]] std::optional<bool> dxlValueToBool(const std::string& register_name, int32_t value) const;
+  [[nodiscard]] std::optional<int32_t> unitToDxlValue(const std::string& register_name, double unit_value) const;
+  /// @brief Convert a bool to the raw register value. Fails (without touching dxl_value_out)
+  /// if the register is unknown or not of type bool.
+  [[nodiscard]] bool boolToDxlValue(const std::string& register_name, bool value, int32_t& dxl_value_out) const;
 
   /// @brief Check if a register exists in this motor's control table.
   [[nodiscard]] bool registerAvailable(const std::string& register_name) const;
+  /// @brief Whether Goal Current limits the current in @p mode, per the model's current_cap_modes
+  [[nodiscard]] bool limitsCurrentIn(ControlMode mode) const;
 
-  /// @brief Get control table item for a register.
+  /// @brief Get control table item for a register, or nullptr if this model has no such register.
+  [[nodiscard]] const ControlTableItem* findItem(const std::string& name) const;
+
+  /// @brief Get control table item for a register. Throws if this model has no such register.
   [[nodiscard]] const ControlTableItem& getItem(const std::string& name) const;
 
   [[nodiscard]] uint8_t getId() const;
@@ -141,23 +184,29 @@ public:
   /// false for P-/PRO-series (pointers live in EEPROM and survive a reboot).
   [[nodiscard]] bool indirectAddressesInRam() const;
 
-  /// @brief Get human-readable description of current hardware error.
-  [[nodiscard]] std::string getHardwareErrorStatusString() const;
-
   int32_t hardware_error_status{OK};  ///< Last read hardware error status.
+  int32_t bus_watchdog_value{0};      ///< Last read bus watchdog register value (-1 = tripped/latched).
 
   /// @brief Set initial register values to write on connect.
   void setInitialRegisterValues(const std::unordered_map<std::string, std::string>& values);
-
-  /// @brief Get configured initial register values.
-  const std::unordered_map<std::string, std::string>& getInitialRegisterValues() const;
 
   /// @brief Write all configured initial register values to hardware.
   bool writeInitialValues();
 
 private:
-  void indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address,
-                                uint16_t& indirect_data_address) const;
+  /// @brief Retry an EEPROM write that a torqued motor refused, with torque off and restored.
+  ///
+  /// The goal is re-anchored on the present position before re-energising: the registers worth
+  /// retrying this way (homing_offset, drive_mode) are exactly the ones that change what the goal
+  /// already in the register means.
+  /// @return false if the register is not EEPROM, the motor was not energised, or the retry failed -
+  ///         i.e. whenever the original failure still stands.
+  [[nodiscard]] bool retryEepromWriteDeEnergised(const std::string& register_name, int32_t target_value) const;
+
+  /// @brief Map an indirect slot index to its pointer/data addresses.
+  /// @return false if the index exceeds the motor's indirect address capacity.
+  [[nodiscard]] bool indirectIndexToAddresses(unsigned int indirect_address_index, uint16_t& indirect_address,
+                                              uint16_t& indirect_data_address) const;
 
   DynamixelDriver& driver_;
   ControlTable* control_table_{nullptr};

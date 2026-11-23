@@ -19,12 +19,7 @@ TEST_F(HardwareInterfaceTest, CommunicationError_TemporaryErrorRecovery)
 
   auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // Move to initial position
   std_msgs::msg::Float64MultiArray cmd;
@@ -38,113 +33,157 @@ TEST_F(HardwareInterfaceTest, CommunicationError_TemporaryErrorRecovery)
   ASSERT_NE(motor1, nullptr);
   ASSERT_NE(motor2, nullptr);
 
-  motor1->setCommunicationError(true);
-  motor2->setCommunicationError(true);
+  motor1->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DISCONNECTED);
+  motor2->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DISCONNECTED);
 
-  // Wait a bit with errors
-  std::this_thread::sleep_for(500ms);
+  // Brief glitch: stays below the consecutive-error threshold (25 cycles @ 50 Hz = 500 ms),
+  // so the interface must ride it out without erroring.
+  std::this_thread::sleep_for(200ms);
 
-  // 3. Clear errors - simulate recovery
-  motor1->setCommunicationError(false);
-  motor2->setCommunicationError(false);
+  // 3. Clear errors to simulate recovery
+  motor1->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);
+  motor2->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);
 
   // 4. Wait for recovery and then send command
   std::this_thread::sleep_for(500ms);
 
-  // Record positions before new command
-  std::vector<double> positions_before;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
+  // 5. Every joint reaches a new target, so the system recovered
+  EXPECT_TRUE(armReaches(pub, 0.5)) << "System should recover from temporary communication errors";
+}
+
+TEST_F(HardwareInterfaceTest, PartialCommLoss_HoldsReachableMotorsAndStopsDeadOne)
+{
+  // When one motor stops answering, the cyclic Protocol 2.0 sync read yields nothing for ANY
+  // motor, so a whole-group goal reset cannot secure the arm. The reachable motors would keep
+  // driving toward their last goal. on_error therefore probes each motor individually: reachable
+  // motors are held (torque restored after a torque-safe mode switch), the unreachable motor gets
+  // a statusless torque-off.
+  std::this_thread::sleep_for(300ms);  // let activation settle. All motors start torqued
+
+  // Sanity: everything starts torqued.
+  for (uint8_t id : ARM_MOTOR_IDS) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before.push_back(motor->getCurrentPosition());
+    ASSERT_NE(motor, nullptr);
+    ASSERT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 1) << "Motor " << static_cast<int>(id);
   }
 
-  // Send new position command
-  cmd.data = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(2s);
+  // One motor drops its status packets: it still receives writes but never answers, so every cyclic
+  // read fails. After the consecutive-error threshold (25 @ 50 Hz) read() returns ERROR -> on_error.
+  constexpr uint8_t DEAD_ID = ARM_JOINT_4_ID;
+  auto dead = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(DEAD_ID);
+  ASSERT_NE(dead, nullptr);
+  dead->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DROP_STATUS_PACKETS);
 
-  // 5. Verify at least some motors moved (system recovered)
-  bool any_moved = false;
-  for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.05) {
-      any_moved = true;
-      break;
+  // Wait past the error threshold plus the one-shot on_error handling.
+  std::this_thread::sleep_for(1500ms);
+
+  // Reachable motors must remain torqued. They were held at position, not left driving and not
+  // de-energised. (The old code left them exactly as they were because the group reset aborted.)
+  for (uint8_t id : ARM_MOTOR_IDS) {
+    if (id == DEAD_ID) {
+      continue;
     }
+    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
+    ASSERT_NE(motor, nullptr);
+    EXPECT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 1)
+        << "Reachable motor " << static_cast<int>(id) << " should be held (torqued) after the partial comm loss";
+    // Held at its current position: goal position was reset to the present position.
+    EXPECT_NEAR(motor->read4ByteSigned(motor->getAddress("goal_position")),
+                motor->read4ByteSigned(motor->getAddress("present_position")), 5)
+        << "Reachable motor " << static_cast<int>(id) << " was not held at its current position";
   }
-  EXPECT_TRUE(any_moved) << "System should recover from temporary communication errors";
+
+  // The unresponsive motor received a best-effort torque-off (it still applies writes).
+  EXPECT_EQ(dead->read1Byte(dead->getAddress("torque_enable")), 0)
+      << "Unresponsive motor should have been sent a torque-off";
+
+  dead->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);  // let teardown settle
 }
 
 TEST_F(HardwareInterfaceTest, CommunicationError_GlobalErrorBlocksOperation)
 {
   // Test that global communication errors (all motors) block operation
   // This simulates hard E-Stop cutting power to all motors
+  // Every wait is for observable state, so a loaded machine only makes the test slower. A command
+  // is published again on every check, because the first one can precede the subscriber's discovery.
+  const auto arm_motor = [](size_t i) {
+    return dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
+  };
+  const auto goal_ticks = [&](size_t i) {
+    return arm_motor(i)->read4ByteSigned(arm_motor(i)->getAddress("goal_position"));
+  };
+  const auto positions = [&]() {
+    std::vector<double> result;
+    for (size_t i = 0; i < 7; ++i) {
+      result.push_back(arm_motor(i)->getCurrentPosition());
+    }
+    return result;
+  };
 
   // 1. Activate controller
   ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
 
   auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
-  // Move to initial position
+  // Move to initial position and wait until every motor took the new goal and came to rest there
+  std::vector<int32_t> goals_before;
+  for (size_t i = 0; i < 7; ++i) {
+    goals_before.push_back(goal_ticks(i));
+  }
   std_msgs::msg::Float64MultiArray cmd;
   cmd.data = {0.2, 0.2, 0.2, 0.2, 0.2, 0.2, 0.2};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(1s);
-
-  // Record initial positions
-  std::vector<double> initial_positions;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    initial_positions.push_back(motor->getCurrentPosition());
-  }
+  ASSERT_TRUE(executor_->spin_until(
+      [&] {
+        pub->publish(cmd);
+        for (size_t i = 0; i < 7; ++i) {
+          const auto present = arm_motor(i)->read4ByteSigned(arm_motor(i)->getAddress("present_position"));
+          if (goal_ticks(i) == goals_before[i] || std::abs(goal_ticks(i) - present) > 5 ||
+              std::abs(arm_motor(i)->getCurrentVelocity()) > 1e-3) {
+            return false;
+          }
+        }
+        return true;
+      },
+      60s))
+      << "The arm did not settle at its initial command";
+  const std::vector<double> initial_positions = positions();
 
   // 2. Enable global communication error (simulates power cut)
   dynamixel_ros_control::MockDynamixelManager::instance().setGlobalCommunicationError(true);
 
-  // 3. Try to send movement commands - should have no effect
+  // 3. Try to send movement commands. They must have no effect until the component gave up on the bus
   cmd.data = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(1s);
+  ASSERT_TRUE(executor_->spin_until(
+      [&] {
+        pub->publish(cmd);
+        return hardwareComponentState("athena_arm_interface") == "unconfigured";
+      },
+      60s))
+      << "Sustained communication loss must take the component through the fault path";
 
   // Verify positions haven't changed (communication errors prevent read/write)
   for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    // With communication errors, the mock won't update positions
-    EXPECT_NEAR(motor->getCurrentPosition(), initial_positions[i], 0.1)
+    EXPECT_NEAR(arm_motor(i)->getCurrentPosition(), initial_positions[i], 0.1)
         << "Motor " << (ARM_JOINT_1_ID + i) << " should not move during communication errors";
   }
 
   // 4. Clear errors (simulate power restored)
   dynamixel_ros_control::MockDynamixelManager::instance().setGlobalCommunicationError(false);
-  std::this_thread::sleep_for(500ms);
 
-  // 5. Verify system can recover
-  std::vector<double> positions_after_recovery;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_after_recovery.push_back(motor->getCurrentPosition());
-  }
+  // 5. Sustained comm loss errors out the hardware interface and deactivates its controllers
+  // (matching real hardware, where a dead bus produces RX timeouts). Recovery therefore
+  // requires re-activation — the same flow the spawner performs on the robot.
+  ASSERT_TRUE(
+      setHardwareComponentState("athena_arm_interface", lifecycle_msgs::msg::State::PRIMARY_STATE_ACTIVE, "active"))
+      << "Hardware reactivation should succeed after communication is restored";
 
-  cmd.data = {0.7, 0.7, 0.7, 0.7, 0.7, 0.7, 0.7};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(2s);
+  ASSERT_TRUE(switch_controllers({"arm_position_controller"}, {}))
+      << "Controller reactivation should succeed after hardware recovery";
+  ASSERT_TRUE(waitForControllerState("arm_position_controller", "active"));
 
-  bool any_moved = false;
-  for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    if (std::abs(motor->getCurrentPosition() - positions_after_recovery[i]) > 0.05) {
-      any_moved = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(any_moved) << "System should recover after communication errors are cleared";
+  EXPECT_TRUE(armReaches(pub, 0.7)) << "System should recover after reactivation";
 }
 
 TEST_F(HardwareInterfaceTest, EdgeCase_ControllerActivationWithCommunicationErrors)
@@ -156,25 +195,20 @@ TEST_F(HardwareInterfaceTest, EdgeCase_ControllerActivationWithCommunicationErro
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
     if (motor)
-      motor->setCommunicationError(true);
+      motor->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DISCONNECTED);
   }
   // Also set error on gripper
   auto gripper_motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID);
   if (gripper_motor)
-    gripper_motor->setCommunicationError(true);
+    gripper_motor->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DISCONNECTED);
 
   // Wait for errors to take effect in read cycle
   std::this_thread::sleep_for(500ms);
 
-  // 2. Try to load and activate controller - this may fail
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-
+  // 2. Try to load and activate controller. This may fail
   auto load_req = std::make_shared<LoadController::Request>();
   load_req->name = "arm_position_controller";
-  auto load_resp =
-      hector_testing_utils::call_service<LoadController>(load_client_->get(), load_req, *executor_, options);
+  auto load_resp = callService<LoadController>(load_client_, load_req);
 
   // Loading should succeed (doesn't require communication)
   ASSERT_NE(load_resp, nullptr);
@@ -182,39 +216,26 @@ TEST_F(HardwareInterfaceTest, EdgeCase_ControllerActivationWithCommunicationErro
 
   auto config_req = std::make_shared<ConfigureController::Request>();
   config_req->name = "arm_position_controller";
-  auto config_resp =
-      hector_testing_utils::call_service<ConfigureController>(config_client_->get(), config_req, *executor_, options);
+  auto config_resp = callService<ConfigureController>(config_client_, config_req);
   ASSERT_NE(config_resp, nullptr);
   EXPECT_TRUE(config_resp->ok) << "Controller configuration should succeed";
 
-  // 3. Activation might fail due to no successful read
-  auto switch_req = std::make_shared<SwitchController::Request>();
+  // 3. No motor can be read, so there is no present position to hold and the activation must fail
+  auto switch_req = switchRequest();
   switch_req->activate_controllers = {"arm_position_controller"};
-  switch_req->strictness = SwitchController::Request::STRICT;
-  auto switch_resp =
-      hector_testing_utils::call_service<SwitchController>(switch_client_->get(), switch_req, *executor_, options);
-
-  // This documents the current behavior - activation may fail
-  // If this test passes with switch_resp->ok == false, that's expected safety behavior
-  // If a fix is implemented to do inline read, this test should be updated
+  auto switch_resp = callService<SwitchController>(switch_client_, switch_req);
+  ASSERT_NE(switch_resp, nullptr);
+  EXPECT_FALSE(switch_resp->ok) << "A controller activated against motors that cannot be read";
+  EXPECT_FALSE(waitForControllerState("arm_position_controller", "active", 1s));
 
   // 4. Clear errors for cleanup
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
     if (motor)
-      motor->setCommunicationError(false);
+      motor->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);
   }
   if (gripper_motor)
-    gripper_motor->setCommunicationError(false);
-
-  // Log the result for documentation
-  if (switch_resp && !switch_resp->ok) {
-    // Expected behavior - activation fails when read hasn't succeeded
-    SUCCEED() << "Controller activation correctly rejected when communication errors prevent reads";
-  } else if (switch_resp && switch_resp->ok) {
-    // If activation succeeded, the fix was implemented - verify system is functional
-    SUCCEED() << "Controller activation succeeded (inline read fix may be implemented)";
-  }
+    gripper_motor->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);
 }
 
 TEST_F(HardwareInterfaceTest, RebootService_ResetsMotors)
@@ -234,12 +255,11 @@ TEST_F(HardwareInterfaceTest, RebootService_ResetsMotors)
   }
 
   // 3. Call reboot service
+  ASSERT_TRUE(setHardwareComponentState("athena_arm_interface", lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED,
+                                        "unconfigured"))
+      << "the reboot service needs the component unconfigured";
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+  auto resp = callService<std_srvs::srv::Trigger>(reboot_client, request, 10s);
 
   ASSERT_NE(resp, nullptr) << "Reboot service call failed";
   EXPECT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
@@ -252,10 +272,9 @@ TEST_F(HardwareInterfaceTest, RebootService_ResetsMotors)
     ASSERT_NE(motor, nullptr) << "Motor " << (int) id << " should still exist after reboot";
   }
 
-  // 5. Verify LED is correct (should be blue if torque is on)
+  // 5. Verify LED is correct (pink, the component is unconfigured)
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    EXPECT_EQ(motor->getLedBlue(), COLOR_BLUE_B) << "Motor " << (int) id << " LED should be blue after reboot";
+    verifyLEDColor(id, COLOR_PINK_R, COLOR_PINK_G, COLOR_PINK_B);
   }
 }
 
@@ -281,16 +300,12 @@ TEST_F(HardwareInterfaceTest, RebootService_OnlyRebootsFaultyMotors)
   motor1->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_OVERHEATING);
   motor3->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_INPUT_VOLTAGE);
 
-  // Wait for at least one read cycle to update hardware_error_status in the Dynamixel class
-  std::this_thread::sleep_for(300ms);
+  // The reboot service requires the component that on_error left unconfigured
+  ASSERT_TRUE(waitForComponentState("athena_arm_interface", "unconfigured"));
 
   // 4. Call reboot service
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+  auto resp = callService<std_srvs::srv::Trigger>(reboot_client, request, 10s);
 
   ASSERT_NE(resp, nullptr) << "Reboot service call failed";
   EXPECT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
@@ -341,16 +356,12 @@ TEST_F(HardwareInterfaceTest, RebootService_RestoresTorqueOnAndBlueLED)
   motor1->resetRebootCount();
   motor1->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_OVERHEATING);
 
-  // Wait for at least one read cycle to update hardware_error_status in the Dynamixel class
-  std::this_thread::sleep_for(300ms);
+  // The reboot service requires the component that on_error left unconfigured
+  ASSERT_TRUE(waitForComponentState("athena_arm_interface", "unconfigured"));
 
   // 4. Call reboot service
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+  auto resp = callService<std_srvs::srv::Trigger>(reboot_client, request, 10s);
 
   ASSERT_NE(resp, nullptr) << "Reboot service call failed";
   EXPECT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
@@ -388,22 +399,10 @@ TEST_F(HardwareInterfaceTest, RebootService_RestoresTorqueOffAndGreenLED)
 
   // 1. Setup clients
   auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
   ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s)) << "Reboot service not available";
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s)) << "Torque service not available";
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
 
   // 2. Disable torque first
-  auto torque_request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  torque_request->enable = false;
-  auto torque_resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), torque_request, *executor_, options);
-  ASSERT_NE(torque_resp, nullptr);
-  ASSERT_TRUE(torque_resp->success) << "Should be able to disable torque";
+  ASSERT_TRUE(limp()) << "Should be able to disable torque";
 
   std::this_thread::sleep_for(300ms);
 
@@ -419,12 +418,11 @@ TEST_F(HardwareInterfaceTest, RebootService_RestoresTorqueOffAndGreenLED)
   motor1->resetRebootCount();
   motor1->setHardwareError(dynamixel_ros_control::HardwareErrorBit::ERROR_OVERLOAD);
 
-  // Wait for at least one read cycle to update hardware_error_status in the Dynamixel class
-  std::this_thread::sleep_for(300ms);
+  // The reboot service requires the component that on_error left unconfigured
+  ASSERT_TRUE(waitForComponentState("athena_arm_interface", "unconfigured"));
 
   auto reboot_request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  auto resp = hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), reboot_request,
-                                                                         *executor_, options);
+  auto resp = callService<std_srvs::srv::Trigger>(reboot_client, reboot_request, 10s);
 
   ASSERT_NE(resp, nullptr) << "Reboot service call failed";
   EXPECT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
@@ -468,12 +466,11 @@ TEST_F(HardwareInterfaceTest, RebootService_NoRebootWhenNoErrors)
   }
 
   // 3. Call reboot service
+  ASSERT_TRUE(setHardwareComponentState("athena_arm_interface", lifecycle_msgs::msg::State::PRIMARY_STATE_UNCONFIGURED,
+                                        "unconfigured"))
+      << "the reboot service needs the component unconfigured";
   auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+  auto resp = callService<std_srvs::srv::Trigger>(reboot_client, request, 10s);
 
   ASSERT_NE(resp, nullptr) << "Reboot service call failed";
   EXPECT_TRUE(resp->success) << "Reboot should succeed (no errors to fix): " << resp->message;
@@ -486,10 +483,9 @@ TEST_F(HardwareInterfaceTest, RebootService_NoRebootWhenNoErrors)
     EXPECT_EQ(motor->getRebootCount(), 0) << "Motor " << (int) id << " should NOT have been rebooted (no error)";
   }
 
-  // 5. Verify LED is still correct (blue since torque is on)
+  // 5. Verify LED is still correct (pink, the component is unconfigured)
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    EXPECT_EQ(motor->getLedBlue(), COLOR_BLUE_B) << "Motor " << (int) id << " LED should be blue";
+    verifyLEDColor(id, COLOR_PINK_R, COLOR_PINK_G, COLOR_PINK_B);
   }
 }
 
@@ -519,9 +515,9 @@ TEST_F(HardwareInterfaceTest, Robustness_ToleratesOccasionalReadErrors)
   ASSERT_NE(motor1, nullptr);
 
   // Cause a few errors then recover (well below the 25 error threshold)
-  motor1->setCommunicationError(true);
+  motor1->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DISCONNECTED);
   std::this_thread::sleep_for(200ms);  // ~4 read cycles at 50Hz
-  motor1->setCommunicationError(false);
+  motor1->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);
 
   // 3. Wait for recovery
   std::this_thread::sleep_for(500ms);
@@ -531,26 +527,7 @@ TEST_F(HardwareInterfaceTest, Robustness_ToleratesOccasionalReadErrors)
       << "Controller should remain active after brief communication errors";
 
   // 5. Verify commands still work
-  std::vector<double> positions_before;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before.push_back(motor->getCurrentPosition());
-  }
-
-  cmd.data = {0.6, 0.6, 0.6, 0.6, 0.6, 0.6, 0.6};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(2s);
-
-  // Verify motors moved
-  bool any_moved = false;
-  for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.1) {
-      any_moved = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(any_moved) << "System should continue operating after tolerating brief read errors";
+  EXPECT_TRUE(armReaches(pub, 0.6)) << "System should continue operating after tolerating brief read errors";
 }
 
 TEST_F(HardwareInterfaceTest, Robustness_IntermittentErrorsWithRecovery)
@@ -570,11 +547,11 @@ TEST_F(HardwareInterfaceTest, Robustness_IntermittentErrorsWithRecovery)
   // 2. Cause multiple intermittent error periods
   for (int i = 0; i < 5; ++i) {
     // Brief error
-    motor1->setCommunicationError(true);
+    motor1->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DISCONNECTED);
     std::this_thread::sleep_for(100ms);  // ~2 read cycles
 
-    // Recovery period - errors should reset
-    motor1->setCommunicationError(false);
+    // Recovery period, where errors should reset
+    motor1->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);
     std::this_thread::sleep_for(200ms);  // Allow successful reads to reset error counter
   }
 
@@ -583,26 +560,7 @@ TEST_F(HardwareInterfaceTest, Robustness_IntermittentErrorsWithRecovery)
       << "Controller should remain active after intermittent errors with recovery";
 
   // 4. Verify system is still functional
-  std::vector<double> positions_before;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before.push_back(motor->getCurrentPosition());
-  }
-
-  std_msgs::msg::Float64MultiArray cmd;
-  cmd.data = {0.4, 0.4, 0.4, 0.4, 0.4, 0.4, 0.4};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(2s);
-
-  bool any_moved = false;
-  for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.1) {
-      any_moved = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(any_moved) << "System should function after intermittent errors with recovery periods";
+  EXPECT_TRUE(armReaches(pub, 0.4)) << "System should function after intermittent errors with recovery periods";
 }
 
 TEST_F(HardwareInterfaceTest, Robustness_ControllerActivationWithoutPriorRead)
@@ -625,7 +583,7 @@ TEST_F(HardwareInterfaceTest, Robustness_ControllerActivationWithoutPriorRead)
     }
   }
 
-  // 2. If no controllers are active, activate one - this tests inline read
+  // 2. If no controllers are active, activate one. This tests inline read
   if (!any_active) {
     ASSERT_TRUE(loadAndActivateController("arm_position_controller"))
         << "Controller activation should succeed with inline read in perform_command_mode_switch";
@@ -638,26 +596,7 @@ TEST_F(HardwareInterfaceTest, Robustness_ControllerActivationWithoutPriorRead)
   ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // 4. Send command and verify it works
-  std::vector<double> positions_before;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_before.push_back(motor->getCurrentPosition());
-  }
-
-  std_msgs::msg::Float64MultiArray cmd;
-  cmd.data = {0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(2s);
-
-  bool any_moved = false;
-  for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.05) {
-      any_moved = true;
-      break;
-    }
-  }
-  EXPECT_TRUE(any_moved) << "Commands should work after controller activation with inline read";
+  EXPECT_TRUE(armReaches(pub, 0.3)) << "Commands should work after controller activation with inline read";
 }
 
 TEST_F(HardwareInterfaceTest, Robustness_ControllerSwitchAfterCommunicationRecovery)
@@ -672,29 +611,25 @@ TEST_F(HardwareInterfaceTest, Robustness_ControllerSwitchAfterCommunicationRecov
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
   ASSERT_TRUE(waitForSubscribers(pos_pub, 5s));
 
-  // 2. Cause communication errors that reset first_read_successful_
+  // 2. Cause a brief communication glitch (below the 25-cycle error threshold, so the
+  // interface and controllers stay active)
   dynamixel_ros_control::MockDynamixelManager::instance().setGlobalCommunicationError(true);
-  std::this_thread::sleep_for(500ms);
+  std::this_thread::sleep_for(200ms);
   dynamixel_ros_control::MockDynamixelManager::instance().setGlobalCommunicationError(false);
   std::this_thread::sleep_for(500ms);
 
   // 3. Load velocity controller
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-
   auto load_req = std::make_shared<LoadController::Request>();
   load_req->name = "arm_velocity_controller";
-  auto load_resp =
-      hector_testing_utils::call_service<LoadController>(load_client_->get(), load_req, *executor_, options);
+  auto load_resp = callService<LoadController>(load_client_, load_req);
   ASSERT_NE(load_resp, nullptr);
   ASSERT_TRUE(load_resp->ok);
 
   auto config_req = std::make_shared<ConfigureController::Request>();
   config_req->name = "arm_velocity_controller";
-  hector_testing_utils::call_service<ConfigureController>(config_client_->get(), config_req, *executor_, options);
+  callService<ConfigureController>(config_client_, config_req);
 
-  // 4. Switch controllers - this should succeed with inline read
+  // 4. Switch controllers. This should succeed with inline read
   ASSERT_TRUE(switch_controllers({"arm_velocity_controller"}, {"arm_position_controller"}))
       << "Controller switch should succeed after communication recovery (inline read)";
 
@@ -716,23 +651,17 @@ TEST_F(HardwareInterfaceTest, Robustness_ControllerSwitchAfterCommunicationRecov
   std_msgs::msg::Float64MultiArray cmd;
   cmd.data = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
   vel_pub->publish(cmd);
-  std::this_thread::sleep_for(1s);
-
-  bool any_moved = false;
-  for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    if (std::abs(motor->getCurrentPosition() - positions_before[i]) > 0.1) {
-      any_moved = true;
-      break;
+  const auto every_joint_moved = [&] {
+    for (size_t i = 0; i < 7; ++i) {
+      auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
+      if (motor->getCurrentPosition() - positions_before[i] <= 0.1) {
+        return false;
+      }
     }
-  }
-  EXPECT_TRUE(any_moved) << "Velocity controller should work after switch following communication recovery";
+    return true;
+  };
+  EXPECT_TRUE(executor_->spin_until(every_joint_moved, scaled(10s)))
+      << "Not every joint followed the velocity controller after the communication recovery";
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

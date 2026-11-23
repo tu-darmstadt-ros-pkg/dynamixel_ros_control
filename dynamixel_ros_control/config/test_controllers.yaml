@@ -6,9 +6,6 @@
       joint_state_broadcaster:
         type: joint_state_broadcaster/JointStateBroadcaster
 
-      velocity_to_position_controller:
-        type: velocity_to_position_command_controller/VelocityToPositionCommandController
-
       velocity_controller:
         type: forward_command_controller/ForwardCommandController
 
@@ -25,16 +22,11 @@
   multi_interface_controller:
     ros__parameters:
       joint: joint_1
+      # max_current needs a model that limits by Goal Current in extended_position, e.g. P series
       interface_names:
         - position
-        - velocity
-        - current
+        - max_current
 
-
-  velocity_to_position_controller:
-    ros__parameters:
-      joints:
-        - joint_1
 
   velocity_controller:
     ros__parameters:

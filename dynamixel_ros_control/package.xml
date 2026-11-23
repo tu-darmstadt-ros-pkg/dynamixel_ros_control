@@ -11,9 +11,7 @@
   <buildtool_depend>ament_cmake</buildtool_depend>
 
   <depend>ament_index_cpp</depend>
-  <depend>controller_orchestrator</depend>
   <depend>diagnostic_msgs</depend>
-  <depend>dynamixel_ros_control_msgs</depend>
   <depend>dynamixel_sdk</depend>
   <depend>hardware_interface</depend>
   <depend>hector_transmission_interface</depend>
@@ -30,17 +28,27 @@
   <depend>yaml-cpp</depend>
   <depend>yaml_cpp_vendor</depend>
 
+  <!-- Needed by the installed launch/ and config/ demo, not by the library. -->
+  <exec_depend>ament_index_python</exec_depend>
   <exec_depend>controller_manager</exec_depend>
+  <exec_depend>forward_command_controller</exec_depend>
+  <exec_depend>joint_state_broadcaster</exec_depend>
+  <exec_depend>joint_trajectory_controller</exec_depend>
+  <exec_depend>launch</exec_depend>
+  <exec_depend>launch_ros</exec_depend>
   <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
 
+  <test_depend>ament_cmake_google_benchmark</test_depend>
   <test_depend>ament_cmake_gtest</test_depend>
+  <test_depend>ament_cmake_ros</test_depend>
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <!-- The integration tests link against it, unlike the library itself. -->
   <test_depend>controller_manager</test_depend>
-  <test_depend>forward_command_controller</test_depend>
+  <test_depend>hardware_contract_tests</test_depend>
+  <test_depend>hector_controller_manager</test_depend>
   <test_depend>hector_testing_utils</test_depend>
-  <test_depend>joint_state_broadcaster</test_depend>
-  <test_depend>joint_trajectory_controller</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

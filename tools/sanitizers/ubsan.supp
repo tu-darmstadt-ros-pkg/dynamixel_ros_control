@@ -1,0 +1,5 @@
+# UndefinedBehaviorSanitizer suppressions for dynamixel_ros_control.
+#
+# Empty on purpose: nothing outside this package is instrumented, so a UBSan
+# report here is ours. Add an entry only with a comment saying why the reported
+# behaviour is in fact defined.

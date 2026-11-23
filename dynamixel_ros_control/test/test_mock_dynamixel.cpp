@@ -1,1185 +1,873 @@
+// The mock motor: its kinematic model, its firmware rules and its fault injection
+
 #include <gtest/gtest.h>
-#include <dynamixel_ros_control/dynamixel.hpp>
-#include <dynamixel_ros_control/dynamixel_driver.hpp>
+
 #include <dynamixel_ros_control/mock_dynamixel.hpp>
+
 #include <cmath>
+#include <memory>
+#include <stdexcept>
+#include <utility>
+#include <vector>
 
-using namespace dynamixel_ros_control;
+namespace dynamixel_ros_control {
+namespace {
 
-// PH-Series (model 2020) register addresses (from PH.yaml)
-constexpr uint16_t ADDR_MODEL_NUMBER = 0;
-constexpr uint16_t ADDR_ID = 7;
-constexpr uint16_t ADDR_OPERATING_MODE = 11;
-constexpr uint16_t ADDR_VELOCITY_LIMIT = 44;
-constexpr uint16_t ADDR_TORQUE_ENABLE = 512;
-constexpr uint16_t ADDR_GOAL_POSITION = 564;
-constexpr uint16_t ADDR_GOAL_VELOCITY = 552;
-constexpr uint16_t ADDR_PRESENT_POSITION = 580;
-constexpr uint16_t ADDR_PRESENT_VELOCITY = 576;
-constexpr uint16_t ADDR_HARDWARE_ERROR = 518;
+constexpr uint16_t MODEL_PH = 2020;  // PH54-200-S500-R, indirect pointers in EEPROM
+constexpr uint16_t MODEL_XM = 1020;  // XM430-W350, indirect pointers in RAM
+constexpr uint16_t MODEL_PRO_H54 = 54024;
 
-// PH Series Indirect Addresses (from PH.yaml indirect_addresses section).
-// On PH the pointer registers live in EEPROM (address 168 < RAM start 512).
-constexpr uint16_t ADDR_INDIRECT_ADDRESS_START = 168;
-constexpr uint16_t ADDR_INDIRECT_DATA_START = 634;
+// The indirect blocks of devices/models/PH.yaml and XM.yaml, which getAddress() does not name
+constexpr uint16_t PH_POINTER_1 = 168;
+constexpr uint16_t XM_POINTER_1 = 578;
+constexpr uint16_t DATA_1 = 634;
 
-// XM Series Indirect Addresses (from XM.yaml). On XM the pointer registers live in
-// RAM (address 578 >= RAM start 64), so a reboot wipes them.
-constexpr uint16_t ADDR_XM_INDIRECT_ADDRESS_START = 578;
-constexpr uint16_t ADDR_XM_TORQUE_ENABLE = 64;
-
-// Model number for PH series (PH54-200-S500-R)
-constexpr uint16_t MODEL_PH = 2020;
-
-// Model number for XM series (XM430-W350)
-constexpr uint16_t MODEL_XM = 1020;
-
-/**
- * @brief Test fixture that resets the MockDynamixelManager between tests
- */
 class MockDynamixelTest : public ::testing::Test
 {
 protected:
   void SetUp() override
   {
-    // Reset the singleton manager before each test
     MockDynamixelManager::instance().reset();
   }
 
   void TearDown() override
   {
-    // Clean up after each test
     MockDynamixelManager::instance().reset();
   }
+
+  static std::shared_ptr<MockDynamixel> motor(const uint8_t id = 1, const uint16_t model = MODEL_PH)
+  {
+    MockDynamixelManager::instance().addMotor(id, model);
+    return MockDynamixelManager::instance().getMotor(id);
+  }
+
+  /// A motor with torque on in @p mode
+  static std::shared_ptr<MockDynamixel> energised(const OperatingMode mode, const uint8_t id = 1,
+                                                  const uint16_t model = MODEL_PH)
+  {
+    auto m = motor(id, model);
+    m->write1Byte(m->getAddress("operating_mode"), static_cast<uint8_t>(mode));
+    m->write1Byte(m->getAddress("torque_enable"), 1);
+    return m;
+  }
+
+  static void run(MockDynamixel& m, const int steps, const double dt = 0.01)
+  {
+    for (int i = 0; i < steps; ++i) {
+      m.update(dt);
+    }
+  }
+
+  MockPortHandler port_{"mock"};
+  MockPacketHandler handler_;
+  uint8_t error_{0};
 };
 
-// ============================================================================
-// Basic Communication Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, PingMotor)
+/// +1 and -1, for the rules that hold in both directions
+class MockDynamixelSignTest : public MockDynamixelTest, public ::testing::WithParamInterface<int>
 {
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
+};
 
-  driver.addDummyMotor(1, MODEL_PH);
+INSTANTIATE_TEST_SUITE_P(BothDirections, MockDynamixelSignTest, ::testing::Values(1, -1));
 
-  uint16_t model_number;
-  EXPECT_TRUE(driver.ping(1, model_number));
+// ============================================================================
+// Kinematic model
+// ============================================================================
+
+TEST_F(MockDynamixelTest, PositionModeMovesTowardTheGoal)
+{
+  const auto m = energised(OperatingMode::POSITION_CONTROL);
+  m->write4Byte(m->getAddress("profile_velocity"), 10000);
+  m->write4Byte(m->getAddress("goal_position"), 100000);
+  run(*m, 1000);
+  EXPECT_GT(m->getCurrentPosition(), 0.0);
+}
+
+// A goal latched at the present position of a fast motor, as a NaN hold does. At a 20 ms step the
+// braking speed of the last stretch must not carry the motor past the goal.
+TEST_F(MockDynamixelTest, PositionModeComesToRestAtAGoalSetWhileMoving)
+{
+  const auto m = energised(OperatingMode::POSITION_CONTROL);
+  m->write4Byte(m->getAddress("goal_position"), 1000000);
+  run(*m, 10, 0.02);
+  ASSERT_GT(m->getCurrentVelocity(), 1.0);
+  m->write4Byte(m->getAddress("goal_position"), m->read4Byte(m->getAddress("present_position")));
+  run(*m, 100, 0.02);
+  const double rest = m->getCurrentPosition();
+  m->update(0.02);
+  EXPECT_EQ(m->getCurrentPosition(), rest);
+  EXPECT_EQ(m->getCurrentVelocity(), 0.0);
+}
+
+TEST_F(MockDynamixelTest, ALimpMotorDoesNotMove)
+{
+  const auto m = motor();
+  EXPECT_EQ(m->read1Byte(m->getAddress("torque_enable")), 0) << "torque is off at boot";
+  m->write4Byte(m->getAddress("goal_position"), 100000);
+  run(*m, 100);
+  EXPECT_NEAR(m->getCurrentPosition(), 0.0, 0.001);
+}
+
+TEST_P(MockDynamixelSignTest, VelocityModeTurnsInTheDirectionOfTheGoal)
+{
+  const auto m = energised(OperatingMode::VELOCITY_CONTROL);
+  m->write4Byte(m->getAddress("goal_velocity"), static_cast<uint32_t>(GetParam() * 10000));
+  run(*m, 100);
+  EXPECT_GT(GetParam() * m->getCurrentPosition(), 0.0);
+  EXPECT_GT(GetParam() * m->getCurrentVelocity(), 0.0);
+}
+
+TEST_F(MockDynamixelTest, CurrentModeAccelerates)
+{
+  const auto m = energised(OperatingMode::CURRENT_CONTROL);
+  m->write2Byte(m->getAddress("goal_current"), 1000);
+  run(*m, 100);
+  EXPECT_GT(std::abs(m->getCurrentVelocity()), 0.0);
+}
+
+TEST_P(MockDynamixelSignTest, PositionModeStopsAtThePositionLimit)
+{
+  const auto m = energised(OperatingMode::POSITION_CONTROL);
+  m->setFactoryValue("max_position_limit", 1.0);
+  m->setFactoryValue("min_position_limit", -1.0);
+  m->write4Byte(m->getAddress("profile_velocity"), 10000);
+  m->setFactoryValue("goal_position", GetParam() * 3.0);
+  run(*m, 1000);
+  EXPECT_LE(GetParam() * m->getCurrentPosition(), 1.0 + 1e-3);
+}
+
+TEST_F(MockDynamixelTest, ExtendedPositionModeIgnoresThePositionLimits)
+{
+  const auto m = energised(OperatingMode::EXTENDED_POSITION_CONTROL);
+  m->setFactoryValue("max_position_limit", 1.0);
+  m->setFactoryValue("min_position_limit", -1.0);
+  m->write4Byte(m->getAddress("profile_velocity"), 10000);
+  m->setFactoryValue("goal_position", 3.0);
+  run(*m, 2000);
+  EXPECT_GT(m->getCurrentPosition(), 1.0);
+}
+
+TEST_P(MockDynamixelSignTest, HomingOffsetShiftsThePresentPosition)
+{
+  const auto m = energised(OperatingMode::POSITION_CONTROL);
+  const int32_t offset = GetParam() * 10000;
+  m->setHomingOffset(offset);
+  EXPECT_EQ(m->getHomingOffset(), offset);
+  // The goal is in the frame of the present position, so this goal holds the motor at 0
+  m->write4Byte(m->getAddress("goal_position"), static_cast<uint32_t>(offset));
+  m->update(0.01);
+  EXPECT_EQ(static_cast<int32_t>(m->read4Byte(m->getAddress("present_position"))), offset);
+}
+
+TEST_F(MockDynamixelTest, AFasterProfileVelocityTravelsFarther)
+{
+  double travelled[2] = {};
+  for (const int i : {0, 1}) {
+    const auto m = energised(OperatingMode::POSITION_CONTROL, static_cast<uint8_t>(i + 1));
+    m->write4Byte(m->getAddress("profile_velocity"), i == 0 ? 1000 : 50000);
+    m->write4Byte(m->getAddress("goal_position"), 10000000);
+    run(*m, 200);
+    travelled[i] = m->getCurrentPosition();
+  }
+  EXPECT_GT(travelled[1], travelled[0]);
+}
+
+TEST_F(MockDynamixelTest, WithoutAProfileVelocityTheLimitApplies)
+{
+  const auto m = energised(OperatingMode::POSITION_CONTROL);
+  m->write4Byte(m->getAddress("profile_velocity"), 0);
+  m->write4Byte(m->getAddress("velocity_limit"), 5000);
+  m->write4Byte(m->getAddress("goal_position"), 100000);
+  run(*m, 1000);
+  EXPECT_GT(m->getCurrentPosition(), 0.0);
+}
+
+TEST_F(MockDynamixelTest, TheAccelerationLimitIsInItsRegisterUnit)
+{
+  const auto m = energised(OperatingMode::VELOCITY_CONTROL);
+  m->setFactoryValue("acceleration_limit", 2.0);
+  m->setFactoryValue("goal_velocity", 3.0);
+  m->update(0.1);
+  EXPECT_NEAR(m->getCurrentVelocity(), 0.2, 1e-3) << "2 rad/s^2 for 0.1 s";
+}
+
+// The profile in its unit moves the motor inside the limits
+TEST_F(MockDynamixelTest, TheProfileMovesTheMotorInsideTheLimits)
+{
+  const auto m = energised(OperatingMode::EXTENDED_POSITION_CONTROL);
+  m->setFactoryValue("acceleration_limit", 2.0);
+  m->setFactoryValue("velocity_limit", 1.0);
+  // Half the limits, in their unit
+  m->write4Byte(m->getAddress("profile_acceleration"), m->read4Byte(m->getAddress("acceleration_limit")) / 2);
+  m->write4Byte(m->getAddress("profile_velocity"), m->read4Byte(m->getAddress("velocity_limit")) / 2);
+  m->setFactoryValue("goal_position", 100.0);
+  m->update(0.1);
+  EXPECT_NEAR(m->getCurrentVelocity(), 0.1, 1e-3) << "accelerates at the profile";
+  run(*m, 100, 0.1);
+  EXPECT_NEAR(m->getCurrentVelocity(), 0.5, 1e-3) << "cruises at the profile";
+}
+
+// P series: "Profile Velocity(560) cannot exceed Velocity Limit(44)", the same for the acceleration,
+// a write over the limit gets a Data Limit Error
+TEST_F(MockDynamixelTest, APSeriesRefusesAProfileAboveItsLimit)
+{
+  const auto m = motor();
+  for (const auto& [profile, limit] : {std::pair<const char*, const char*>{"profile_velocity", "velocity_limit"},
+                                       {"profile_acceleration", "acceleration_limit"}}) {
+    m->write4Byte(m->getAddress(limit), 100);
+    ASSERT_EQ(handler_.write4ByteTxRx(port_, 1, m->getAddress(profile), 100, &error_), COMM_SUCCESS);
+    EXPECT_EQ(error_, 0) << profile << " at its limit was refused";
+    ASSERT_EQ(handler_.write4ByteTxRx(port_, 1, m->getAddress(profile), 101, &error_), COMM_SUCCESS);
+    EXPECT_EQ(error_, PACKET_ERROR_DATA_LIMIT) << profile;
+    EXPECT_EQ(m->read4Byte(m->getAddress(profile)), 100U) << profile << " over its limit was applied";
+
+    MockGroupSyncWrite group(nullptr, nullptr, m->getAddress(profile), 4);
+    uint8_t value[4] = {101, 0, 0, 0};
+    ASSERT_TRUE(group.addParam(1, value));
+    EXPECT_EQ(group.txPacket(), COMM_SUCCESS);
+    EXPECT_EQ(m->read4Byte(m->getAddress(profile)), 100U) << profile << " over its limit landed by sync write";
+  }
+}
+
+// X series: Profile Velocity ranges over 0 to 32767, the velocity limit bounds only the goal velocity
+TEST_F(MockDynamixelTest, AnXSeriesTakesAProfileVelocityAboveTheVelocityLimit)
+{
+  const auto m = energised(OperatingMode::EXTENDED_POSITION_CONTROL, 1, MODEL_XM);
+  m->setFactoryValue("velocity_limit", 1.0);
+  const uint32_t profile = 2 * m->read4Byte(m->getAddress("velocity_limit"));
+  ASSERT_EQ(handler_.write4ByteTxRx(port_, 1, m->getAddress("profile_velocity"), profile, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, 0);
+  EXPECT_EQ(m->read4Byte(m->getAddress("profile_velocity")), profile);
+  m->setFactoryValue("goal_position", 100.0);
+  run(*m, 1000);
+  EXPECT_NEAR(m->getCurrentVelocity(), 2.0, 0.03) << "moves at the profile, 0.024 rad/s a tick";
+}
+
+// ============================================================================
+// Bus watchdog
+// ============================================================================
+
+// The firmware stops the motor on a trip: rate and force goals go to zero, the position goal stays
+// where the motor stands
+TEST_F(MockDynamixelTest, BusWatchdogTripHaltsATurningMotor)
+{
+  const auto m = energised(OperatingMode::VELOCITY_CONTROL);
+  m->write4Byte(m->getAddress("goal_velocity"), 10000);
+  run(*m, 100);
+  ASSERT_GT(m->getCurrentVelocity(), 0.0);
+  m->tripBusWatchdog();
+  run(*m, 100);
+  EXPECT_NEAR(m->getCurrentVelocity(), 0.0, 1e-3);
+}
+
+// The PH manual: the goal registers are read-only while latched, a write gets a Data Range Error
+TEST_F(MockDynamixelTest, LatchedBusWatchdogAnswersAnAddressedGoalWriteWithARangeError)
+{
+  const auto m = motor();
+  const uint16_t goal = m->getAddress("goal_position");
+  m->write4Byte(goal, 100);
+  m->tripBusWatchdog();
+  const uint32_t goal_after_trip = m->read4Byte(goal);
+
+  EXPECT_EQ(handler_.write4ByteTxRx(port_, 1, goal, 5000, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, PACKET_ERROR_DATA_RANGE);
+  EXPECT_EQ(m->read4Byte(goal), goal_after_trip) << "the refused goal was applied";
+
+  // Clearing the watchdog register lifts the latch
+  EXPECT_EQ(handler_.write1ByteTxRx(port_, 1, m->getAddress("bus_watchdog"), 0, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, 0);
+  EXPECT_EQ(handler_.write4ByteTxRx(port_, 1, goal, 5000, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, 0);
+  EXPECT_EQ(m->read4Byte(goal), 5000U);
+}
+
+// Writes always restart the window, reads only if the manager says so
+TEST_F(MockDynamixelTest, TimedWatchdogTripsAfterAWindowWithoutInstructions)
+{
+  MockDynamixelManager::instance().setBusWatchdogTiming(true, false);
+  const auto m = motor();
+  const uint16_t goal = m->getAddress("goal_position");
+  ASSERT_EQ(handler_.write1ByteTxRx(port_, 1, m->getAddress("torque_enable"), 1, &error_), COMM_SUCCESS);
+  ASSERT_EQ(handler_.write1ByteTxRx(port_, 1, m->getAddress("bus_watchdog"), 4, &error_), COMM_SUCCESS);  // 80 ms
+
+  for (int i = 0; i < 10; ++i) {
+    MockDynamixelManager::instance().update(0.02);
+    ASSERT_EQ(handler_.write4ByteTxRx(port_, 1, goal, 100, &error_), COMM_SUCCESS);
+  }
+  EXPECT_FALSE(m->busWatchdogLatched()) << "a write every cycle feeds it";
+
+  uint32_t value = 0;
+  for (int i = 0; i < 4; ++i) {
+    MockDynamixelManager::instance().update(0.02);
+    ASSERT_EQ(handler_.read4ByteTxRx(port_, 1, goal, &value, &error_), COMM_SUCCESS);
+  }
+  MockDynamixelManager::instance().update(0.02);
+  EXPECT_TRUE(m->busWatchdogLatched()) << "reads fed it although configured not to";
+}
+
+TEST_F(MockDynamixelTest, TimedWatchdogCanBeFedByReads)
+{
+  MockDynamixelManager::instance().setBusWatchdogTiming(true, true);
+  const auto m = motor();
+  ASSERT_EQ(handler_.write1ByteTxRx(port_, 1, m->getAddress("torque_enable"), 1, &error_), COMM_SUCCESS);
+  ASSERT_EQ(handler_.write1ByteTxRx(port_, 1, m->getAddress("bus_watchdog"), 4, &error_), COMM_SUCCESS);
+
+  uint32_t value = 0;
+  for (int i = 0; i < 20; ++i) {
+    MockDynamixelManager::instance().update(0.02);
+    ASSERT_EQ(handler_.read4ByteTxRx(port_, 1, m->getAddress("goal_position"), &value, &error_), COMM_SUCCESS);
+  }
+  EXPECT_FALSE(m->busWatchdogLatched());
+  for (int i = 0; i < 5; ++i) {
+    MockDynamixelManager::instance().update(0.02);
+  }
+  EXPECT_TRUE(m->busWatchdogLatched()) << "silence longer than the window trips it";
+}
+
+TEST_F(MockDynamixelTest, TheWatchdogAccessorReadsTheRegister)
+{
+  const auto m = motor();
+  EXPECT_EQ(m->getBusWatchdog(), 0);
+  ASSERT_EQ(handler_.write1ByteTxRx(port_, 1, m->getAddress("bus_watchdog"), 4, &error_), COMM_SUCCESS);
+  EXPECT_EQ(m->getBusWatchdog(), 4);
+  uint8_t value = 0;
+  ASSERT_EQ(handler_.read1ByteTxRx(port_, 1, m->getAddress("bus_watchdog"), &value, &error_), COMM_SUCCESS);
+  EXPECT_EQ(value, 4);
+}
+
+// ============================================================================
+// Hardware errors and reboot
+// ============================================================================
+
+TEST_F(MockDynamixelTest, AHardwareErrorShowsInItsRegisterUntilCleared)
+{
+  const auto m = motor();
+  const uint16_t status = m->getAddress("hardware_error_status");
+  EXPECT_EQ(m->getHardwareError(), 0);
+  m->setHardwareError(ERROR_OVERHEATING | ERROR_OVERLOAD);
+  EXPECT_EQ(m->getHardwareError(), ERROR_OVERHEATING | ERROR_OVERLOAD);
+  EXPECT_EQ(m->read1Byte(status), ERROR_OVERHEATING | ERROR_OVERLOAD);
+  m->clearHardwareError();
+  EXPECT_EQ(m->getHardwareError(), 0);
+}
+
+TEST_F(MockDynamixelTest, ARebootClearsTheHardwareError)
+{
+  const auto m = motor();
+  m->setHardwareError(ERROR_OVERLOAD);
+  ASSERT_EQ(handler_.reboot(port_, 1, &error_), COMM_SUCCESS);
+  EXPECT_EQ(m->getHardwareError(), 0);
+  EXPECT_EQ(m->read1Byte(m->getAddress("hardware_error_status")), 0);
+}
+
+// The manual: a shutdown clears Torque Enable, and "REBOOT is the only method to reset Torque
+// Enable to 1". Input voltage is not among the default Shutdown bits.
+TEST_F(MockDynamixelTest, ShutdownErrorClearsTorqueUntilAReboot)
+{
+  const auto m = motor();
+  const uint16_t torque = m->getAddress("torque_enable");
+  m->write1Byte(torque, 1);
+  m->setHardwareError(ERROR_INPUT_VOLTAGE);
+  EXPECT_EQ(m->read1Byte(torque), 1) << "an error outside the Shutdown bits cut torque";
+
+  m->setHardwareError(ERROR_OVERLOAD);
+  EXPECT_EQ(m->read1Byte(torque), 0) << "a shutdown error kept torque";
+  EXPECT_EQ(handler_.write1ByteTxRx(port_, 1, torque, 1, &error_), COMM_SUCCESS);
+  EXPECT_EQ(m->read1Byte(torque), 0) << "torque came back without a reboot";
+
+  ASSERT_EQ(handler_.reboot(port_, 1, &error_), COMM_SUCCESS);
+  EXPECT_EQ(handler_.write1ByteTxRx(port_, 1, torque, 1, &error_), COMM_SUCCESS);
+  EXPECT_EQ(m->read1Byte(torque), 1);
+}
+
+// A motor that lost only its status path still receives the reboot, while the master sees nothing
+TEST_F(MockDynamixelTest, RebootIsAppliedByAMotorThatCannotAnswer)
+{
+  const auto m = motor();
+  m->setCommunicationFault(CommunicationFault::DROP_STATUS_PACKETS);
+  EXPECT_EQ(handler_.reboot(port_, 1, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(m->getRebootCount(), 1);
+
+  m->setCommunicationFault(CommunicationFault::DISCONNECTED);
+  EXPECT_EQ(handler_.reboot(port_, 1, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(m->getRebootCount(), 1) << "a disconnected motor received the reboot";
+}
+
+struct PointerReboot
+{
+  uint16_t model;
+  uint16_t pointer;
+  bool survives;
+};
+
+class IndirectPointerRebootTest : public MockDynamixelTest, public ::testing::WithParamInterface<PointerReboot>
+{
+};
+
+INSTANTIATE_TEST_SUITE_P(RamAndEeprom, IndirectPointerRebootTest,
+                         ::testing::Values(PointerReboot{MODEL_XM, XM_POINTER_1, false},
+                                           PointerReboot{MODEL_PH, PH_POINTER_1, true}));
+
+// X series pointers live in RAM and a reboot sets them back to their own slot, P series pointers
+// live in EEPROM and survive. The interface rewrites only the former.
+TEST_P(IndirectPointerRebootTest, ARebootKeepsOnlyEepromPointers)
+{
+  const auto m = motor(1, GetParam().model);
+  const uint16_t torque = m->getAddress("torque_enable");
+  m->write2Byte(GetParam().pointer, torque);
+  ASSERT_EQ(handler_.reboot(port_, 1, &error_), COMM_SUCCESS);
+  EXPECT_EQ(m->read2Byte(GetParam().pointer), GetParam().survives ? torque : DATA_1);
+}
+
+// ============================================================================
+// Firmware write rules
+// ============================================================================
+
+// The status names the refusal: Access Error, a write to EEPROM while torque is enabled
+TEST_F(MockDynamixelTest, EepromWriteWhileTorquedIsRefused)
+{
+  const auto m = motor();
+  const uint16_t velocity_limit = m->getAddress("velocity_limit");
+  ASSERT_EQ(handler_.write4ByteTxRx(port_, 1, velocity_limit, 1000, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, 0) << "a limp motor refused an EEPROM write";
+
+  m->write1Byte(m->getAddress("torque_enable"), 1);
+  ASSERT_EQ(handler_.write4ByteTxRx(port_, 1, velocity_limit, 2000, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, PACKET_ERROR_ACCESS);
+  EXPECT_EQ(m->read4Byte(velocity_limit), 1000U) << "the refused value was applied";
+
+  ASSERT_EQ(handler_.write4ByteTxRx(port_, 1, m->getAddress("goal_position"), 123, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, 0) << "a RAM write was refused";
+}
+
+// A sync write carries no status, so a motor drops what it refuses an addressed write
+TEST_F(MockDynamixelTest, ASyncWriteToEepromOfATorquedMotorIsDropped)
+{
+  const auto m = motor();
+  const uint16_t velocity_limit = m->getAddress("velocity_limit");
+  m->write4Byte(velocity_limit, 1000);
+  m->write1Byte(m->getAddress("torque_enable"), 1);
+  MockGroupSyncWrite group(nullptr, nullptr, velocity_limit, 4);
+  uint8_t value[4] = {0xD0, 0x07, 0, 0};
+  ASSERT_TRUE(group.addParam(1, value));
+  EXPECT_EQ(group.txPacket(), COMM_SUCCESS);
+  EXPECT_EQ(m->read4Byte(velocity_limit), 1000U);
+}
+
+// Indirect pointers may only address the RAM area. A group over an EEPROM register would work
+// against a mock that stores any pointer and fail on_configure on the robot.
+TEST_F(MockDynamixelTest, AnIndirectPointerIsBoundedByTheRamArea)
+{
+  const auto m = motor();
+  ASSERT_EQ(handler_.write2ByteTxRx(port_, 1, PH_POINTER_1, m->getAddress("operating_mode"), &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, PACKET_ERROR_DATA_RANGE) << "a pointer into EEPROM was accepted";
+  EXPECT_EQ(m->read2Byte(PH_POINTER_1), DATA_1);
+
+  // The area, not register membership: 520 is in a gap between listed PH registers
+  ASSERT_EQ(handler_.write2ByteTxRx(port_, 1, PH_POINTER_1, 520, &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, 0) << "a pointer the motor accepts was refused";
+
+  ASSERT_EQ(handler_.write2ByteTxRx(port_, 1, PH_POINTER_1, m->getAddress("torque_enable"), &error_), COMM_SUCCESS);
+  EXPECT_EQ(error_, 0);
+  m->write1Byte(DATA_1, 1);
+  EXPECT_EQ(m->read1Byte(m->getAddress("torque_enable")), 1) << "the accepted pointer does not alias its register";
+}
+
+TEST_F(MockDynamixelTest, ASyncWriteOfAnIndirectPointerOutsideRamIsDropped)
+{
+  const auto m = motor();
+  MockGroupSyncWrite group(nullptr, nullptr, PH_POINTER_1, 2);
+  uint8_t pointer[2] = {static_cast<uint8_t>(m->getAddress("operating_mode")), 0};
+  ASSERT_TRUE(group.addParam(1, pointer));
+  EXPECT_EQ(group.txPacket(), COMM_SUCCESS);
+  EXPECT_EQ(m->read2Byte(PH_POINTER_1), DATA_1);
+}
+
+TEST_F(MockDynamixelTest, IndirectSlotsReachTheirRegisters)
+{
+  const auto m = motor();
+  const uint16_t torque = m->getAddress("torque_enable");
+  const uint16_t goal = m->getAddress("goal_position");
+  m->write2Byte(PH_POINTER_1, torque);
+  m->write1Byte(DATA_1, 1);
+  EXPECT_EQ(m->read1Byte(torque), 1);
+  EXPECT_EQ(m->read1Byte(DATA_1), 1);
+  m->write1Byte(DATA_1, 0);
+  EXPECT_EQ(m->read1Byte(torque), 0);
+
+  // Four slots over a four byte register
+  for (uint16_t i = 0; i < 4; ++i) {
+    m->write2Byte(static_cast<uint16_t>(PH_POINTER_1 + 2 * i), static_cast<uint16_t>(goal + i));
+  }
+  m->write4Byte(DATA_1, 123456);
+  EXPECT_EQ(m->read4Byte(goal), 123456U);
+  EXPECT_EQ(m->read4Byte(DATA_1), 123456U);
+}
+
+TEST_F(MockDynamixelTest, ScatteredIndirectSlotsReachTheirRegisters)
+{
+  const auto m = motor();
+  const uint16_t red = m->getAddress("led_red");
+  const uint16_t green = m->getAddress("led_green");
+  const uint16_t torque = m->getAddress("torque_enable");
+  m->write2Byte(PH_POINTER_1, red);
+  m->write2Byte(PH_POINTER_1 + 2, green);
+  m->write2Byte(PH_POINTER_1 + 4, torque);
+  // The fourth slot is unmapped and holds its own byte
+  m->write4Byte(DATA_1, 0x2A010101);
+  EXPECT_EQ(m->read1Byte(red), 1);
+  EXPECT_EQ(m->read1Byte(green), 1);
+  EXPECT_EQ(m->read1Byte(torque), 1);
+
+  m->write1Byte(green, 0);
+  EXPECT_EQ(m->read4Byte(DATA_1), 0x2A010001U);
+  EXPECT_EQ(m->read2Byte(m->getAddress("model_number")), MODEL_PH) << "the unmapped slot wrote the model number";
+}
+
+// ============================================================================
+// Fault injection
+// ============================================================================
+
+TEST_F(MockDynamixelTest, ADisconnectedMotorNeitherAnswersNorApplies)
+{
+  const auto m = motor();
+  const uint16_t torque = m->getAddress("torque_enable");
+  m->setCommunicationFault(CommunicationFault::DISCONNECTED);
+  uint16_t model_number = 0;
+  uint8_t value = 0;
+  EXPECT_EQ(handler_.ping(port_, 1, &model_number, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(handler_.read1ByteTxRx(port_, 1, torque, &value, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(handler_.write1ByteTxRx(port_, 1, torque, 1, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(m->read1Byte(torque), 0);
+
+  m->setCommunicationFault(CommunicationFault::NONE);
+  EXPECT_EQ(handler_.ping(port_, 1, &model_number, &error_), COMM_SUCCESS) << "the motor did not recover";
   EXPECT_EQ(model_number, MODEL_PH);
 }
 
-TEST_F(MockDynamixelTest, PingNonExistentMotor)
+TEST_F(MockDynamixelTest, AGlobalCommunicationErrorSilencesEveryMotor)
 {
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  // Don't add any motor
-  uint16_t model_number;
-  EXPECT_FALSE(driver.ping(99, model_number));
-}
-
-TEST_F(MockDynamixelTest, ReadIdRegister)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(42, MODEL_PH);
-
-  int32_t val;
-  EXPECT_TRUE(driver.readRegister(42, ADDR_ID, 1, val));
-  EXPECT_EQ(val, 42);
-}
-
-TEST_F(MockDynamixelTest, ReadModelNumber)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  int32_t val;
-  EXPECT_TRUE(driver.readRegister(1, ADDR_MODEL_NUMBER, 2, val));
-  EXPECT_EQ(val, MODEL_PH);
-}
-
-TEST_F(MockDynamixelTest, WriteAndRead1Byte)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  // Write torque enable
-  EXPECT_TRUE(driver.writeRegister(1, ADDR_TORQUE_ENABLE, 1, 1));
-
-  int32_t val;
-  EXPECT_TRUE(driver.readRegister(1, ADDR_TORQUE_ENABLE, 1, val));
-  EXPECT_EQ(val, 1);
-}
-
-TEST_F(MockDynamixelTest, WriteAndRead4Byte)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  int32_t target_pos = 100000;
-  EXPECT_TRUE(driver.writeRegister(1, ADDR_GOAL_POSITION, 4, target_pos));
-
-  int32_t val;
-  EXPECT_TRUE(driver.readRegister(1, ADDR_GOAL_POSITION, 4, val));
-  EXPECT_EQ(val, target_pos);
-}
-
-// ============================================================================
-// Position Mode Physics Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, PositionModePhysicsBasic)
-{
-  // Test that position mode physics simulation moves motor toward goal
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Verify addresses are cached correctly
-  EXPECT_EQ(motor->getAddress("torque_enable"), ADDR_TORQUE_ENABLE);
-  EXPECT_EQ(motor->getAddress("goal_position"), ADDR_GOAL_POSITION);
-  EXPECT_GT(motor->getAddress("profile_velocity"), 0);  // Should be 560
-  EXPECT_GT(motor->getAddress("present_position"), 0);  // Should be 580
-
-  // Set position mode (operating_mode = 3)
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-
-  // Enable torque
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set profile_velocity (the primary velocity limit for position mode)
-  motor->write4Byte(560, 10000);  // profile_velocity
-
-  // Set goal position (positive direction)
-  int32_t target_pos = 100000;  // Large goal position
-  motor->write4Byte(ADDR_GOAL_POSITION, static_cast<uint32_t>(target_pos));
-
-  // Verify initial position is 0
-  EXPECT_NEAR(motor->getCurrentPosition(), 0.0, 0.001);
-
-  // Simulate for significant time (1000 iterations like working tests)
-  for (int i = 0; i < 1000; ++i) {
-    motor->update(0.01);  // 10 seconds total
-  }
-
-  // Motor should have moved toward goal (position > 0)
-  EXPECT_GT(motor->getCurrentPosition(), 0.0);
-}
-
-TEST_F(MockDynamixelTest, PositionModeTorqueDisabledNoMovement)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Torque is OFF by default
-  EXPECT_EQ(motor->read1Byte(ADDR_TORQUE_ENABLE), 0);
-
-  // Set goal position
-  motor->write4Byte(ADDR_GOAL_POSITION, 100000);
-
-  // Simulate
-  for (int i = 0; i < 100; ++i) {
-    motor->update(0.01);
-  }
-
-  // Should not have moved (torque disabled)
-  EXPECT_NEAR(motor->getCurrentPosition(), 0.0, 0.001);
-}
-
-TEST_F(MockDynamixelTest, PositionModeAddressValidation)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Verify all required addresses are loaded from YAML
-  EXPECT_GT(motor->getAddress("torque_enable"), 0);
-  EXPECT_GT(motor->getAddress("goal_position"), 0);
-  EXPECT_GT(motor->getAddress("present_position"), 0);
-  EXPECT_GT(motor->getAddress("operating_mode"), 0);
-
-  // Set position mode and verify register write
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  EXPECT_EQ(motor->read1Byte(ADDR_OPERATING_MODE), 3);
-
-  // Enable torque and verify
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-  EXPECT_EQ(motor->read1Byte(ADDR_TORQUE_ENABLE), 1);
-
-  // Set goal and verify
-  motor->write4Byte(ADDR_GOAL_POSITION, 50000);
-  EXPECT_EQ(motor->read4Byte(ADDR_GOAL_POSITION), 50000u);
-}
-
-// ============================================================================
-// Velocity Mode Physics Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, VelocityModePhysicsBasic)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Set velocity control mode (operating_mode = 1)
-  motor->write1Byte(ADDR_OPERATING_MODE, 1);
-
-  // Enable torque
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set goal velocity (positive direction)
-  int32_t goal_vel_ticks = 10000;
-  motor->write4Byte(ADDR_GOAL_VELOCITY, static_cast<uint32_t>(goal_vel_ticks));
-
-  // Record initial state
-  double initial_pos = motor->getCurrentPosition();
-
-  // Simulate
-  for (int i = 0; i < 100; ++i) {
-    motor->update(0.01);
-  }
-
-  // Position should have changed (motor is rotating)
-  double final_pos = motor->getCurrentPosition();
-  EXPECT_GT(final_pos, initial_pos);
-
-  // Velocity should be positive (matching goal direction)
-  EXPECT_GT(motor->getCurrentVelocity(), 0.0);
-}
-
-TEST_F(MockDynamixelTest, VelocityModeReverseDirection)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Set velocity control mode
-  motor->write1Byte(ADDR_OPERATING_MODE, 1);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set negative goal velocity (using 2's complement for signed value)
-  int32_t goal_vel = -10000;
-  motor->write4Byte(ADDR_GOAL_VELOCITY, static_cast<uint32_t>(goal_vel));
-
-  // Simulate
-  double initial_pos = motor->getCurrentPosition();
-  for (int i = 0; i < 100; ++i) {
-    motor->update(0.01);
-  }
-
-  // Position should decrease (negative direction)
-  double final_pos = motor->getCurrentPosition();
-  EXPECT_LT(final_pos, initial_pos);
-
-  // Velocity should be negative
-  EXPECT_LT(motor->getCurrentVelocity(), 0.0);
-}
-
-// ============================================================================
-// Current/Torque Mode Physics Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, CurrentModeBasic)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Set current control mode (operating_mode = 0)
-  motor->write1Byte(ADDR_OPERATING_MODE, 0);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Write goal current (use goal_current address from PH.yaml = 550)
-  uint16_t goal_current_addr = motor->getAddress("goal_current");
-  if (goal_current_addr == 0) {
-    goal_current_addr = 550;  // Fallback to PH series address
-  }
-  motor->write2Byte(goal_current_addr, 1000);
-
-  // Simulate
-  for (int i = 0; i < 100; ++i) {
-    motor->update(0.01);
-  }
-
-  // In current mode, current causes acceleration
-  // Velocity should have increased from 0
-  double velocity = motor->getCurrentVelocity();
-  EXPECT_GT(std::abs(velocity), 0.0);
-}
-
-// ============================================================================
-// Sync Read/Write Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, SyncReadMultipleMotors)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  // Add multiple motors
-  driver.addDummyMotor(1, MODEL_PH);
-  driver.addDummyMotor(2, MODEL_PH);
-  driver.addDummyMotor(3, MODEL_PH);
-
-  // Write distinct positions to each
-  ASSERT_TRUE(driver.writeRegister(1, ADDR_GOAL_POSITION, 4, 1000));
-  ASSERT_TRUE(driver.writeRegister(2, ADDR_GOAL_POSITION, 4, 2000));
-  ASSERT_TRUE(driver.writeRegister(3, ADDR_GOAL_POSITION, 4, 3000));
-
-  // Create sync read for goal_position
-  auto sync_read = driver.setSyncRead(ADDR_GOAL_POSITION, 4);
-  ASSERT_NE(sync_read, nullptr);
-
-  sync_read->addParam(1);
-  sync_read->addParam(2);
-  sync_read->addParam(3);
-
-  EXPECT_EQ(sync_read->txRxPacket(), COMM_SUCCESS);
-
-  // Verify each motor's data
-  EXPECT_TRUE(sync_read->isAvailable(1, ADDR_GOAL_POSITION, 4));
-  EXPECT_TRUE(sync_read->isAvailable(2, ADDR_GOAL_POSITION, 4));
-  EXPECT_TRUE(sync_read->isAvailable(3, ADDR_GOAL_POSITION, 4));
-
-  EXPECT_EQ(sync_read->getData(1, ADDR_GOAL_POSITION, 4), 1000u);
-  EXPECT_EQ(sync_read->getData(2, ADDR_GOAL_POSITION, 4), 2000u);
-  EXPECT_EQ(sync_read->getData(3, ADDR_GOAL_POSITION, 4), 3000u);
-}
-
-TEST_F(MockDynamixelTest, SyncWriteMultipleMotors)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-  driver.addDummyMotor(2, MODEL_PH);
-
-  // Create sync write for torque enable
-  auto sync_write = driver.setSyncWrite(ADDR_TORQUE_ENABLE, 1);
-  ASSERT_NE(sync_write, nullptr);
-
-  uint8_t torque_on = 1;
-  sync_write->addParam(1, &torque_on);
-  sync_write->addParam(2, &torque_on);
-
-  EXPECT_EQ(sync_write->txPacket(), COMM_SUCCESS);
-
-  // Verify both motors have torque enabled
-  int32_t val1, val2;
-  ASSERT_TRUE(driver.readRegister(1, ADDR_TORQUE_ENABLE, 1, val1));
-  ASSERT_TRUE(driver.readRegister(2, ADDR_TORQUE_ENABLE, 1, val2));
-
-  EXPECT_EQ(val1, 1);
-  EXPECT_EQ(val2, 1);
-}
-
-// ============================================================================
-// Hardware Error Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, InjectHardwareError)
-{
-  // Use direct mock access since driver fails on hardware error (by design)
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Inject overheating error
-  motor->setHardwareError(ERROR_OVERHEATING);
-
-  // Read hardware error register directly from mock
-  EXPECT_EQ(motor->getHardwareError(), ERROR_OVERHEATING);
-  EXPECT_EQ(motor->read1Byte(ADDR_HARDWARE_ERROR), ERROR_OVERHEATING);
-}
-
-TEST_F(MockDynamixelTest, MultipleHardwareErrors)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Inject multiple errors (bitmap)
-  uint8_t errors = ERROR_OVERHEATING | ERROR_OVERLOAD;
-  motor->setHardwareError(errors);
-
-  EXPECT_EQ(motor->getHardwareError(), errors);
-  EXPECT_EQ(motor->read1Byte(ADDR_HARDWARE_ERROR), errors);
-}
-
-TEST_F(MockDynamixelTest, ClearHardwareErrorOnReboot)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  motor->setHardwareError(ERROR_OVERLOAD);
-
-  // Verify error is set (directly via mock)
-  EXPECT_EQ(motor->getHardwareError(), ERROR_OVERLOAD);
-  EXPECT_EQ(motor->read1Byte(ADDR_HARDWARE_ERROR), ERROR_OVERLOAD);
-
-  // Reboot should clear the error
-  EXPECT_TRUE(driver.reboot(1));
-
-  EXPECT_EQ(motor->getHardwareError(), 0);
-  EXPECT_EQ(motor->read1Byte(ADDR_HARDWARE_ERROR), 0);
-}
-
-TEST_F(MockDynamixelTest, IndirectAddressMappingsClearedOnRebootXSeries)
-{
-  // On X-series motors the indirect-address pointer registers live in RAM, so a real
-  // reboot wipes them. The mock must reproduce this, otherwise the production-side
-  // rewriteIndirectAddresses path would have nothing to restore and tests for it could
-  // not detect regressions.
-  //
-  // This test is synchronous and single-threaded — no executor, no service calls,
-  // no sleep — so it is not subject to timing flakes.
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_XM);
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Write a non-zero indirect-address pointer (slot 0 -> torque_enable). The pointer
-  // registers live below the indirect-data window (XM: 578..633 vs 634..661), so reads
-  // and writes here are direct memory accesses, not subject to resolveAddress redirection.
-  motor->write2Byte(ADDR_XM_INDIRECT_ADDRESS_START, ADDR_XM_TORQUE_ENABLE);
-  ASSERT_EQ(motor->read2Byte(ADDR_XM_INDIRECT_ADDRESS_START), ADDR_XM_TORQUE_ENABLE);
-
-  // Reboot.
-  EXPECT_TRUE(driver.reboot(1));
-
-  // The pointer must be cleared, matching real X-series reboot behavior.
-  EXPECT_EQ(motor->read2Byte(ADDR_XM_INDIRECT_ADDRESS_START), 0)
-      << "X-series indirect address pointer must be cleared on reboot, otherwise tests "
-      << "for the production-side rewriteIndirectAddresses path cannot detect regressions.";
-}
-
-TEST_F(MockDynamixelTest, IndirectAddressMappingsSurviveRebootPSeries)
-{
-  // On P-/PRO-series motors the indirect-address pointer registers live in EEPROM, so a
-  // real reboot leaves them intact. The mock must preserve them too — otherwise the
-  // EEPROM-skip path in production code (which deliberately does NOT rewrite these
-  // motors) could not be distinguished from a no-op.
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Write a non-zero indirect-address pointer (slot 0 -> torque_enable). PH pointer
-  // registers live below the indirect-data window (168..223 vs 634..661), so accesses
-  // here are direct memory, not subject to resolveAddress redirection.
-  motor->write2Byte(ADDR_INDIRECT_ADDRESS_START, ADDR_TORQUE_ENABLE);
-  ASSERT_EQ(motor->read2Byte(ADDR_INDIRECT_ADDRESS_START), ADDR_TORQUE_ENABLE);
-
-  // Reboot.
-  EXPECT_TRUE(driver.reboot(1));
-
-  // The EEPROM-resident pointer must survive the reboot unchanged.
-  EXPECT_EQ(motor->read2Byte(ADDR_INDIRECT_ADDRESS_START), ADDR_TORQUE_ENABLE)
-      << "P-series indirect address pointer lives in EEPROM and must survive a reboot; "
-      << "wiping it in the mock would make the production EEPROM-skip path untestable.";
-}
-
-TEST_F(MockDynamixelTest, WriteInitialValuesSkipsUnavailableRegister)
-{
-  // Configured registers that don't exist on the motor model are a config-skip,
-  // not a hardware failure. writeInitialValues() must continue to apply the
-  // available registers and return true so that callers don't double-warn.
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  Dynamixel dxl(1, driver);
-  ASSERT_TRUE(dxl.connect());
-
-  // Configure one register that exists (led_blue) and one that does not exist
-  // on PH (a fabricated name guaranteed not in the control table).
-  dxl.setInitialRegisterValues({
-      {"led_blue", "200"},
-      {"this_register_does_not_exist_on_any_model", "42"},
-  });
-
-  // Skip-don't-fail: a missing register is logged but does NOT cause a `false` return,
-  // so the reboot caller doesn't emit a redundant generic warning.
-  EXPECT_TRUE(dxl.writeInitialValues());
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-  uint16_t led_blue_addr = motor->getAddress("led_blue");
-  ASSERT_GT(led_blue_addr, 0u);
-  EXPECT_EQ(motor->read1Byte(led_blue_addr), 200)
-      << "Available registers must still be applied even when a sibling register is unavailable.";
-}
-
-// ============================================================================
-// Communication Error Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, CommunicationErrorOnPing)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  // Enable communication error
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  motor->setCommunicationError(true);
-
-  // Ping should fail
-  uint16_t model_number;
-  EXPECT_FALSE(driver.ping(1, model_number));
-}
-
-TEST_F(MockDynamixelTest, CommunicationErrorOnReadWrite)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  motor->setCommunicationError(true);
-
-  // Read should fail
-  int32_t val;
-  EXPECT_FALSE(driver.readRegister(1, ADDR_TORQUE_ENABLE, 1, val));
-
-  // Write should fail
-  EXPECT_FALSE(driver.writeRegister(1, ADDR_TORQUE_ENABLE, 1, 1));
-}
-
-TEST_F(MockDynamixelTest, CommunicationErrorRecovery)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-
-  // Enable error
-  motor->setCommunicationError(true);
-  EXPECT_FALSE(driver.ping(1));
-
-  // Clear error
-  motor->setCommunicationError(false);
-  EXPECT_TRUE(driver.ping(1));
-}
-
-TEST_F(MockDynamixelTest, GlobalCommunicationError)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-  driver.addDummyMotor(2, MODEL_PH);
-
-  // Set global communication error
+  motor(1);
+  motor(2);
+  uint16_t model_number = 0;
   MockDynamixelManager::instance().setGlobalCommunicationError(true);
-
-  EXPECT_FALSE(driver.ping(1));
-  EXPECT_FALSE(driver.ping(2));
-
-  // Clear
+  EXPECT_EQ(handler_.ping(port_, 1, &model_number, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(handler_.ping(port_, 2, &model_number, &error_), COMM_RX_TIMEOUT);
   MockDynamixelManager::instance().setGlobalCommunicationError(false);
+  EXPECT_EQ(handler_.ping(port_, 1, &model_number, &error_), COMM_SUCCESS);
+  EXPECT_EQ(handler_.ping(port_, 2, &model_number, &error_), COMM_SUCCESS);
+}
 
-  EXPECT_TRUE(driver.ping(1));
-  EXPECT_TRUE(driver.ping(2));
+// A counted fault heals, so it tells a caller that retries from one that gives up on the first miss
+TEST_F(MockDynamixelTest, ACountedReadFaultHealsAfterItsCount)
+{
+  const auto m = motor();
+  const uint16_t torque = m->getAddress("torque_enable");
+  m->write1Byte(torque, 1);
+  m->setRegisterReadFaultCount("torque_enable", 2);
+  uint8_t value = 0;
+  EXPECT_EQ(handler_.read1ByteTxRx(port_, 1, torque, &value, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(handler_.read1ByteTxRx(port_, 1, torque, &value, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(handler_.read1ByteTxRx(port_, 1, torque, &value, &error_), COMM_SUCCESS) << "the fault was not spent";
+  EXPECT_EQ(value, 1);
+}
+
+TEST_F(MockDynamixelTest, APersistentReadFaultNeverHeals)
+{
+  const auto m = motor();
+  m->setRegisterReadFault("torque_enable");
+  uint8_t value = 0;
+  for (int attempt = 0; attempt < 5; ++attempt) {
+    EXPECT_EQ(handler_.read1ByteTxRx(port_, 1, m->getAddress("torque_enable"), &value, &error_), COMM_RX_TIMEOUT)
+        << "attempt " << attempt;
+  }
+}
+
+// One read spends one use of every byte, or the remaining bytes stay faulted forever
+TEST_F(MockDynamixelTest, ACountedReadFaultOnAMultiByteRegisterHealsAsAWhole)
+{
+  const auto m = motor();
+  m->setRegisterReadFaultCount("goal_position", 1);
+  uint32_t value = 0;
+  EXPECT_EQ(handler_.read4ByteTxRx(port_, 1, m->getAddress("goal_position"), &value, &error_), COMM_RX_TIMEOUT);
+  EXPECT_EQ(handler_.read4ByteTxRx(port_, 1, m->getAddress("goal_position"), &value, &error_), COMM_SUCCESS);
+}
+
+// A motor resolves an addressed read of an indirect slot as it does a sync read
+TEST_F(MockDynamixelTest, AnAddressedReadOfAnIndirectSlotFailsWithItsRegister)
+{
+  const auto m = motor();
+  m->write2Byte(PH_POINTER_1, m->getAddress("torque_enable"));
+  m->setRegisterReadFault("torque_enable");
+  uint8_t value = 0;
+  EXPECT_EQ(handler_.read1ByteTxRx(port_, 1, DATA_1, &value, &error_), COMM_RX_TIMEOUT);
+}
+
+// A hook reports a read that happened, so it must not fire for a motor that did not answer
+TEST_F(MockDynamixelTest, AReadHookDoesNotFireForAMotorThatDidNotAnswer)
+{
+  const auto m = motor();
+  m->write2Byte(PH_POINTER_1, m->getAddress("torque_enable"));
+  int fired = 0;
+  m->setRegisterReadHook("torque_enable", [&fired]() { ++fired; });
+  MockGroupSyncRead group(nullptr, nullptr, DATA_1, 1);
+  ASSERT_TRUE(group.addParam(1));
+
+  m->setCommunicationFault(CommunicationFault::DISCONNECTED);
+  EXPECT_NE(group.txRxPacket(), COMM_SUCCESS);
+  EXPECT_EQ(fired, 0) << "fired for a silent motor";
+
+  m->setCommunicationFault(CommunicationFault::NONE);
+  m->setRegisterReadFault("torque_enable");
+  EXPECT_NE(group.txRxPacket(), COMM_SUCCESS);
+  EXPECT_EQ(fired, 0) << "fired for a faulted register";
+}
+
+// The error field carries an error number and an alert bit, which occur together
+TEST_F(MockDynamixelTest, PacketErrorStringKeepsTheErrorNumberAndTheAlertApart)
+{
+  EXPECT_STREQ(handler_.getRxPacketError(0), "");
+  EXPECT_STREQ(handler_.getRxPacketError(PACKET_ERROR_ALERT), "Hardware error alert");
+  EXPECT_STREQ(handler_.getRxPacketError(PACKET_ERROR_DATA_RANGE), "Data Range Error");
+  EXPECT_STREQ(handler_.getRxPacketError(PACKET_ERROR_DATA_RANGE | PACKET_ERROR_ALERT),
+               "Data Range Error (with hardware error alert)");
 }
 
 // ============================================================================
-// Manager Tests
+// Sync groups
 // ============================================================================
 
-TEST_F(MockDynamixelTest, ManagerReset)
+TEST_F(MockDynamixelTest, ASyncReadAnswersForEveryMotor)
 {
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  MockDynamixelManager::instance().addMotor(2, MODEL_PH);
+  for (const uint8_t id : {1, 2, 3}) {
+    const auto m = motor(id);
+    m->write4Byte(m->getAddress("goal_position"), id * 1000U);
+  }
+  const uint16_t goal = MockDynamixelManager::instance().getMotor(1)->getAddress("goal_position");
+  MockGroupSyncRead group(nullptr, nullptr, goal, 4);
+  for (const uint8_t id : {1, 2, 3}) {
+    ASSERT_TRUE(group.addParam(id));
+  }
+  ASSERT_EQ(group.txRxPacket(), COMM_SUCCESS);
+  for (const uint8_t id : {1, 2, 3}) {
+    EXPECT_TRUE(group.isAvailable(id, goal, 4));
+    EXPECT_EQ(group.getData(id, goal, 4), id * 1000U);
+  }
+}
 
-  EXPECT_NE(MockDynamixelManager::instance().getMotor(1), nullptr);
-  EXPECT_NE(MockDynamixelManager::instance().getMotor(2), nullptr);
+// As the SDK group, which aborts at the first missing status packet
+TEST_F(MockDynamixelTest, ASyncReadFailsWholeWhenOneMotorStaysSilent)
+{
+  for (const uint8_t id : {1, 2}) {
+    motor(id);
+  }
+  const uint16_t present = MockDynamixelManager::instance().getMotor(1)->getAddress("present_position");
+  MockDynamixelManager::instance().getMotor(2)->setCommunicationFault(CommunicationFault::DROP_STATUS_PACKETS);
+  MockGroupSyncRead group(nullptr, nullptr, present, 4);
+  ASSERT_TRUE(group.addParam(1));
+  ASSERT_TRUE(group.addParam(2));
+  EXPECT_NE(group.txRxPacket(), COMM_SUCCESS);
+  EXPECT_FALSE(group.isAvailable(1, present, 4)) << "data of a partial read was kept";
+  EXPECT_FALSE(group.isAvailable(2, present, 4));
+}
 
+// getData must not sign-extend a value with the top bit set
+TEST_F(MockDynamixelTest, ASyncReadKeepsTheTopBitOfAFourByteValue)
+{
+  const auto m = motor();
+  const uint16_t present = m->getAddress("present_position");
+  m->write4Byte(present, 0xFF000000U);
+  MockGroupSyncRead group(nullptr, nullptr, present, 4);
+  ASSERT_TRUE(group.addParam(1));
+  ASSERT_EQ(group.txRxPacket(), COMM_SUCCESS);
+  EXPECT_EQ(group.getData(1, present, 4), 0xFF000000U);
+}
+
+TEST_F(MockDynamixelTest, ASyncWriteReachesEveryMotor)
+{
+  motor(1);
+  motor(2);
+  const uint16_t torque = MockDynamixelManager::instance().getMotor(1)->getAddress("torque_enable");
+  MockGroupSyncWrite group(nullptr, nullptr, torque, 1);
+  uint8_t on = 1;
+  ASSERT_TRUE(group.addParam(1, &on));
+  ASSERT_TRUE(group.addParam(2, &on));
+  EXPECT_EQ(group.txPacket(), COMM_SUCCESS);
+  EXPECT_EQ(MockDynamixelManager::instance().getMotor(1)->read1Byte(torque), 1);
+  EXPECT_EQ(MockDynamixelManager::instance().getMotor(2)->read1Byte(torque), 1);
+}
+
+// A sync write is transmit only, so a motor that cannot answer still applies it
+TEST_F(MockDynamixelTest, ASyncWriteReachesAMotorThatCannotAnswerButNotADisconnectedOne)
+{
+  const auto m = motor();
+  const uint16_t torque = m->getAddress("torque_enable");
+  MockGroupSyncWrite group(nullptr, nullptr, torque, 1);
+  uint8_t off = 0;
+  ASSERT_TRUE(group.addParam(1, &off));
+
+  m->write1Byte(torque, 1);
+  m->setCommunicationFault(CommunicationFault::DROP_STATUS_PACKETS);
+  EXPECT_EQ(group.txPacket(), COMM_SUCCESS);
+  EXPECT_EQ(m->read1Byte(torque), 0);
+
+  m->write1Byte(torque, 1);
+  m->setCommunicationFault(CommunicationFault::DISCONNECTED);
+  EXPECT_EQ(group.txPacket(), COMM_SUCCESS);
+  EXPECT_EQ(m->read1Byte(torque), 1);
+}
+
+// ============================================================================
+// Manager and accessors
+// ============================================================================
+
+TEST_F(MockDynamixelTest, TheManagerAddsRemovesAndResetsMotors)
+{
+  for (const uint8_t id : {5, 10, 15}) {
+    motor(id);
+  }
+  EXPECT_EQ(MockDynamixelManager::instance().getConnectedIds(), (std::vector<uint8_t>{5, 10, 15}));
+  MockDynamixelManager::instance().removeMotor(5);
+  EXPECT_EQ(MockDynamixelManager::instance().getMotor(5), nullptr);
+  EXPECT_NE(MockDynamixelManager::instance().getMotor(10), nullptr);
   MockDynamixelManager::instance().reset();
+  EXPECT_TRUE(MockDynamixelManager::instance().getConnectedIds().empty());
+}
 
+TEST_F(MockDynamixelTest, AMotorKnowsItsIdentity)
+{
+  const auto m = motor(42);
+  EXPECT_EQ(m->getId(), 42);
+  EXPECT_EQ(m->getModelNumber(), MODEL_PH);
+  EXPECT_EQ(m->read1Byte(m->getAddress("id")), 42);
+  EXPECT_EQ(m->read2Byte(m->getAddress("model_number")), MODEL_PH);
+  EXPECT_EQ(m->getAddress("nonexistent_register"), 0) << "an unknown register";
+}
+
+// A motor without its control table would answer pings and ignore every register
+TEST_F(MockDynamixelTest, AModelWithoutAControlTableIsRefused)
+{
+  EXPECT_THROW(MockDynamixelManager::instance().addMotor(1, 7), std::runtime_error) << "not in model_list.yaml";
+  EXPECT_THROW(MockDynamixelManager::instance().addMotor(1, 12), std::runtime_error) << "AX, no table in devices/";
   EXPECT_EQ(MockDynamixelManager::instance().getMotor(1), nullptr);
-  EXPECT_EQ(MockDynamixelManager::instance().getMotor(2), nullptr);
 }
 
-TEST_F(MockDynamixelTest, RemoveMotor)
+TEST_F(MockDynamixelTest, TheLedAccessorsReadAndWriteTheRegisters)
 {
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  MockDynamixelManager::instance().addMotor(2, MODEL_PH);
-
-  MockDynamixelManager::instance().removeMotor(1);
-
-  EXPECT_EQ(MockDynamixelManager::instance().getMotor(1), nullptr);
-  EXPECT_NE(MockDynamixelManager::instance().getMotor(2), nullptr);
-}
-
-TEST_F(MockDynamixelTest, GetConnectedIds)
-{
-  MockDynamixelManager::instance().addMotor(5, MODEL_PH);
-  MockDynamixelManager::instance().addMotor(10, MODEL_PH);
-  MockDynamixelManager::instance().addMotor(15, MODEL_PH);
-
-  auto ids = MockDynamixelManager::instance().getConnectedIds();
-
-  EXPECT_EQ(ids.size(), 3u);
-  EXPECT_NE(std::find(ids.begin(), ids.end(), 5), ids.end());
-  EXPECT_NE(std::find(ids.begin(), ids.end(), 10), ids.end());
-  EXPECT_NE(std::find(ids.begin(), ids.end(), 15), ids.end());
+  const auto m = motor();
+  EXPECT_EQ(m->getLedRed(), 0);
+  EXPECT_EQ(m->getLedGreen(), 0);
+  EXPECT_EQ(m->getLedBlue(), 0);
+  m->setLedRed(255);
+  m->setLedGreen(128);
+  m->setLedBlue(64);
+  EXPECT_EQ(m->read1Byte(m->getAddress("led_red")), 255);
+  EXPECT_EQ(m->read1Byte(m->getAddress("led_green")), 128);
+  EXPECT_EQ(m->read1Byte(m->getAddress("led_blue")), 64);
+  m->write1Byte(m->getAddress("led_red"), 100);
+  m->write1Byte(m->getAddress("led_green"), 150);
+  m->write1Byte(m->getAddress("led_blue"), 200);
+  EXPECT_EQ(m->getLedRed(), 100);
+  EXPECT_EQ(m->getLedGreen(), 150);
+  EXPECT_EQ(m->getLedBlue(), 200);
 }
 
 // ============================================================================
-// Direct Motor Access Tests
+// Plant mode: the motor drives a joint of a physics engine
 // ============================================================================
 
-TEST_F(MockDynamixelTest, DirectMotorAccess)
+TEST_F(MockDynamixelTest, LimpServoReferenceFollowsThePlantAndTorqueOnStartsThere)
 {
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
+  const auto m = motor();
+  m->write1Byte(m->getAddress("operating_mode"), static_cast<uint8_t>(OperatingMode::EXTENDED_POSITION_CONTROL));
+  auto command = m->followPlant(0.01, 1.0, 0.5, 0.0);
+  EXPECT_FALSE(command.torque_on);
+  EXPECT_NEAR(command.position, 1.0, 1e-9);
+  EXPECT_NEAR(command.velocity, 0.5, 1e-9);
 
-  EXPECT_EQ(motor->getId(), 1);
-  EXPECT_EQ(motor->getModelNumber(), MODEL_PH);
+  // The plugin anchors the goal at the present position before it enables torque
+  m->followPlant(0.01, 1.0, 0.0, 0.0);
+  m->write4Byte(m->getAddress("goal_position"), m->read4Byte(m->getAddress("present_position")));
+  m->write1Byte(m->getAddress("torque_enable"), 1);
+  command = m->followPlant(0.01, 1.0, 0.0, 0.0);
+  EXPECT_TRUE(command.torque_on);
+  EXPECT_NEAR(command.position, 1.0, 1e-3);
 }
 
-TEST_F(MockDynamixelTest, AddressLookup)
+// The plant hands over what the register reports, homing included, and the reference comes back in
+// that frame, so a torque on does not turn arm_joint_1 by its homing offset of pi
+TEST_F(MockDynamixelTest, PlantPositionIsInTheFrameOfThePresentPositionRegister)
 {
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
+  const auto m = motor();
+  m->setFactoryValue("homing_offset", M_PI);
+  m->write1Byte(m->getAddress("operating_mode"), static_cast<uint8_t>(OperatingMode::EXTENDED_POSITION_CONTROL));
+  m->followPlant(0.01, 2.0, 0.0, 0.0);
+  m->setFactoryValue("goal_position", 2.0);
+  EXPECT_NEAR(static_cast<int32_t>(m->read4Byte(m->getAddress("present_position"))),
+              static_cast<int32_t>(m->read4Byte(m->getAddress("goal_position"))), 1);
+  EXPECT_NEAR(m->getCurrentPosition(), 2.0 - M_PI, 1e-4);
 
-  // Verify address lookup works
-  EXPECT_EQ(motor->getAddress("torque_enable"), ADDR_TORQUE_ENABLE);
-  EXPECT_EQ(motor->getAddress("goal_position"), ADDR_GOAL_POSITION);
-  EXPECT_EQ(motor->getAddress("present_position"), ADDR_PRESENT_POSITION);
-  EXPECT_EQ(motor->getAddress("hardware_error_status"), ADDR_HARDWARE_ERROR);
-
-  // Unknown register should return 0
-  EXPECT_EQ(motor->getAddress("nonexistent_register"), 0);
+  m->write4Byte(m->getAddress("goal_position"), m->read4Byte(m->getAddress("present_position")));
+  m->write1Byte(m->getAddress("torque_enable"), 1);
+  EXPECT_NEAR(m->followPlant(0.01, 2.0, 0.0, 0.0).position, 2.0, 1e-4);
 }
 
-// ============================================================================
-// Test Isolation
-// ============================================================================
-
-TEST_F(MockDynamixelTest, TestIsolation1)
+// A blocked or current limited joint must not hold back the profile, or the servo stops pulling
+TEST_F(MockDynamixelTest, PositionModeReferenceAdvancesTowardTheGoalWhileThePlantStands)
 {
-  // This test adds motor ID 1
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  EXPECT_NE(MockDynamixelManager::instance().getMotor(1), nullptr);
-}
-
-TEST_F(MockDynamixelTest, TestIsolation2)
-{
-  // This test should not see motor from previous test (due to reset in SetUp)
-  EXPECT_EQ(MockDynamixelManager::instance().getMotor(1), nullptr);
-
-  // Add motor 1 fresh
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  EXPECT_NE(MockDynamixelManager::instance().getMotor(1), nullptr);
-}
-
-// ============================================================================
-// Position Limits Tests
-// ============================================================================
-
-// PH Series position limit addresses
-constexpr uint16_t ADDR_MAX_POSITION_LIMIT = 48;
-constexpr uint16_t ADDR_MIN_POSITION_LIMIT = 52;
-
-TEST_F(MockDynamixelTest, PositionLimitsEnforcedInPositionMode)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Set position mode (operating_mode = 3)
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set position limits (in ticks)
-  // PH series: rad_per_tick = 0.00000625911
-  // Set limits at approximately +/- 1 rad (160000 ticks each way)
-  int32_t max_limit = 160000;
-  int32_t min_limit = -160000;
-  motor->write4Byte(ADDR_MAX_POSITION_LIMIT, static_cast<uint32_t>(max_limit));
-  motor->write4Byte(ADDR_MIN_POSITION_LIMIT, static_cast<uint32_t>(min_limit));
-
-  // Set velocity/acceleration for movement
-  motor->write4Byte(560, 10000);  // profile_velocity
-
-  // Try to move beyond maximum position limit
-  int32_t beyond_max = 500000;  // Way beyond max_limit
-  motor->write4Byte(ADDR_GOAL_POSITION, static_cast<uint32_t>(beyond_max));
-
-  // Simulate for a long time
-  for (int i = 0; i < 1000; ++i) {
-    motor->update(0.01);  // 10 seconds
+  const auto m = energised(OperatingMode::EXTENDED_POSITION_CONTROL);
+  m->setFactoryValue("goal_position", 1.0);
+  ServoCommand command;
+  for (int i = 0; i < 10; ++i) {
+    command = m->followPlant(0.01, 0.0, 0.0, 0.0);
   }
-
-  // Motor should stop at or before max_limit
-  double max_limit_rad = static_cast<double>(max_limit) * 0.00000625911;
-  EXPECT_LE(motor->getCurrentPosition(), max_limit_rad + 0.001);
+  EXPECT_GT(command.position, 0.05);
+  EXPECT_LT(command.position, 1.0);
+  EXPECT_GT(command.velocity, 0.0);
 }
 
-TEST_F(MockDynamixelTest, PositionLimitsEnforcedNegativeDirection)
+TEST_F(MockDynamixelTest, PlantMeasurementReachesThePresentRegistersInModelUnits)
 {
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
+  const auto m = motor(1, MODEL_PRO_H54);
+  m->followPlant(0.01, 1.0, 0.5, 2.0);
+  // The per tick values of devices/models/PROExt.yaml
+  EXPECT_NEAR(static_cast<int32_t>(m->read4Byte(m->getAddress("present_position"))), 1.0 / 0.00001251822, 1);
+  EXPECT_NEAR(static_cast<int32_t>(m->read4Byte(m->getAddress("present_velocity"))), 0.5 / 0.00020863735, 1);
+  EXPECT_NEAR(static_cast<int16_t>(m->read2Byte(m->getAddress("present_current"))), 2.0 / 0.01611328125, 1);
+}
 
-  // Position mode
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set position limits
-  int32_t max_limit = 160000;
-  int32_t min_limit = -160000;
-  motor->write4Byte(ADDR_MAX_POSITION_LIMIT, static_cast<uint32_t>(max_limit));
-  motor->write4Byte(ADDR_MIN_POSITION_LIMIT, static_cast<uint32_t>(min_limit));
-
-  motor->write4Byte(560, 10000);  // profile_velocity
-
-  // Try to move beyond minimum position limit (negative)
-  int32_t beyond_min = -500000;
-  motor->write4Byte(ADDR_GOAL_POSITION, static_cast<uint32_t>(beyond_min));
-
-  // Simulate
-  for (int i = 0; i < 1000; ++i) {
-    motor->update(0.01);
+TEST_F(MockDynamixelTest, VelocityModeReferenceDoesNotWindUpOnABlockedJoint)
+{
+  const auto m = energised(OperatingMode::VELOCITY_CONTROL);
+  m->setFactoryValue("goal_velocity", 1.0);
+  ServoCommand command;
+  for (int i = 0; i < 100; ++i) {
+    command = m->followPlant(0.01, 0.0, 0.0, 0.0);
   }
-
-  // Motor should stop at or after min_limit
-  double min_limit_rad = static_cast<double>(min_limit) * 0.00000625911;
-  EXPECT_GE(motor->getCurrentPosition(), min_limit_rad - 0.001);
+  EXPECT_NEAR(command.velocity, 1.0, 1e-3);
+  EXPECT_NEAR(command.position, 0.0, 1e-9);
 }
 
-TEST_F(MockDynamixelTest, ExtendedPositionModeIgnoresLimits)
+TEST_F(MockDynamixelTest, PlantCurrentLimitIsTheLowerOfCurrentLimitAndGoalCurrent)
 {
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Set EXTENDED position mode (operating_mode = 4) - multi-turn
-  motor->write1Byte(ADDR_OPERATING_MODE, 4);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set position limits (these should be IGNORED in extended mode)
-  int32_t max_limit = 160000;
-  int32_t min_limit = -160000;
-  motor->write4Byte(ADDR_MAX_POSITION_LIMIT, static_cast<uint32_t>(max_limit));
-  motor->write4Byte(ADDR_MIN_POSITION_LIMIT, static_cast<uint32_t>(min_limit));
-
-  motor->write4Byte(560, 10000);  // profile_velocity
-
-  // Set goal well beyond the "limit"
-  int32_t beyond_max = 500000;
-  motor->write4Byte(ADDR_GOAL_POSITION, static_cast<uint32_t>(beyond_max));
-
-  // Simulate for a very long time
-  for (int i = 0; i < 2000; ++i) {
-    motor->update(0.01);  // 20 seconds
-  }
-
-  // In extended mode, motor should have moved past the limit
-  double max_limit_rad = static_cast<double>(max_limit) * 0.00000625911;
-  EXPECT_GT(motor->getCurrentPosition(), max_limit_rad);
+  const auto m = motor();
+  m->setFactoryValue("current_limit", 2.0);
+  m->setFactoryValue("goal_current", -0.5);
+  EXPECT_NEAR(m->followPlant(0.01, 0.0, 0.0, 0.0).current_limit, 0.5, 1e-9);
+  m->setFactoryValue("goal_current", 3.0);
+  EXPECT_NEAR(m->followPlant(0.01, 0.0, 0.0, 0.0).current_limit, 2.0, 1e-9);
 }
 
-// ============================================================================
-// LED Control Tests
-// ============================================================================
-
-constexpr uint16_t ADDR_LED_RED = 513;
-constexpr uint16_t ADDR_LED_GREEN = 514;
-constexpr uint16_t ADDR_LED_BLUE = 515;
-
-TEST_F(MockDynamixelTest, LedAccessors)
+TEST_F(MockDynamixelTest, FactoryValuesAreWrittenInTheRegisterUnit)
 {
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Initially LEDs should be off
-  EXPECT_EQ(motor->getLedRed(), 0);
-  EXPECT_EQ(motor->getLedGreen(), 0);
-  EXPECT_EQ(motor->getLedBlue(), 0);
-
-  // Set LED colors using accessors
-  motor->setLedRed(255);
-  motor->setLedGreen(128);
-  motor->setLedBlue(64);
-
-  // Verify via accessors
-  EXPECT_EQ(motor->getLedRed(), 255);
-  EXPECT_EQ(motor->getLedGreen(), 128);
-  EXPECT_EQ(motor->getLedBlue(), 64);
-
-  // Verify via direct register read
-  EXPECT_EQ(motor->read1Byte(ADDR_LED_RED), 255);
-  EXPECT_EQ(motor->read1Byte(ADDR_LED_GREEN), 128);
-  EXPECT_EQ(motor->read1Byte(ADDR_LED_BLUE), 64);
+  const auto m = motor(1, MODEL_PRO_H54);
+  // Velocity first, so a current limit written wider than its register would show
+  m->setFactoryValue("velocity_limit", 3.0);
+  m->setFactoryValue("current_limit", 22.0);
+  EXPECT_EQ(m->read2Byte(m->getAddress("current_limit")), std::lround(22.0 / 0.01611328125));
+  EXPECT_EQ(m->read4Byte(m->getAddress("velocity_limit")), std::lround(3.0 / 0.00020863735));
+  EXPECT_THROW(m->setFactoryValue("no_such_register", 1.0), std::invalid_argument);
 }
 
-TEST_F(MockDynamixelTest, LedViaRegisterWrite)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Write LED values directly to registers
-  motor->write1Byte(ADDR_LED_RED, 100);
-  motor->write1Byte(ADDR_LED_GREEN, 150);
-  motor->write1Byte(ADDR_LED_BLUE, 200);
-
-  // Read back via accessors
-  EXPECT_EQ(motor->getLedRed(), 100);
-  EXPECT_EQ(motor->getLedGreen(), 150);
-  EXPECT_EQ(motor->getLedBlue(), 200);
-}
-
-// ============================================================================
-// Homing Offset Tests
-// ============================================================================
-
-constexpr uint16_t ADDR_HOMING_OFFSET = 20;
-
-TEST_F(MockDynamixelTest, HomingOffsetAppliedToPresentPosition)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Set homing offset (in ticks)
-  int32_t homing_offset = 10000;
-  motor->setHomingOffset(homing_offset);
-
-  // Verify it was written
-  EXPECT_EQ(motor->getHomingOffset(), homing_offset);
-
-  // Enable torque and set a goal position
-  // Goal Position is in the same coordinate system as Present Position (includes homing offset)
-  // So to keep the motor at raw position 0, we need to set Goal = homing_offset
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-  motor->write4Byte(560, 10000);                         // profile_velocity
-  motor->write4Byte(ADDR_GOAL_POSITION, homing_offset);  // Goal = homing_offset to stay at raw 0
-
-  // Motor's actual position is 0, and present_position = actual + homing_offset
-  motor->update(0.01);
-
-  // Present position = actual position + homing offset
-  int32_t present_pos = static_cast<int32_t>(motor->read4Byte(ADDR_PRESENT_POSITION));
-  // Actual position is 0, so present = 0 + homing_offset = homing_offset
-  EXPECT_EQ(present_pos, homing_offset);
-}
-
-TEST_F(MockDynamixelTest, HomingOffsetNegative)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Set negative homing offset
-  int32_t homing_offset = -5000;
-  motor->setHomingOffset(homing_offset);
-
-  EXPECT_EQ(motor->getHomingOffset(), homing_offset);
-
-  // Simulate one update to write present values
-  // Set goal = homing_offset to keep motor at raw position 0
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-  motor->write4Byte(ADDR_GOAL_POSITION, homing_offset);  // Goal = homing_offset to stay at raw 0
-  motor->update(0.001);
-
-  // Present position should be actual (0) + homing_offset (-5000) = -5000
-  int32_t present_pos = static_cast<int32_t>(motor->read4Byte(ADDR_PRESENT_POSITION));
-  EXPECT_EQ(present_pos, homing_offset);
-}
-
-// ============================================================================
-// Profile Velocity as Dynamic Limit Tests
-// ============================================================================
-
-constexpr uint16_t ADDR_PROFILE_VELOCITY = 560;
-
-TEST_F(MockDynamixelTest, ProfileVelocityLimitsMovementSpeed)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Position mode
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set a slow profile velocity
-  motor->write4Byte(ADDR_PROFILE_VELOCITY, 1000);  // Slow (~1 rad/s)
-
-  // Set a goal far away (10,000,000 ticks approx 62 rads)
-  motor->write4Byte(ADDR_GOAL_POSITION, 10000000);
-
-  // Simulate for short time (2 seconds)
-  // At 1 rad/s, should move ~2 rads
-  for (int i = 0; i < 200; ++i) {
-    motor->update(0.01);
-  }
-  double slow_position = motor->getCurrentPosition();
-
-  // Reset and try with faster profile velocity
-  MockDynamixelManager::instance().reset();
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  motor = MockDynamixelManager::instance().getMotor(1);
-
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-  motor->write4Byte(ADDR_PROFILE_VELOCITY, 50000);  // Fast (~50 rad/s)
-  motor->write4Byte(ADDR_GOAL_POSITION, 10000000);
-
-  // Simulate for same time
-  // At 50 rad/s (accelerating), should move much further
-  for (int i = 0; i < 200; ++i) {
-    motor->update(0.01);
-  }
-  double fast_position = motor->getCurrentPosition();
-
-  // Motor with faster profile_velocity should have traveled farther
-  EXPECT_GT(fast_position, slow_position);
-}
-
-TEST_F(MockDynamixelTest, ProfileVelocityZeroUsesDefault)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  motor->write1Byte(ADDR_OPERATING_MODE, 3);
-  motor->write1Byte(ADDR_TORQUE_ENABLE, 1);
-
-  // Set profile_velocity to 0 (should use default or velocity_limit)
-  motor->write4Byte(ADDR_PROFILE_VELOCITY, 0);
-  motor->write4Byte(ADDR_VELOCITY_LIMIT, 5000);
-
-  motor->write4Byte(ADDR_GOAL_POSITION, 100000);
-
-  // Should still move (uses velocity_limit as fallback)
-  for (int i = 0; i < 1000; ++i) {
-    motor->update(0.01);
-  }
-
-  EXPECT_GT(motor->getCurrentPosition(), 0.0);
-}
-
-// ============================================================================
-// Hardware Error Simulation Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, OverheatingErrorInjection)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // No errors initially
-  EXPECT_EQ(motor->getHardwareError(), 0);
-
-  // Inject overheating error
-  motor->setHardwareError(ERROR_OVERHEATING);
-
-  EXPECT_EQ(motor->getHardwareError(), ERROR_OVERHEATING);
-  EXPECT_EQ(motor->read1Byte(ADDR_HARDWARE_ERROR), ERROR_OVERHEATING);
-
-  // Reboot clears error
-  motor->clearHardwareError();
-  EXPECT_EQ(motor->getHardwareError(), 0);
-}
-
-// ============================================================================
-// Indirect Addressing Tests
-// ============================================================================
-
-TEST_F(MockDynamixelTest, IndirectAddressingOneByte)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Map Indirect Data 1 (634) to Torque Enable (512)
-  // Indirect Address 1 is at 168.
-  motor->write2Byte(ADDR_INDIRECT_ADDRESS_START, ADDR_TORQUE_ENABLE);
-
-  // Write to Indirect Data 1
-  motor->write1Byte(ADDR_INDIRECT_DATA_START, 1);
-
-  // Check real address
-  EXPECT_EQ(motor->read1Byte(ADDR_TORQUE_ENABLE), 1);
-
-  // Read from Indirect Data 1
-  EXPECT_EQ(motor->read1Byte(ADDR_INDIRECT_DATA_START), 1);
-
-  // Disable via Indirect Data
-  motor->write1Byte(ADDR_INDIRECT_DATA_START, 0);
-  EXPECT_EQ(motor->read1Byte(ADDR_TORQUE_ENABLE), 0);
-}
-
-TEST_F(MockDynamixelTest, IndirectAddressingMultiByteContiguous)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Map Indirect Data 1..4 (634-637) to Goal Position (564-567)
-  // Goal Position is 4 bytes at 564.
-
-  // Set pointers
-  for (int i = 0; i < 4; ++i) {
-    motor->write2Byte(ADDR_INDIRECT_ADDRESS_START + (i * 2), ADDR_GOAL_POSITION + i);
-  }
-
-  // Write 4-byte value to Indirect Data Start
-  int32_t target_pos = 123456;
-  motor->write4Byte(ADDR_INDIRECT_DATA_START, static_cast<uint32_t>(target_pos));
-
-  // Verify real address received the value
-  int32_t real_pos = static_cast<int32_t>(motor->read4Byte(ADDR_GOAL_POSITION));
-  EXPECT_EQ(real_pos, target_pos);
-
-  // Verify reading from Indirect Data works
-  int32_t indirect_read = static_cast<int32_t>(motor->read4Byte(ADDR_INDIRECT_DATA_START));
-  EXPECT_EQ(indirect_read, target_pos);
-}
-
-TEST_F(MockDynamixelTest, IndirectAddressingScattered)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Map scattered registers:
-  // IndData 1 -> LED Red (513)
-  // IndData 2 -> LED Green (514)
-  // IndData 3 -> Torque Enable (512)
-
-  motor->write2Byte(ADDR_INDIRECT_ADDRESS_START, 513);      // Addr 168 -> 513
-  motor->write2Byte(ADDR_INDIRECT_ADDRESS_START + 2, 514);  // Addr 170 -> 514
-  motor->write2Byte(ADDR_INDIRECT_ADDRESS_START + 4, 512);  // Addr 172 -> 512
-
-  // Create a 4-byte packet: [Red=1, Green=1, Torque=1, Dummy=0]
-  // Byte 0: 0x01 -> IndData 1 -> Red
-  // Byte 1: 0x01 -> IndData 2 -> Green
-  // Byte 2: 0x01 -> IndData 3 -> Torque
-  // Byte 3: 0x00 -> IndData 4 -> Unmapped (points to 0)
-
-  uint32_t packet = 0x00010101;
-  motor->write4Byte(ADDR_INDIRECT_DATA_START, packet);
-
-  // Check results
-  EXPECT_EQ(motor->read1Byte(513), 1);  // Red
-  EXPECT_EQ(motor->read1Byte(514), 1);  // Green
-  EXPECT_EQ(motor->read1Byte(512), 1);  // Torque
-
-  // Check reading scattered data
-  // Change Green manually
-  motor->write1Byte(514, 0);
-
-  // Read 4 bytes from Indirect Data
-  // Should get: [1, 0, 1, (model_lsb)]
-  // Model Number of PH is 2020 (0x07E4). LSB is 0xE4 (228).
-
-  uint32_t read_packet = motor->read4Byte(ADDR_INDIRECT_DATA_START);
-  uint8_t byte0 = read_packet & 0xFF;
-  uint8_t byte1 = (read_packet >> 8) & 0xFF;
-  uint8_t byte2 = (read_packet >> 16) & 0xFF;
-  uint8_t byte3 = (read_packet >> 24) & 0xFF;
-
-  EXPECT_EQ(byte0, 1);  // Red
-  EXPECT_EQ(byte1, 0);  // Green
-  EXPECT_EQ(byte2, 1);  // Torque
-  // Byte 3 reads from address 0 (Model LSB).
-  // Since we wrote 0 to it via the packet, and Mock allows overwriting, it should be 0.
-  EXPECT_EQ(byte3, 0);
-}
-
-// ============================================================================
-// Bus Watchdog Tests
-// ============================================================================
-
-constexpr uint16_t ADDR_BUS_WATCHDOG = 546;
-
-TEST_F(MockDynamixelTest, BusWatchdogAddressCached)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // PH series should have bus_watchdog at address 546
-  EXPECT_EQ(motor->getAddress("bus_watchdog"), ADDR_BUS_WATCHDOG);
-}
-
-TEST_F(MockDynamixelTest, BusWatchdogAccessor)
-{
-  MockDynamixelManager::instance().addMotor(1, MODEL_PH);
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  ASSERT_NE(motor, nullptr);
-
-  // Initially bus watchdog should be 0
-  EXPECT_EQ(motor->getBusWatchdog(), 0);
-
-  // Write a value via register
-  motor->write1Byte(ADDR_BUS_WATCHDOG, 4);
-
-  // Verify via accessor
-  EXPECT_EQ(motor->getBusWatchdog(), 4);
-
-  // Verify via direct register read
-  EXPECT_EQ(motor->read1Byte(ADDR_BUS_WATCHDOG), 4);
-}
-
-TEST_F(MockDynamixelTest, BusWatchdogViaDriver)
-{
-  DynamixelDriver driver;
-  ASSERT_TRUE(driver.init("/dev/ttyUSB0", 57600, true));
-
-  driver.addDummyMotor(1, MODEL_PH);
-
-  // Write bus watchdog value via driver
-  EXPECT_TRUE(driver.writeRegister(1, ADDR_BUS_WATCHDOG, 1, 4));
-
-  // Read back
-  int32_t val;
-  EXPECT_TRUE(driver.readRegister(1, ADDR_BUS_WATCHDOG, 1, val));
-  EXPECT_EQ(val, 4);
-
-  // Verify via mock accessor
-  auto motor = MockDynamixelManager::instance().getMotor(1);
-  EXPECT_EQ(motor->getBusWatchdog(), 4);
-}
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}
+}  // namespace
+}  // namespace dynamixel_ros_control

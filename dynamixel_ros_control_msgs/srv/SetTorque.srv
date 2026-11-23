@@ -1,5 +1,0 @@
-bool enable
-string[] ignore_joints
----
-bool success
-string message

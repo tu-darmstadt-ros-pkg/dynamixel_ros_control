@@ -70,15 +70,7 @@ TEST_F(HardwareInterfaceTest, Profile_RegistersRestoredAfterReboot)
   std::this_thread::sleep_for(1s);
 
   // 3. Call reboot service
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
-  ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+  auto resp = rebootMotors();
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success) << "Reboot should succeed: " << resp->message;
 
@@ -125,38 +117,20 @@ TEST_F(HardwareInterfaceTest, Profile_IndirectMappingsValidAfterReboot)
   // verifying read, and only then returns. So `resp->success == true` is itself
   // a strong assertion that the post-reboot read succeeded through valid indirect
   // mappings.
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
-  ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+  auto resp = rebootMotors();
   ASSERT_NE(resp, nullptr);
   EXPECT_TRUE(resp->success) << "Reboot service must succeed. With the bug, the post-reboot read goes through "
                              << "stale indirect mappings, isHardwareOk() reports false, and the service returns "
                              << "'Hardware still reports errors after reboot.'  Service message: " << resp->message;
 
-  // 3. Direct mock-state assertion (no timing dependency): after a successful reboot,
-  // the indirect-address pointer registers must be non-zero so post-reboot reads
-  // resolve to the intended registers (a zeroed pointer would target address 0 =
-  // model_number). On PH series the pointers are EEPROM-resident and survive the
-  // reboot untouched; the mock preserves them and the production code skips the
-  // rewrite. Either way the mapping must be intact here.
-  // Address 168 is indirect_address_1 on PH series (devices/models/PH.yaml).
+  // 3. Direct mock-state assertion (no timing dependency): after a successful reboot the
+  // indirect-address pointers must still map registers. On PH series they are EEPROM-resident and
+  // survive the reboot untouched, so the production code skips the rewrite. A pointer that lost its
+  // mapping addresses its own data slot. On PH (devices/models/PH.yaml) pointer 1 is at 168 and
+  // its slot at 634.
   constexpr uint16_t INDIRECT_ADDRESS_1 = 168;
-  EXPECT_NE(motor->read2Byte(INDIRECT_ADDRESS_1), 0)
-      << "indirect_address_1 must be valid after reboot; reading 0 means the indirect "
-      << "mapping was lost and post-reboot reads target address 0 (model_number) "
-      << "instead of the intended register.";
+  constexpr uint16_t INDIRECT_DATA_1 = 634;
+  EXPECT_NE(motor->read2Byte(INDIRECT_ADDRESS_1), INDIRECT_DATA_1) << "indirect_address_1 lost its mapping";
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

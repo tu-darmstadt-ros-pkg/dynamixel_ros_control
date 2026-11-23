@@ -1558,6 +1558,7 @@
     </hardware>
     <joint name="arm_joint_1">
       <param name="id">11</param>
+      <command_interface name="torque_off"/>
       <param name="registers.homing_offset">0.0</param>
       <param name="registers.led_blue">255</param>
       <param name="registers.drive_mode">4</param>
@@ -1566,7 +1567,7 @@
       <param name="position_control_mode">extended_position</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
@@ -1581,82 +1582,89 @@
     </transmission>
     <joint name="arm_joint_2">
       <param name="id">12</param>
+      <command_interface name="torque_off"/>
       <param name="registers.homing_offset">0.24434609527920614</param>
       <param name="registers.led_blue">255</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
     </joint>
     <joint name="arm_joint_3">
       <param name="id">13</param>
+      <command_interface name="torque_off"/>
       <param name="registers.homing_offset">-0.7853981633974483</param>
       <param name="registers.led_blue">255</param>
       <param name="position_control_mode">extended_position</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
     </joint>
     <joint name="arm_joint_4">
       <param name="id">14</param>
+      <command_interface name="torque_off"/>
       <param name="registers.homing_offset">0</param>
       <param name="registers.led_blue">255</param>
       <param name="registers.current_limit">22</param>
       <!-- PH54-200 after 2nd slip ring (10 A limit)BUG CHANGE BACK-->
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
     </joint>
     <joint name="arm_joint_5">
       <param name="id">15</param>
+      <command_interface name="torque_off"/>
       <param name="registers.homing_offset">-0.7853981633974483</param>
       <param name="registers.led_blue">255</param>
       <param name="position_control_mode">extended_position</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
     </joint>
     <joint name="arm_joint_6">
       <param name="id">16</param>
+      <command_interface name="torque_off"/>
       <param name="registers.homing_offset">0</param>
       <param name="registers.led_blue">255</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
     </joint>
     <joint name="arm_joint_7">
       <param name="id">17</param>
+      <command_interface name="torque_off"/>
       <param name="registers.homing_offset">1.0471975511965976</param>
       <param name="registers.led_blue">255</param>
       <param name="position_control_mode">extended_position</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
     </joint>
     <joint name="gripper_servo_joint">
       <param name="id">18</param>
+      <command_interface name="torque_off"/>
       <param name="registers.led_blue">255</param>
       <param name="position_control_mode">current_based_position</param>
       <command_interface name="position"/>
       <command_interface name="velocity"/>
-      <command_interface name="current"/>
+      <command_interface name="max_current"/>
       <state_interface name="position"/>
       <state_interface name="velocity"/>
       <state_interface name="effort"/>
@@ -1697,6 +1705,7 @@
     </hardware>
     <joint name="flipper_fl_joint">
       <param name="id">1</param>
+      <command_interface name="torque_off"/>
       <!--<param name="registers.torque_limit">9.0</param>-->
       <command_interface name="position"/>
       <command_interface name="velocity"/>
@@ -1716,6 +1725,7 @@
     </transmission>
     <joint name="flipper_fr_joint">
       <param name="id">2</param>
+      <command_interface name="torque_off"/>
       <!--<param name="registers.torque_limit">9.0</param>-->
       <command_interface name="position"/>
       <command_interface name="velocity"/>
@@ -1735,6 +1745,7 @@
     </transmission>
     <joint name="flipper_bl_joint">
       <param name="id">3</param>
+      <command_interface name="torque_off"/>
       <!--<param name="registers.torque_limit">9.0</param>-->
       <command_interface name="position"/>
       <command_interface name="velocity"/>
@@ -1754,6 +1765,7 @@
     </transmission>
     <joint name="flipper_br_joint">
       <param name="id">4</param>
+      <command_interface name="torque_off"/>
       <!--<param name="registers.torque_limit">9.0</param>-->
       <command_interface name="position"/>
       <command_interface name="velocity"/>

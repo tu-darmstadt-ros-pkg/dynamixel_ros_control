@@ -2,11 +2,14 @@
 unit_conversions: # dxl value to unit ratio
   rad: 0.00155509054
   rad_per_s: 0.0119377
-  rad_per_s2: 1.123489409 # TODO
+  rad_per_s2: 0.3745075149  # 214.577 rev/min^2 per tick
   celsius: 1.0
   V: 0.1
   A: 0.00402
   12bit_ADC_V: 0.000805861
+
+# Operating modes in which Goal Current limits the current (e-Manual)
+current_cap_modes: [current_based_position]
 
 indirect_addresses:
 # address start | data start  | count | memory

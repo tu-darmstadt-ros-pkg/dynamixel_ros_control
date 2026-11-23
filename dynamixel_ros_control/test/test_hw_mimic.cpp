@@ -6,7 +6,7 @@
 namespace dynamixel_ros_control::test {
 
 // ============================================================================
-// Mimic Joint Tests - Verify gripper mimic joints follow the main joint
+// Mimic Joint Tests: gripper mimic joints follow the main joint
 // ============================================================================
 
 // Mimic joint multipliers from URDF:
@@ -35,12 +35,7 @@ TEST_F(HardwareInterfaceTest, MimicJoint_GripperMimicJointsFollowServo)
   auto pub =
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/gripper_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // 5. Subscribe to joint_states to read mimic joint positions
   sensor_msgs::msg::JointState::SharedPtr last_joint_state;
@@ -52,7 +47,7 @@ TEST_F(HardwareInterfaceTest, MimicJoint_GripperMimicJointsFollowServo)
       });
 
   // Wait for first joint state message
-  deadline = std::chrono::steady_clock::now() + 5s;
+  auto deadline = std::chrono::steady_clock::now() + 5s;
   while (std::chrono::steady_clock::now() < deadline) {
     {
       std::lock_guard<std::mutex> lock(js_mutex);
@@ -206,11 +201,7 @@ TEST_F(HardwareInterfaceTest, MimicJoint_GripperStateInterfacesExist)
 
   // List hardware interfaces
   auto request = std::make_shared<ListHardwareInterfaces::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp =
-      hector_testing_utils::call_service<ListHardwareInterfaces>(list_hw_client_->get(), request, *executor_, options);
+  auto resp = callService<ListHardwareInterfaces>(list_hw_client_, request);
 
   ASSERT_NE(resp, nullptr);
 
@@ -275,49 +266,33 @@ TEST_F(HardwareInterfaceTest, MimicJoint_GripperVelocityFollowsServo)
   cmd.data = {0.8};
   pub->publish(cmd);
 
-  // Wait for movement to start, spinning to receive joint state updates
-  deadline = std::chrono::steady_clock::now() + 2s;
-  while (std::chrono::steady_clock::now() < deadline) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-
-  sensor_msgs::msg::JointState::SharedPtr state;
-  {
-    std::lock_guard<std::mutex> lock(js_mutex);
-    state = last_joint_state;
-  }
-  ASSERT_NE(state, nullptr);
-
-  // Skip velocity checks if joint_state_broadcaster doesn't publish velocities
-  if (state->velocity.empty()) {
-    GTEST_SKIP() << "Joint state broadcaster does not publish velocities, skipping velocity test";
-  }
-
-  auto findJointVelocity = [&state](const std::string& joint_name) -> double {
-    for (size_t i = 0; i < state->name.size(); ++i) {
-      if (state->name[i] == joint_name && i < state->velocity.size()) {
-        return state->velocity[i];
+  const auto velocity_of = [](const sensor_msgs::msg::JointState& msg, const std::string& joint_name) {
+    for (size_t i = 0; i < msg.name.size() && i < msg.velocity.size(); ++i) {
+      if (msg.name[i] == joint_name) {
+        return msg.velocity[i];
       }
     }
     return std::numeric_limits<double>::quiet_NaN();
   };
+  // A state taken while the servo moves, so the mimic velocities have something to follow
+  sensor_msgs::msg::JointState::SharedPtr state;
+  ASSERT_TRUE(executor_->spin_until(
+      [&] {
+        std::lock_guard<std::mutex> lock(js_mutex);
+        if (last_joint_state && std::abs(velocity_of(*last_joint_state, "gripper_servo_joint")) > 0.01) {
+          state = last_joint_state;
+          return true;
+        }
+        return false;
+      },
+      scaled(5s)))
+      << "the gripper servo never reported a velocity while it moved";
 
-  double servo_vel = findJointVelocity("gripper_servo_joint");
-  double r1_vel = findJointVelocity("gripper_joint_r1");
-  double r2_vel = findJointVelocity("gripper_joint_r2");
-
-  // If servo is moving, mimic joints should also report velocity
-  if (!std::isnan(servo_vel) && std::abs(servo_vel) > 0.01) {
-    if (!std::isnan(r1_vel)) {
-      EXPECT_NEAR(r1_vel, servo_vel * MIMIC_R1_MULTIPLIER, 0.5)
-          << "Mimic joint r1 velocity should follow servo with multiplier";
-    }
-    if (!std::isnan(r2_vel)) {
-      EXPECT_NEAR(r2_vel, servo_vel * MIMIC_R2_MULTIPLIER, 0.5)
-          << "Mimic joint r2 velocity should follow servo with multiplier";
-    }
-  }
+  const double servo_vel = velocity_of(*state, "gripper_servo_joint");
+  EXPECT_NEAR(velocity_of(*state, "gripper_joint_r1"), servo_vel * MIMIC_R1_MULTIPLIER, 0.5)
+      << "Mimic joint r1 velocity should follow servo with multiplier";
+  EXPECT_NEAR(velocity_of(*state, "gripper_joint_r2"), servo_vel * MIMIC_R2_MULTIPLIER, 0.5)
+      << "Mimic joint r2 velocity should follow servo with multiplier";
 }
 
 TEST_F(HardwareInterfaceTest, MimicJoint_NoCommandInterfacesForMimicJoints)
@@ -327,11 +302,7 @@ TEST_F(HardwareInterfaceTest, MimicJoint_NoCommandInterfacesForMimicJoints)
   std::this_thread::sleep_for(500ms);
 
   auto request = std::make_shared<ListHardwareInterfaces::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp =
-      hector_testing_utils::call_service<ListHardwareInterfaces>(list_hw_client_->get(), request, *executor_, options);
+  auto resp = callService<ListHardwareInterfaces>(list_hw_client_, request);
 
   ASSERT_NE(resp, nullptr);
 
@@ -357,9 +328,3 @@ TEST_F(HardwareInterfaceTest, MimicJoint_NoCommandInterfacesForMimicJoints)
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

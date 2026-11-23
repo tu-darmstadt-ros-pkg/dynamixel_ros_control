@@ -1,47 +1,79 @@
 #ifndef DYNAMIXEL_ROS_CONTROL_COMMON_H
 #define DYNAMIXEL_ROS_CONTROL_COMMON_H
 #include <string>
+#include <set>
 #include <unordered_map>
 #include <algorithm>
 #include <sstream>
 #include <vector>
 #include <cstdint>
+#include <chrono>
+#include <limits>
+#include <stdexcept>
 
 namespace dynamixel_ros_control {
 
 // Timing constants for motor communication
-constexpr int64_t REBOOT_WAIT_NS = 500'000'000;  // 500ms - Wait for motor to restart after reboot
+constexpr std::chrono::milliseconds REBOOT_WAIT{500};  // Wait for motor to restart after reboot.
 
-// Default model number for dummy/mock motors (Dynamixel PH series)
-constexpr uint16_t DEFAULT_MOCK_MODEL_NUMBER = 2020;
+/// Consecutive failed bus transactions after which a sync manager reports the connection lost.
+/// Shared so the diagnostics topic reports the threshold the managers actually apply.
+constexpr unsigned int COMM_ERROR_THRESHOLD = 25;
 
-// LED color values
-constexpr int COLOR_PINK_VALUES[] = {255, 175, 193};
-constexpr int COLOR_GREEN_VALUES[] = {0, 255, 0};
-constexpr int COLOR_BLUE_VALUES[] = {0, 0, 255};
-constexpr int COLOR_ORANGE_VALUES[] = {255, 165, 0};
-constexpr int COLOR_RED_VALUES[] = {255, 0, 0};
+/// The command interface whose claim switches a joint's torque off. A controller that holds it
+/// writes no value: the claim itself is the command.
+constexpr char TORQUE_OFF_INTERFACE[] = "torque_off";
 
-// LED color names
-constexpr char COLOR_PINK[] = "pink";
-constexpr char COLOR_GREEN[] = "green";
-constexpr char COLOR_BLUE[] = "blue";
-constexpr char COLOR_ORANGE[] = "orange";
-constexpr char COLOR_RED[] = "red";
+/// Runtime caps beside a main interface, never deciding the mode. Unclaimed or NaN they hold the
+/// EEPROM limit, and a value above it is clamped to it.
+constexpr char MAX_CURRENT_INTERFACE[] = "max_current";
+constexpr char MAX_VELOCITY_INTERFACE[] = "max_velocity";
+
+/// @brief Parse a decimal integer from a control-table field and check it fits @p T.
+///
+/// std::stoi throws out_of_range as well as invalid_argument, and a bare static_cast narrows
+/// silently. A data_length of 256 would become 0, and the register would be read as zero bytes.
+/// Both are configuration errors in a shipped YAML, so both must be refused rather than absorbed.
+/// @return false, leaving @p out untouched, if @p text is not an integer, carries trailing
+/// characters, or does not fit.
+template <typename T>
+[[nodiscard]] bool parseIntegerInto(const std::string& text, T& out)
+{
+  try {
+    size_t parsed = 0;
+    const long long value = std::stoll(text, &parsed);
+    // stoll stops at the first character it cannot use and reports success for what it did read.
+    // A remainder means the field was only partly understood, so "4junk" must not become 4.
+    if (text.find_first_not_of(" \t\n\r\f\v", parsed) != std::string::npos) {
+      return false;
+    }
+    if (value < static_cast<long long>(std::numeric_limits<T>::min()) ||
+        value > static_cast<long long>(std::numeric_limits<T>::max())) {
+      return false;
+    }
+    out = static_cast<T>(value);
+    return true;
+  }
+  catch (const std::exception&) {
+    return false;
+  }
+}
 
 using ParameterMap = std::unordered_map<std::string, std::string>;
 
 template <typename T>
-bool getParameter(const ParameterMap& map, const std::string& param_name, T& value);
+[[nodiscard]] bool getParameter(const ParameterMap& map, const std::string& param_name, T& value);
 
+/// An absent parameter takes @p default_value. A present one that does not parse fails.
 template <typename T>
-bool getParameter(const ParameterMap& map, const std::string& param_name, T& value, const T& default_value)
+[[nodiscard]] bool getOptionalParameter(const ParameterMap& map, const std::string& param_name, T& value,
+                                        const T& default_value)
 {
-  const bool success = getParameter(map, param_name, value);
-  if (!success) {
+  if (map.count(param_name) == 0) {
     value = default_value;
+    return true;
   }
-  return success;
+  return getParameter(map, param_name, value);
 }
 
 template <typename Iterable>
@@ -82,6 +114,30 @@ std::string mapToString(const Map& m, const std::string& separator = ", ", const
   return oss.str();
 }
 
+/**
+ * @brief Simple monotonic stopwatch for startup/phase timing diagnostics.
+ */
+class Stopwatch
+{
+public:
+  Stopwatch()
+      : start_(std::chrono::steady_clock::now())
+  {}
+
+  void reset()
+  {
+    start_ = std::chrono::steady_clock::now();
+  }
+
+  [[nodiscard]] double elapsedMs() const
+  {
+    return std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - start_).count();
+  }
+
+private:
+  std::chrono::steady_clock::time_point start_;
+};
+
 inline std::string& removeWhitespace(std::string& s)
 {
   const auto end_pos = std::remove(s.begin(), s.end(), ' ');
@@ -91,20 +147,24 @@ inline std::string& removeWhitespace(std::string& s)
 
 bool splitFullInterfaceName(const std::string& full_name, std::string& joint_name, std::string& interface_name);
 
-// template<typename T>
-// void split(const std::string &s, char delim, T result) {
-//     std::stringstream ss(s);
-//     std::string item;
-//     while (std::getline(ss, item, delim)) {
-//         *(result++) = item;
-//     }
-// }
+/// The names in @p parameters that are neither in @p known nor start with @p known_prefix (if not empty),
+/// in alphabetical order.
+std::vector<std::string> unknownParameters(const ParameterMap& parameters, const std::set<std::string>& known,
+                                           const std::string& known_prefix = "");
 
-// std::vector<std::string> split(const std::string &s, char delim) {
-//     std::vector<std::string> elems;
-//     split(s, delim, std::back_inserter(elems));
-//     return elems;
-// }
+/**
+ * @brief Load the interface-name -> register-name translation tables from a YAML file.
+ *
+ * The file must be a map with the sequences "state_interfaces", "command_interfaces" and "limits",
+ * each entry a map with "interface_name" and "register_name". Any deviation — unreadable file,
+ * missing section, entry that is not a map, missing key — fails with a logged error rather than
+ * returning partially filled maps: an empty translation table would let configuration continue and
+ * fail much later with a far less obvious message.
+ */
+bool loadInterfaceRegisterNameTranslation(const std::string& path,
+                                          std::unordered_map<std::string, std::string>& state_interface_to_register,
+                                          std::unordered_map<std::string, std::string>& command_interface_to_register,
+                                          std::unordered_map<std::string, std::string>& interface_to_register_limits);
 
 }  // namespace dynamixel_ros_control
 

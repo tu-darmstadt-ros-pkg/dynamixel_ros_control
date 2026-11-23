@@ -44,11 +44,7 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
 
   auto cmd_pub =
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_position_controller/commands", 10);
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && cmd_pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
+  waitForSubscribers(cmd_pub, 5s);
   ASSERT_GT(cmd_pub->get_subscription_count(), 0u);
 
   const std::vector<std::string> joints = {"flipper_fl_joint", "flipper_fr_joint", "flipper_bl_joint",
@@ -85,7 +81,7 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
       std::lock_guard<std::mutex> l(mtx);
       if (last_goal && last_write && last_read) {
         // goal and write are published from the same write() cycle and therefore share a
-        // header.stamp; require equality so we never pair a goal with a write from a
+        // header.stamp. Require equality so a goal is never paired with a write from a
         // different cycle (e.g. when one publisher's try_publish() dropped a message once).
         const bool same_write_cycle = last_goal->header.stamp == last_write->header.stamp;
         bool all_match = same_write_cycle;
@@ -133,8 +129,8 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
   EXPECT_EQ(r1->name, g1->name);
 
   // The flipper joints declare `current` (not `effort`) state/command interfaces in URDF.
-  // sensor_msgs/JointState only has `effort`, so the publisher set falls back to HW_IF_CURRENT;
-  // verify the effort field is finite at every snapshot to catch a regression of that fallback.
+  // sensor_msgs/JointState only has `effort`, so the publisher set falls back to HW_IF_CURRENT.
+  // Verify the effort field is finite at every snapshot to catch a regression of that fallback.
   const std::vector<std::string> flippers = {"flipper_fl_joint", "flipper_fr_joint", "flipper_bl_joint",
                                              "flipper_br_joint"};
   for (const auto* snap : {&w1, &w2, &r1, &r2, &g1, &g2}) {
@@ -179,9 +175,3 @@ TEST_F(HardwareInterfaceTest, RealtimePublishers_PublishOnReadAndWrite)
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

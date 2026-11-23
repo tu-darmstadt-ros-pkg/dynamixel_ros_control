@@ -22,6 +22,22 @@
         type: forward_command_controller/ForwardCommandController
       arm_trajectory_controller:
         type: joint_trajectory_controller/JointTrajectoryController
+      # Drives the flippers in CURRENT mode. The generic forward controller, because no
+      # current_controllers/JointGroupCurrentController exists and effort_controllers claims the
+      # "effort" interface, which these joints do not expose.
+      flipper_current_controller:
+        type: forward_command_controller/ForwardCommandController
+
+      # Torque off claims. The forward controller writes nothing until it gets a command, and the
+      # claim alone makes the joints limp.
+      arm_torque_off_controller:
+        type: forward_command_controller/ForwardCommandController
+      arm_joints_torque_off_controller:
+        type: forward_command_controller/ForwardCommandController
+      flipper_torque_off_controller:
+        type: forward_command_controller/ForwardCommandController
+      gripper_torque_off_controller:
+        type: forward_command_controller/ForwardCommandController
 
       # Gripper Controllers
       gripper_position_controller:
@@ -105,6 +121,56 @@
       state_interfaces:
         - position
         - velocity
+
+  flipper_current_controller:
+    ros__parameters:
+      interface_name: current
+      joints:
+        - flipper_fl_joint
+        - flipper_fr_joint
+        - flipper_bl_joint
+        - flipper_br_joint
+
+  # --- Torque Off Configurations ---
+  arm_torque_off_controller:
+    ros__parameters:
+      interface_name: torque_off
+      joints:
+        - arm_joint_1
+        - arm_joint_2
+        - arm_joint_3
+        - arm_joint_4
+        - arm_joint_5
+        - arm_joint_6
+        - arm_joint_7
+        - gripper_servo_joint
+
+  arm_joints_torque_off_controller:
+    ros__parameters:
+      interface_name: torque_off
+      joints:
+        - arm_joint_1
+        - arm_joint_2
+        - arm_joint_3
+        - arm_joint_4
+        - arm_joint_5
+        - arm_joint_6
+        - arm_joint_7
+
+  gripper_torque_off_controller:
+    ros__parameters:
+      interface_name: torque_off
+      joints:
+        - gripper_servo_joint
+
+  flipper_torque_off_controller:
+    ros__parameters:
+      interface_name: torque_off
+      joints:
+        - flipper_fl_joint
+        - flipper_fr_joint
+        - flipper_bl_joint
+        - flipper_br_joint
 
   # --- Gripper Configurations ---
   gripper_position_controller:

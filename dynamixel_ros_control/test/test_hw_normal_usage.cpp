@@ -29,12 +29,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_ArmPositionMode)
               target_position, target_position, target_position};  // 7 joints
 
   // Wait for subscriber and publish
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0) << "Controller not subscribed to commands topic";
+  ASSERT_TRUE(waitForSubscribers(pub, 5s)) << "Controller not subscribed to commands topic";
 
   pub->publish(cmd);
 
@@ -77,12 +72,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_FlipperVelocityMode)
   double joint_velocity = 1.0;  // rad/s for joint
   cmd.data = {joint_velocity, joint_velocity, joint_velocity, joint_velocity};
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   pub->publish(cmd);
 
@@ -125,25 +115,12 @@ TEST_F(HardwareInterfaceTest, NormalUsage_ControllerSwitch_ArmPositionToVelocity
   std_msgs::msg::Float64MultiArray pos_cmd;
   pos_cmd.data = {0.3, 0.3, 0.3, 0.3, 0.3, 0.3, 0.3};
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pos_pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
+  waitForSubscribers(pos_pub, 5s);
   pos_pub->publish(pos_cmd);
   std::this_thread::sleep_for(2s);
 
   // 3. Load velocity controller (configure but don't activate)
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-
-  auto load_req = std::make_shared<LoadController::Request>();
-  load_req->name = "arm_velocity_controller";
-  hector_testing_utils::call_service<LoadController>(load_client_->get(), load_req, *executor_, options);
-
-  auto config_req = std::make_shared<ConfigureController::Request>();
-  config_req->name = "arm_velocity_controller";
-  hector_testing_utils::call_service<ConfigureController>(config_client_->get(), config_req, *executor_, options);
+  loadController("arm_velocity_controller");
 
   // 4. Switch controllers
   ASSERT_TRUE(switch_controllers({"arm_velocity_controller"}, {"arm_position_controller"}));
@@ -159,12 +136,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_ControllerSwitch_ArmPositionToVelocity
   std_msgs::msg::Float64MultiArray vel_cmd;
   vel_cmd.data = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};  // rad/s
 
-  deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && vel_pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(vel_pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(vel_pub, 5s));
 
   // Record positions before velocity command
   std::vector<double> positions_before;
@@ -211,10 +183,7 @@ TEST_F(HardwareInterfaceTest, NormalUsage_SimultaneousMovement)
   }
 
   // 3. Record initial states
-  std::vector<double> arm_initial, flipper_initial;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    arm_initial.push_back(dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id)->getJointPosition());
-  }
+  std::vector<double> flipper_initial;
   for (uint8_t id : {FLIPPER_FL_ID, FLIPPER_FR_ID, FLIPPER_BL_ID, FLIPPER_BR_ID}) {
     flipper_initial.push_back(dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id)->getJointPosition());
   }
@@ -231,24 +200,20 @@ TEST_F(HardwareInterfaceTest, NormalUsage_SimultaneousMovement)
   flipper_pub->publish(flipper_cmd);
   gripper_pub->publish(gripper_cmd);
 
-  // 5. Wait for movement
-  std::this_thread::sleep_for(2s);
-
-  // 6. Verify all moved
-  for (size_t i = 0; i < 7; ++i) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID + i);
-    EXPECT_NE(motor->getJointPosition(), arm_initial[i]) << "Arm joint " << i << " should have moved";
-  }
+  // 5. Every joint reaches its target, the flippers run at their commanded speed
+  EXPECT_TRUE(armReaches(arm_pub, 0.5)) << "The arm did not reach its target while the others moved";
+  auto gripper_motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID);
+  EXPECT_TRUE(
+      executor_->spin_until([&] { return std::abs(gripper_motor->getJointPosition() - 0.5) < 0.2; }, scaled(10s)))
+      << "Gripper did not reach its target, it started at " << gripper_initial;
 
   size_t idx = 0;
   for (uint8_t id : {FLIPPER_FL_ID, FLIPPER_FR_ID, FLIPPER_BL_ID, FLIPPER_BR_ID}) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    EXPECT_NE(motor->getJointPosition(), flipper_initial[idx]) << "Flipper " << (int) id << " should have moved";
+    EXPECT_GT(std::abs(motor->getJointPosition() - flipper_initial[idx]), 0.1)
+        << "Flipper " << (int) id << " did not follow its velocity command";
     idx++;
   }
-
-  auto gripper_motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(GRIPPER_ID);
-  EXPECT_NE(gripper_motor->getJointPosition(), gripper_initial) << "Gripper should have moved";
 }
 
 TEST_F(HardwareInterfaceTest, RapidControllerSwitch_StressTest)
@@ -257,23 +222,8 @@ TEST_F(HardwareInterfaceTest, RapidControllerSwitch_StressTest)
   // This can expose race conditions and timing issues
 
   // Load and configure both controllers
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-
-  auto load_req = std::make_shared<LoadController::Request>();
-  load_req->name = "arm_position_controller";
-  hector_testing_utils::call_service<LoadController>(load_client_->get(), load_req, *executor_, options);
-
-  auto config_req = std::make_shared<ConfigureController::Request>();
-  config_req->name = "arm_position_controller";
-  hector_testing_utils::call_service<ConfigureController>(config_client_->get(), config_req, *executor_, options);
-
-  load_req->name = "arm_velocity_controller";
-  hector_testing_utils::call_service<LoadController>(load_client_->get(), load_req, *executor_, options);
-
-  config_req->name = "arm_velocity_controller";
-  hector_testing_utils::call_service<ConfigureController>(config_client_->get(), config_req, *executor_, options);
+  loadController("arm_position_controller");
+  loadController("arm_velocity_controller");
 
   // First, activate position controller (velocity is still inactive)
   ASSERT_TRUE(switch_controllers({"arm_position_controller"}, {}))
@@ -293,7 +243,7 @@ TEST_F(HardwareInterfaceTest, RapidControllerSwitch_StressTest)
     std::this_thread::sleep_for(100ms);
   }
 
-  // Final state check - verify system is stable
+  // Final state check. Verify the system is stable
   auto list_resp = list_controllers();
   ASSERT_NE(list_resp, nullptr);
   auto states = states_from_list(*list_resp);
@@ -320,12 +270,7 @@ TEST_F(HardwareInterfaceTest, Gripper_PositionControl)
   auto pub =
       tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/gripper_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   std_msgs::msg::Float64MultiArray cmd;
   double target = 0.5;
@@ -349,12 +294,7 @@ TEST_F(HardwareInterfaceTest, MotorLimits_PositionLimitRespected)
 
   auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // Send extreme position command (outside normal operating range)
   std_msgs::msg::Float64MultiArray cmd;
@@ -383,12 +323,7 @@ TEST_F(HardwareInterfaceTest, StateInterface_PositionVelocityConsistent)
 
   auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
+  ASSERT_TRUE(waitForSubscribers(pub, 5s));
 
   // Send position command to initiate movement
   std_msgs::msg::Float64MultiArray cmd;
@@ -454,24 +389,11 @@ TEST_F(HardwareInterfaceTest, SimultaneousOperations_ArmAndFlipperIndependent)
   }
 
   // 3. Disable torque on ARM only (simulating arm-specific issue)
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  EXPECT_TRUE(resp->success);
+  EXPECT_TRUE(limp());
 
   std::this_thread::sleep_for(300ms);
 
-  // 4. Send new flipper command - should still work
+  // 4. Send new flipper command. It should still work
   flipper_cmd.data = {0.6, 0.6, 0.6, 0.6};
   flipper_pub->publish(flipper_cmd);
   std::this_thread::sleep_for(2s);
@@ -500,9 +422,3 @@ TEST_F(HardwareInterfaceTest, SimultaneousOperations_ArmAndFlipperIndependent)
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

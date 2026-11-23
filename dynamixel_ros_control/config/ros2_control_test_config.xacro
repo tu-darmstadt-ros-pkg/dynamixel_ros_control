@@ -1,19 +1,39 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <robot xmlns:xacro="http://www.ros.org/wiki/xacro">
-  <xacro:macro name="ros2_control_test_config" params="port_name baud_rate id">
+  <!--
+    Bench rig. `id` is the motor under test; `id2` adds a second one when set to a
+    non-zero ID, which is what makes the multi-motor paths reachable at all - the sync
+    read/write groups, the bus_watchdog/torque_enable padding on a mixed bus, per-joint
+    torque and ignore_joints, and securing a bus where one motor answers and another
+    does not. A second motor of a *different* model exercises more of that than a
+    matching pair.
+
+    The second joint is deliberately left out of every controller in
+    test_controllers.yaml: it is energised and read like the first, but nothing
+    commands it, so it can join the bus without adding a thing that moves.
+
+    current_limit is off by default (0 = leave the motor's own value alone) rather than
+    carrying a number that would be wrong for some model and would be written to EEPROM
+    on sight. Set it for bench work: it is the firmware-side clamp behind the bench
+    supply's.
+  -->
+  <xacro:macro name="ros2_control_test_config" params="port_name baud_rate id id2:=0 torque_on_startup:=true velocity_limit:=1.0 current_limit:=0">
     <ros2_control name="hardware_interface" type="system">
       <hardware>
         <plugin>dynamixel_ros_control/DynamixelHardwareInterface</plugin>
         <param name="debug">true</param>
         <param name="port_name">${port_name}</param>
         <param name="baud_rate">${baud_rate}</param>
-        <param name="torque_on_startup">true</param>
+        <param name="torque_on_startup">${torque_on_startup}</param>
         <param name="torque_off_on_shutdown">true</param>
       </hardware>
       <joint name="joint_1">
         <param name="id">${id}</param>
         <param name="position_control_mode">extended_position</param>
-        <param name="registers.velocity_limit">1.0</param>
+        <param name="registers.velocity_limit">${velocity_limit}</param>
+        <xacro:unless value="${current_limit == 0}">
+          <param name="registers.current_limit">${current_limit}</param>
+        </xacro:unless>
         <!-- Time-based trapezoidal profile: drive_mode bit 2 enables time-based mode.
              profile_velocity = total profile duration (ms), profile_acceleration = accel ramp (ms). -->
         <param name="registers.drive_mode">4</param>
@@ -21,11 +41,35 @@
         <param name="registers.profile_acceleration">8</param>
         <command_interface name="position"/>
         <command_interface name="velocity"/>
-        <command_interface name="current"/>
+        <command_interface name="max_current"/>
         <state_interface name="position"/>
         <state_interface name="velocity"/>
         <state_interface name="effort"/>
       </joint>
+      <xacro:unless value="${id2 == 0}">
+        <!-- The command interfaces must match joint_1's exactly. Every joint rides in one
+             sync write group, and the group needs one byte layout for all of them - drop
+             `max_current` here and on_configure fails with a layout mismatch rather than
+             starting. What may differ freely is position_control_mode: this joint stays in
+             plain position mode against joint_1's extended_position, so the two sit in
+             different control modes on the same bus, which is part of the point.
+
+             No profile registers either: drive_mode and the profile setpoints are
+             model-specific, and this is where a second motor of another model goes. -->
+        <joint name="joint_2">
+          <param name="id">${id2}</param>
+          <param name="registers.velocity_limit">${velocity_limit}</param>
+          <xacro:unless value="${current_limit == 0}">
+            <param name="registers.current_limit">${current_limit}</param>
+          </xacro:unless>
+          <command_interface name="position"/>
+          <command_interface name="velocity"/>
+          <command_interface name="max_current"/>
+          <state_interface name="position"/>
+          <state_interface name="velocity"/>
+          <state_interface name="effort"/>
+        </joint>
+      </xacro:unless>
       <joint name="mimic_joint">
         <mimic>true</mimic>
         <state_interface name="position"/>

@@ -1,8 +1,5 @@
 #include "dynamixel_ros_control/dynamixel_diagnostics.hpp"
 
-#include "dynamixel_ros_control/diagnostic_state.hpp"
-#include "dynamixel_ros_control/log.hpp"
-
 #include <array>
 #include <optional>
 #include <utility>
@@ -15,16 +12,25 @@ using diagnostic_msgs::msg::KeyValue;
 
 namespace {
 
-// Sync managers default to error_threshold_=25; not exposed via a public getter. If/when the
-// threshold becomes configurable, expose it through SyncRead/WriteManager and read it here.
-constexpr unsigned int DEFAULT_ERROR_THRESHOLD = 25;
-
 KeyValue kv(std::string key, std::string value)
 {
   KeyValue p;
   p.key = std::move(key);
   p.value = std::move(value);
   return p;
+}
+
+std::string torqueStateToString(const TorqueState state)
+{
+  switch (state) {
+    case TorqueState::Off:
+      return "off";
+    case TorqueState::On:
+      return "on";
+    case TorqueState::Unknown:
+      break;
+  }
+  return "unknown";
 }
 
 // Read a register by name as a raw int32. Returns std::nullopt if unavailable or the read fails.
@@ -56,26 +62,23 @@ std::string join(const std::vector<std::string>& strs, const std::string& sep = 
 
 DynamixelDiagnostics::DynamixelDiagnostics(rclcpp::Node::SharedPtr node, std::string hw_iface_name,
                                            const std::unordered_map<std::string, Joint>& joints,
-                                           const std::vector<std::string>& joint_names, DynamixelDriver& driver,
+                                           const std::vector<std::string>& joint_names,
                                            const SyncReadManager& read_manager, const SyncWriteManager& write_manager)
     : node_(std::move(node)),
       hw_iface_name_(std::move(hw_iface_name)),
       joints_(joints),
       joint_names_(joint_names),
-      driver_(driver),
       read_manager_(read_manager),
       write_manager_(write_manager)
 {
-  rt_manifest_pub_ = std::make_shared<realtime_tools::RealtimePublisher<DiagnosticArray>>(
-      node_->create_publisher<DiagnosticArray>("~/manifest", rclcpp::QoS(1).transient_local()));
+  manifest_pub_ = node_->create_publisher<DiagnosticArray>("~/manifest", rclcpp::QoS(1).transient_local());
   // `~/diagnostics` (volatile, 1 Hz) is the conventional diagnostic topic name. We keep the
   // private namespace so multi-robot deployments (each robot in its own namespace) don't
-  // collide on a single global /diagnostics topic; a per-robot aggregator can still pick it up.
-  rt_health_pub_ = std::make_shared<realtime_tools::RealtimePublisher<DiagnosticArray>>(
-      node_->create_publisher<DiagnosticArray>("~/diagnostics", rclcpp::QoS(10)));
+  // collide on a single global /diagnostics topic. A per-robot aggregator can still pick it up.
+  health_pub_ = node_->create_publisher<DiagnosticArray>("~/diagnostics", rclcpp::QoS(10));
 
   // Size + name the per-joint snapshot slots once. snapshotHealth() only updates the runtime
-  // fields after this; joint_name is never reassigned, so the snapshot path stays alloc-free
+  // fields after this. joint_name is never reassigned, so the snapshot path stays alloc-free
   // regardless of name length / SSO threshold.
   snapshot_.joints.resize(joint_names_.size());
   for (size_t i = 0; i < joint_names_.size(); ++i) {
@@ -96,6 +99,13 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
   bus.hardware_id = hw_iface_name_;
   bus.values.push_back(kv("hardware_interface_name", hw_iface_name_));
   bus.values.push_back(kv("num_joints", std::to_string(joint_names_.size())));
+  if (usb_latency_timer_ms_) {
+    bus.values.push_back(kv("usb_latency_timer_ms", std::to_string(*usb_latency_timer_ms_)));
+    if (*usb_latency_timer_ms_ > USB_LATENCY_TIMER_TARGET_MS) {
+      bus.level = DiagnosticStatus::WARN;
+      bus.message = "USB latency timer above " + std::to_string(USB_LATENCY_TIMER_TARGET_MS) + " ms";
+    }
+  }
   msg.status.push_back(bus);
 
   for (const auto& joint_name : joint_names_) {
@@ -150,9 +160,7 @@ void DynamixelDiagnostics::publishManifest(const rclcpp::Time& stamp)
     msg.status.push_back(js);
   }
 
-  if (!rt_manifest_pub_->try_publish(msg)) {
-    DXL_LOG_WARN("Manifest publisher busy; skipping publish.");
-  }
+  manifest_pub_->publish(msg);
 }
 
 void DynamixelDiagnostics::startHealthTimer()
@@ -160,7 +168,17 @@ void DynamixelDiagnostics::startHealthTimer()
   if (health_timer_) {
     return;
   }
-  health_timer_ = node_->create_wall_timer(HEALTH_PERIOD, [this]() { publishHealth(); });
+  {
+    std::lock_guard<std::mutex> lock(publish_mutex_);
+    health_timer_running_ = true;
+  }
+  health_timer_ = node_->create_wall_timer(HEALTH_PERIOD, [this]() {
+    std::lock_guard<std::mutex> lock(publish_mutex_);
+    // A tick that was already dispatched when the timer stopped must not publish after its last word
+    if (health_timer_running_) {
+      publishHealthLocked();
+    }
+  });
 }
 
 void DynamixelDiagnostics::stopHealthTimer()
@@ -169,31 +187,36 @@ void DynamixelDiagnostics::stopHealthTimer()
     health_timer_->cancel();
     health_timer_.reset();
   }
+  std::lock_guard<std::mutex> lock(publish_mutex_);
+  health_timer_running_ = false;
 }
 
-void DynamixelDiagnostics::snapshotHealth(const rclcpp::Time& stamp, bool e_stop_active, bool torque_globally_desired,
-                                          bool mode_switch_failed, const rclcpp::Time& last_successful_read)
+void DynamixelDiagnostics::snapshotHealth(const rclcpp::Time& stamp, bool torque_globally_desired,
+                                          bool mode_switch_failed, const rclcpp::Time& last_successful_read,
+                                          const double longest_bus_silence_ms, const uint64_t overlap_skipped_cycles)
 {
   std::unique_lock<std::mutex> lock(snapshot_mutex_, std::try_to_lock);
   if (!lock.owns_lock()) {
-    // The consumer holds the lock; the timer will publish the previous snapshot. Fine.
+    // The consumer holds the lock. The timer will publish the previous snapshot. Fine.
     return;
   }
 
   snapshot_.stamp = stamp;
   snapshot_.last_successful_read = last_successful_read;
-  snapshot_.e_stop_active = e_stop_active;
   snapshot_.torque_globally_desired = torque_globally_desired;
   snapshot_.mode_switch_failed = mode_switch_failed;
   snapshot_.read_consecutive_errors = read_manager_.getErrorCount();
   snapshot_.write_consecutive_errors = write_manager_.getErrorCount();
+  snapshot_.longest_bus_silence_ms = longest_bus_silence_ms;
+  snapshot_.overlap_skipped_cycles = overlap_skipped_cycles;
 
   // Slots and joint_name are populated once in the ctor — only update runtime fields here.
   for (size_t i = 0; i < joint_names_.size(); ++i) {
     const auto& joint = joints_.at(joint_names_[i]);
     auto& js = snapshot_.joints[i];
     js.motor_id = joint.dynamixel->getId();
-    js.torque_desired = joint.torque;
+    js.torque_desired = joint.torque_desired;
+    js.torque_observed = joint.torque_observed;
     js.hardware_error_status = joint.dynamixel->hardware_error_status;
     js.operating_mode = joint.getControlMode();
   }
@@ -202,6 +225,12 @@ void DynamixelDiagnostics::snapshotHealth(const rclcpp::Time& stamp, bool e_stop
 }
 
 void DynamixelDiagnostics::publishHealth()
+{
+  std::lock_guard<std::mutex> lock(publish_mutex_);
+  publishHealthLocked();
+}
+
+void DynamixelDiagnostics::publishHealthLocked()
 {
   if (!snapshot_valid_.load()) {
     return;
@@ -216,14 +245,14 @@ void DynamixelDiagnostics::publishHealth()
   msg.header.stamp = snap.stamp;
   msg.status.clear();
 
-  // Bus level is the max severity of: bus signals (e-stop, mode-switch fail, error counters)
+  // Bus level is the max severity of: bus signals (mode-switch fail, error counters)
   // and any per-joint hardware fault. Otherwise the rollup row can read OK while individual
   // joints are publishing ERROR — misleading any consumer that doesn't iterate joint statuses.
   uint8_t bus_level = DiagnosticStatus::OK;
-  if (snap.read_consecutive_errors >= DEFAULT_ERROR_THRESHOLD ||
-      snap.write_consecutive_errors >= DEFAULT_ERROR_THRESHOLD || snap.mode_switch_failed) {
+  if (snap.read_consecutive_errors >= COMM_ERROR_THRESHOLD || snap.write_consecutive_errors >= COMM_ERROR_THRESHOLD ||
+      snap.mode_switch_failed) {
     bus_level = DiagnosticStatus::ERROR;
-  } else if (snap.e_stop_active || snap.read_consecutive_errors > 0 || snap.write_consecutive_errors > 0) {
+  } else if (snap.read_consecutive_errors > 0 || snap.write_consecutive_errors > 0) {
     bus_level = DiagnosticStatus::WARN;
   }
   for (const auto& js : snap.joints) {
@@ -240,14 +269,15 @@ void DynamixelDiagnostics::publishHealth()
                 (bus_level == DiagnosticStatus::WARN) ? "Degraded" :
                                                         "Errored";
   bus.hardware_id = hw_iface_name_;
-  bus.values.push_back(kv("e_stop_active", snap.e_stop_active ? "true" : "false"));
   bus.values.push_back(kv("torque_globally_desired", snap.torque_globally_desired ? "true" : "false"));
   bus.values.push_back(kv("mode_switch_failed", snap.mode_switch_failed ? "true" : "false"));
   bus.values.push_back(kv("read_consecutive_errors", std::to_string(snap.read_consecutive_errors)));
-  bus.values.push_back(kv("read_error_threshold", std::to_string(DEFAULT_ERROR_THRESHOLD)));
+  bus.values.push_back(kv("read_error_threshold", std::to_string(COMM_ERROR_THRESHOLD)));
   bus.values.push_back(kv("write_consecutive_errors", std::to_string(snap.write_consecutive_errors)));
-  bus.values.push_back(kv("write_error_threshold", std::to_string(DEFAULT_ERROR_THRESHOLD)));
+  bus.values.push_back(kv("write_error_threshold", std::to_string(COMM_ERROR_THRESHOLD)));
   bus.values.push_back(kv("last_successful_read", std::to_string(snap.last_successful_read.seconds())));
+  bus.values.push_back(kv("longest_bus_silence_ms", std::to_string(snap.longest_bus_silence_ms)));
+  bus.values.push_back(kv("overlap_skipped_cycles", std::to_string(snap.overlap_skipped_cycles)));
   msg.status.push_back(bus);
 
   for (const auto& js : snap.joints) {
@@ -263,13 +293,14 @@ void DynamixelDiagnostics::publishHealth()
     }
     s.values.push_back(kv("motor_id", std::to_string(static_cast<unsigned>(js.motor_id))));
     s.values.push_back(kv("torque_desired", js.torque_desired ? "true" : "false"));
+    s.values.push_back(kv("torque_enable", torqueStateToString(js.torque_observed)));
     s.values.push_back(kv("hardware_error_status", std::to_string(js.hardware_error_status)));
     s.values.push_back(kv("hardware_error_decoded", hardwareErrorToString(js.hardware_error_status)));
     s.values.push_back(kv("operating_mode_desired", controlModeToString(js.operating_mode)));
     msg.status.push_back(s);
   }
 
-  rt_health_pub_->try_publish(msg);
+  health_pub_->publish(msg);
 }
 
 }  // namespace dynamixel_ros_control

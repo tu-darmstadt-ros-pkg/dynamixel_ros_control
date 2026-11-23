@@ -2,21 +2,23 @@
 #define DYNAMIXEL_ROS_CONTROL_MOCK_DYNAMIXEL_HPP
 
 #include "dynamixel_ros_control/sdk_wrapper.hpp"
-#include "dynamixel_ros_control/log.hpp"
-#include <map>
-#include <vector>
-#include <string>
-#include <iostream>
-#include <chrono>
-#include <mutex>
-#include <cmath>
+
 #include <algorithm>
-#include <yaml-cpp/yaml.h>
-#include <ament_index_cpp/get_package_share_path.hpp>
+#include <atomic>
+#include <functional>
+#include <map>
+#include <memory>
+#include <mutex>
+#include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 namespace dynamixel_ros_control {
 
-// Operating modes (matching Dynamixel protocol 2.0)
+/// The model of a simulated motor whose joint names none (PH54-200-S500-R)
+constexpr uint16_t DEFAULT_MOCK_MODEL_NUMBER = 2020;
+
 enum class OperatingMode : uint8_t
 {
   CURRENT_CONTROL = 0,
@@ -27,301 +29,93 @@ enum class OperatingMode : uint8_t
   PWM_CONTROL = 16
 };
 
-// Hardware error bits
+/// The Hardware Error Status register, every bit, so a test cannot inject a pattern no name covers
 enum HardwareErrorBit : uint8_t
 {
-  ERROR_NONE = 0,
+  ERROR_NONE = 0x00,
   ERROR_INPUT_VOLTAGE = 0x01,
+  ERROR_HALL_SENSOR = 0x02,
   ERROR_OVERHEATING = 0x04,
   ERROR_MOTOR_ENCODER = 0x08,
   ERROR_ELECTRICAL_SHOCK = 0x10,
   ERROR_OVERLOAD = 0x20
 };
 
-struct MockRegister
+// The error field of a status packet: an error number for the instruction in bits 0 to 6, and an
+// alert in bit 7 while a hardware error is set, so a refused write and a hot motor stay apart
+constexpr uint8_t PACKET_ERROR_INSTRUCTION = 0x02;
+constexpr uint8_t PACKET_ERROR_DATA_RANGE = 0x04;
+constexpr uint8_t PACKET_ERROR_DATA_LENGTH = 0x05;
+constexpr uint8_t PACKET_ERROR_DATA_LIMIT = 0x06;  ///< a value over its limit register
+constexpr uint8_t PACKET_ERROR_ACCESS = 0x07;      ///< read only, or EEPROM while torque is on
+constexpr uint8_t PACKET_ERROR_ALERT = 0x80;
+
+/// How a motor fails to communicate. A motor can stop answering and still receive instructions.
+enum class CommunicationFault : uint8_t
 {
-  uint16_t address;
-  uint8_t length;
-  std::string access;  // "R" or "RW"
-  std::string name;
+  NONE,
+  DROP_STATUS_PACKETS,  ///< applies instructions, answers none
+  DISCONNECTED          ///< neither answers nor receives
 };
 
-/**
- * @brief Mock Dynamixel motor with realistic physics simulation
- */
+/// How a motor mishandles the writes to one register
+enum class RegisterWriteFault : uint8_t
+{
+  DROP,    ///< acknowledged and not applied, the master sees success
+  TIMEOUT  ///< neither answered nor applied
+};
+
+/// A read fault count meaning every read
+constexpr int PERSISTENT_READ_FAULT = -1;
+
+/// The status packet a motor answers an instruction with
+struct MockStatus
+{
+  uint8_t error = 0;
+  std::vector<uint8_t> params;
+};
+
+/// What a servo on an external plant commands, in the frame of its present_position register.
+struct ServoCommand
+{
+  bool torque_on = false;
+  double position = 0.0;       ///< reference, rad
+  double velocity = 0.0;       ///< reference, rad/s
+  double current_limit = 0.0;  ///< A
+};
+
+/// One simulated motor: the control table of its model, a kinematic model, the firmware rules the
+/// plugin relies on and fault injection
 class MockDynamixel
 {
 public:
-  MockDynamixel(uint8_t id, uint16_t model_number)
-      : id_(id), model_number_(model_number), comm_error_enabled_(false)
-  {
-    // Resize memory to 2048 bytes (covers all Dynamixel models)
-    memory_.resize(2048, 0);
+  /// @throws std::runtime_error if devices/ has no usable control table for the model
+  MockDynamixel(uint8_t id, uint16_t model_number);
 
-    // Write model number at address 0
-    write2Byte(0, model_number);
-    // Write ID at address 7
-    write1Byte(7, id);
-    // Write Firmware version
-    write1Byte(6, 1);
+  /// Steps the kinematic model by @p dt seconds
+  void update(double dt);
 
-    // Load control table from YAML based on model number
-    loadModelSpecs(model_number);
+  /// @brief Step the motor on an external plant such as a physics engine. The kinematic state
+  /// becomes the plant's reference and the present registers report the measurement. While torque
+  /// is off the reference follows the plant, so a torque on starts where the joint is.
+  /// @param position measured, as present_position reports it, homing included, rad
+  /// @param velocity measured, rad/s
+  /// @param current measured, A
+  ServoCommand followPlant(double dt, double position, double velocity, double current);
 
-    // Initialize physics state
-    initPhysicsState();
-  }
+  /// @brief Write a register in its unit. A fresh mock holds 0 in its limits, which a plant would
+  /// read as no current and no speed, so a simulation writes the factory values.
+  /// @throws std::invalid_argument if the model has no such register or no conversion for its unit
+  void setFactoryValue(const std::string& register_name, double value);
 
-  /**
-   * @brief Update motor physics simulation
-   * @param dt Time step in seconds
-   */
-  void update(double dt)
-  {
-    if (dt <= 0)
-      return;
-
-    // Check if torque is enabled
-    bool torque_enabled = false;
-    if (torque_enable_addr_ > 0) {
-      torque_enabled = read1Byte(torque_enable_addr_) == 1;
-    }
-
-    if (!torque_enabled) {
-      // When torque is disabled, assume motor holds position (or drifts - we keep stable)
-      return;
-    }
-
-    // Get operating mode
-    OperatingMode mode = OperatingMode::POSITION_CONTROL;
-    if (operating_mode_addr_ > 0) {
-      mode = static_cast<OperatingMode>(read1Byte(operating_mode_addr_));
-    }
-
-    switch (mode) {
-      case OperatingMode::POSITION_CONTROL:
-        // Position mode enforces position limits
-        updatePositionMode(dt, true);
-        break;
-      case OperatingMode::EXTENDED_POSITION_CONTROL:
-      case OperatingMode::CURRENT_BASED_POSITION_CONTROL:
-        // Extended position mode does NOT enforce limits (multi-turn)
-        updatePositionMode(dt, false);
-        break;
-      case OperatingMode::VELOCITY_CONTROL:
-        updateVelocityMode(dt);
-        break;
-      case OperatingMode::CURRENT_CONTROL:
-        updateCurrentMode(dt);
-        break;
-      default:
-        updatePositionMode(dt, true);
-        break;
-    }
-
-    // Update moving flag
-    updateMovingFlag();
-
-    // Write present values to registers
-    writePresentValues();
-  }
-
-  void loadModelSpecs(uint16_t model_number)
-  {
-    std::string package_path = ament_index_cpp::get_package_share_path("dynamixel_ros_control").string();
-    std::string list_path = package_path + "/devices/model_list.yaml";
-
-    try {
-      YAML::Node list_node = YAML::LoadFile(list_path);
-      std::string series = list_node[model_number].as<std::string>();
-
-      std::string model_path = package_path + "/devices/models/" + series + ".yaml";
-      YAML::Node model_node = YAML::LoadFile(model_path);
-
-      // Load unit conversions
-      if (model_node["unit_conversions"]) {
-        auto conversions = model_node["unit_conversions"];
-        if (conversions["rad"])
-          rad_per_tick_ = conversions["rad"].as<double>();
-        if (conversions["rad_per_s"])
-          rad_per_s_per_tick_ = conversions["rad_per_s"].as<double>();
-      }
-
-      auto control_table = model_node["control_table"];
-      for (const auto& item : control_table) {
-        std::string line = item.as<std::string>();
-
-        // Parse: "addr | name | len | access | memory | unit"
-        std::vector<std::string> parts;
-        std::stringstream ss(line);
-        std::string segment;
-        while (std::getline(ss, segment, '|')) {
-          // Trim whitespace
-          size_t start = segment.find_first_not_of(' ');
-          size_t end = segment.find_last_not_of(' ');
-          if (start != std::string::npos) {
-            parts.push_back(segment.substr(start, end - start + 1));
-          } else {
-            parts.push_back("");
-          }
-        }
-
-        if (parts.size() >= 3) {
-          int addr = std::stoi(parts[0]);
-          std::string name = parts[1];
-          int len = std::stoi(parts[2]);
-
-          address_map_[name] = addr;
-          length_map_[name] = len;
-
-          // Track RAM registers for reset on reboot
-          if (parts.size() >= 5 && parts[4] == "RAM") {
-            ram_registers_.emplace_back(static_cast<uint16_t>(addr), static_cast<uint8_t>(len));
-          }
-
-          // Cache important addresses
-          if (name == "torque_enable")
-            torque_enable_addr_ = addr;
-          else if (name == "operating_mode")
-            operating_mode_addr_ = addr;
-          else if (name == "goal_position")
-            goal_position_addr_ = addr;
-          else if (name == "goal_velocity")
-            goal_velocity_addr_ = addr;
-          else if (name == "goal_torque" || name == "goal_current")
-            goal_current_addr_ = addr;
-          else if (name == "present_position")
-            present_position_addr_ = addr;
-          else if (name == "present_velocity")
-            present_velocity_addr_ = addr;
-          else if (name == "present_current")
-            present_current_addr_ = addr;
-          else if (name == "velocity_limit")
-            velocity_limit_addr_ = addr;
-          else if (name == "acceleration_limit")
-            acceleration_limit_addr_ = addr;
-          else if (name == "hardware_error_status")
-            hardware_error_addr_ = addr;
-          else if (name == "moving")
-            moving_addr_ = addr;
-          else if (name == "profile_velocity")
-            profile_velocity_addr_ = addr;
-          else if (name == "profile_acceleration")
-            profile_acceleration_addr_ = addr;
-          else if (name == "max_position_limit")
-            max_position_limit_addr_ = addr;
-          else if (name == "min_position_limit")
-            min_position_limit_addr_ = addr;
-          else if (name == "homing_offset")
-            homing_offset_addr_ = addr;
-          else if (name == "led_red")
-            led_red_addr_ = addr;
-          else if (name == "led_green")
-            led_green_addr_ = addr;
-          else if (name == "led_blue")
-            led_blue_addr_ = addr;
-          else if (name == "bus_watchdog")
-            bus_watchdog_addr_ = addr;
-          else if (name == "drive_mode")
-            drive_mode_addr_ = addr;
-        }
-      }
-
-      // Load indirect addresses
-      if (model_node["indirect_addresses"]) {
-        auto indirect = model_node["indirect_addresses"];
-        if (indirect.size() > 0) {
-          std::string line = indirect[0].as<std::string>();
-          std::stringstream ss(line);
-          std::string segment;
-          std::vector<std::string> parts;
-          while (std::getline(ss, segment, '|')) {
-            size_t start = segment.find_first_not_of(' ');
-            size_t end = segment.find_last_not_of(' ');
-            if (start != std::string::npos)
-              parts.push_back(segment.substr(start, end - start + 1));
-            else
-              parts.push_back("");
-          }
-          if (parts.size() >= 4) {
-            indirect_address_start_ = std::stoi(parts[0]);
-            indirect_data_start_ = std::stoi(parts[1]);
-            indirect_count_ = std::stoi(parts[2]);
-            // Pointer registers in RAM are wiped by a reboot; in EEPROM they survive.
-            indirect_in_ram_ = (parts[3] == "RAM");
-          }
-        }
-      }
-    }
-    catch (const std::exception& e) {
-      std::cerr << "Failed to load mock specs for model " << model_number << ": " << e.what() << std::endl;
-    }
-  }
-
-  // Memory access methods.
-  //
-  // The mock simulates a serial bus: in production the DynamixelHardwareInterface
-  // serializes all bus access via dynamixel_comm_mutex_. The test fixture however
-  // drives the physics update loop (MockDynamixelManager::update -> per-motor
-  // update()) on a separate thread, while controller_manager calls into read()
-  // and services on its own thread — both reach into memory_ concurrently
-  // through the mock. memory_mutex_ closes that mock-side race that would
-  // otherwise cause TSan warnings (and on weakly-ordered hardware, real torn
-  // reads of multi-byte registers).
-  //
-  // recursive_mutex because update() drives several read/write paths that
-  // re-enter read1Byte / write1Byte transitively.
-  uint8_t read1Byte(uint16_t address) const
-  {
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    uint16_t real_addr = resolveAddress(address);
-    if (static_cast<size_t>(real_addr) >= memory_.size())
-      return 0;
-    return memory_[real_addr];
-  }
-
-  uint16_t read2Byte(uint16_t address) const
-  {
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    return static_cast<uint16_t>(read1Byte(address)) | (static_cast<uint16_t>(read1Byte(address + 1)) << 8);
-  }
-
-  uint32_t read4Byte(uint16_t address) const
-  {
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    return static_cast<uint32_t>(read1Byte(address)) | (static_cast<uint32_t>(read1Byte(address + 1)) << 8) |
-           (static_cast<uint32_t>(read1Byte(address + 2)) << 16) |
-           (static_cast<uint32_t>(read1Byte(address + 3)) << 24);
-  }
-
-  int32_t read4ByteSigned(uint16_t address) const
-  {
-    return static_cast<int32_t>(read4Byte(address));
-  }
-
-  void write1Byte(uint16_t address, uint8_t data)
-  {
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    uint16_t real_addr = resolveAddress(address);
-    if (static_cast<size_t>(real_addr) < memory_.size())
-      memory_[real_addr] = data;
-  }
-
-  void write2Byte(uint16_t address, uint16_t data)
-  {
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    write1Byte(address, data & 0xFF);
-    write1Byte(address + 1, (data >> 8) & 0xFF);
-  }
-
-  void write4Byte(uint16_t address, uint32_t data)
-  {
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    write1Byte(address, data & 0xFF);
-    write1Byte(address + 1, (data >> 8) & 0xFF);
-    write1Byte(address + 2, (data >> 16) & 0xFF);
-    write1Byte(address + 3, (data >> 24) & 0xFF);
-  }
+  // The registers, through the indirect pointers, without the firmware rules of a bus write
+  uint8_t read1Byte(uint16_t address) const;
+  uint16_t read2Byte(uint16_t address) const;
+  uint32_t read4Byte(uint16_t address) const;
+  int32_t read4ByteSigned(uint16_t address) const;
+  void write1Byte(uint16_t address, uint8_t data);
+  void write2Byte(uint16_t address, uint16_t data);
+  void write4Byte(uint16_t address, uint32_t data);
 
   uint8_t getId() const
   {
@@ -332,18 +126,19 @@ public:
     return model_number_;
   }
 
-  // Error injection
-  void setHardwareError(uint8_t error_code)
+  /// A bit selected in the Shutdown register also clears torque, which then only a reboot brings back
+  void setHardwareError(uint8_t error_code);
+
+  /// The error survives a reboot, as one whose cause persists
+  void setHardwareErrorSticky(bool sticky)
   {
-    hardware_error_ = error_code;
-    if (hardware_error_addr_ > 0) {
-      write1Byte(hardware_error_addr_, error_code);
-    }
+    hardware_error_sticky_ = sticky;
   }
 
+  /// What a reboot does to the error. A sticky one is written again, because the reboot zeroed its register.
   void clearHardwareError()
   {
-    setHardwareError(0);
+    setHardwareError(hardware_error_sticky_ ? hardware_error_.load() : 0);
   }
 
   uint8_t getHardwareError() const
@@ -351,104 +146,100 @@ public:
     return hardware_error_;
   }
 
-  // Reset all RAM registers to 0 (simulates power cycle on reboot)
-  void resetRAMRegisters()
+  /// RAM to 0 and RAM pointers to their own slot, as a reboot leaves them
+  void resetRAMRegisters();
+
+  /// The output turned by hand: the position changes, nothing else does
+  void moveByHand(double delta_rad)
   {
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    for (const auto& [addr, len] : ram_registers_) {
-      for (uint8_t i = 0; i < len; ++i) {
-        if (static_cast<size_t>(addr + i) < memory_.size()) {
-          memory_[addr + i] = 0;
-        }
-      }
-    }
-    if (indirect_count_ > 0) {
-      // The indirect-address *pointer* registers are wiped only when they live in RAM
-      // (X-series). On P-/PRO-series they live in EEPROM and a real reboot leaves them
-      // intact, so the mock must preserve them too — otherwise the EEPROM-skip path in
-      // production code could never be distinguished from a no-op rewrite.
-      if (indirect_in_ram_) {
-        const size_t pointer_bytes = static_cast<size_t>(indirect_count_) * 2;
-        for (size_t i = 0; i < pointer_bytes; ++i) {
-          const size_t addr = static_cast<size_t>(indirect_address_start_) + i;
-          if (addr < memory_.size()) {
-            memory_[addr] = 0;
-          }
-        }
-      }
-      // The indirect *data* registers always live in the RAM area, so they are wiped
-      // regardless of where the pointer registers reside.
-      for (size_t i = 0; i < indirect_count_; ++i) {
-        const size_t addr = static_cast<size_t>(indirect_data_start_) + i;
-        if (addr < memory_.size()) {
-          memory_[addr] = 0;
-        }
-      }
-    }
+    const std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
+    current_position_ += delta_rad;
+    writePresentValues();
   }
 
-  // Reboot tracking
+  /// RAM back to defaults, and the position back as the absolute value within one turn
+  void powerCycle();
+
   int getRebootCount() const
   {
     return reboot_count_;
   }
-
-  void incrementRebootCount()
-  {
-    reboot_count_++;
-  }
-
   void resetRebootCount()
   {
     reboot_count_ = 0;
   }
 
-  void setCommunicationError(bool enabled)
+  void setCommunicationFault(CommunicationFault fault)
   {
-    comm_error_enabled_ = enabled;
+    comm_fault_ = fault;
   }
 
-  bool hasCommunicationError() const
-  {
-    return comm_error_enabled_;
-  }
+  /// Writes to the register fail, also through an indirect slot
+  void setRegisterWriteFault(const std::string& register_name, RegisterWriteFault fault);
+  void clearRegisterWriteFaults();
 
-  // Address lookup
+  /// @brief Every read covering the register times out, also through an indirect slot. A motor
+  /// answers a read whole or not at all, so a group over the register gets no answer from it.
+  void setRegisterReadFault(const std::string& register_name);
+
+  /// @brief The next @p count read packets covering the register time out, which tells a caller
+  /// that retries from one that gives up. Counted per packet: readWhoeverAnswers() spends one on
+  /// the group read and one on each probe.
+  void setRegisterReadFaultCount(const std::string& register_name, int count);
+
+  /// On by default as in the firmware, the indirect pointers of the P and PRO series included
+  void setRejectEepromWritesWhileTorqued(bool reject);
+
+  /// @brief Runs @p hook on the reading thread before an answered read of the register is served,
+  /// which is a window the interface holds its bus lock across
+  void setRegisterReadHook(const std::string& register_name, std::function<void()> hook);
+  void clearRegisterReadHooks();
+
+  /// One stored byte, by resolved address
+  struct TracedWrite
+  {
+    uint16_t address;
+    uint8_t value;
+  };
+
+  /// @brief Records the stored bytes in order, for rules about order that the end state does not
+  /// show. A dropped write leaves no entry.
+  void startWriteTrace();
+  void stopWriteTrace();
+
+  // Trace index of the last or first write of @p value to the register's first byte, or of any
+  // write to the register, -1 for none
+  int lastWriteIndex(const std::string& register_name, uint8_t value) const;
+  int lastWriteIndex(const std::string& register_name) const;
+  int firstWriteIndex(const std::string& register_name, uint8_t value) const;
+  int firstWriteIndex(const std::string& register_name) const;
+
+  /// 0 for a register the model does not have
   uint16_t getAddress(const std::string& name) const
   {
     auto it = address_map_.find(name);
     return (it != address_map_.end()) ? it->second : 0;
   }
-
   uint8_t getLength(const std::string& name) const
   {
     auto it = length_map_.find(name);
     return (it != length_map_.end()) ? it->second : 0;
   }
 
-  // Physics state access (for testing)
-  // Returns the actuator position (internal position without homing offset)
+  /// The kinematic position, without the homing offset, rad
   double getCurrentPosition() const
   {
+    const std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     return current_position_;
   }
-  // Returns the joint position (actuator position + homing offset, as reported by Present_Position register)
-  double getJointPosition() const
-  {
-    int32_t homing_offset_ticks = (homing_offset_addr_ > 0) ? read4ByteSigned(homing_offset_addr_) : 0;
-    double homing_offset_rad = static_cast<double>(homing_offset_ticks) * rad_per_tick_;
-    return current_position_ + homing_offset_rad;
-  }
+  /// The position present_position reports, homing included, rad
+  double getJointPosition() const;
   double getCurrentVelocity() const
   {
+    const std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
     return current_velocity_;
   }
-  double getCurrentAcceleration() const
-  {
-    return current_acceleration_;
-  }
 
-  // LED state accessors (for testing)
   uint8_t getLedRed() const
   {
     return led_red_addr_ > 0 ? read1Byte(led_red_addr_) : 0;
@@ -461,7 +252,6 @@ public:
   {
     return led_blue_addr_ > 0 ? read1Byte(led_blue_addr_) : 0;
   }
-
   void setLedRed(uint8_t value)
   {
     if (led_red_addr_ > 0)
@@ -478,13 +268,31 @@ public:
       write1Byte(led_blue_addr_, value);
   }
 
-  // Bus watchdog accessor
+  /// Bus writes to bus_watchdog, the traffic that repeated arming leaves invisible in the register
+  uint64_t getBusWatchdogWriteCount() const
+  {
+    return bus_watchdog_write_count_.load(std::memory_order_relaxed);
+  }
+  void resetBusWatchdogWriteCount()
+  {
+    bus_watchdog_write_count_.store(0, std::memory_order_relaxed);
+  }
+
   uint8_t getBusWatchdog() const
   {
     return bus_watchdog_addr_ > 0 ? read1Byte(bus_watchdog_addr_) : 0;
   }
 
-  // Homing offset accessor
+  /// @brief Trips the bus watchdog as a window without packets does: the motor stops and the
+  /// register reads -1 until written 0. Without the manager's timing model only this trips it,
+  /// which keeps tests free of wall clock races.
+  void tripBusWatchdog();
+
+  /// Trips of the timing model, which a repaired trip leaves no other trace of
+  [[nodiscard]] int timedBusWatchdogTrips() const;
+
+  bool busWatchdogLatched() const;
+
   int32_t getHomingOffset() const
   {
     return homing_offset_addr_ > 0 ? read4ByteSigned(homing_offset_addr_) : 0;
@@ -496,279 +304,86 @@ public:
   }
 
 private:
-  void initPhysicsState()
+  // The bus side of the motor, for the classes that serve its packets
+  friend class MockPacketHandler;
+  friend class MockGroupSyncRead;
+  friend class MockGroupSyncWrite;
+  friend class MockBusServer;
+
+  // Every instruction as the firmware handles it, nullopt where no status packet comes back. Sync
+  // instructions take the same path and drop the status.
+  std::optional<MockStatus> answerPing();
+  std::optional<MockStatus> answerReboot();
+  std::optional<MockStatus> answerRead(uint16_t address, uint16_t length);
+  std::optional<MockStatus> answerWrite(uint16_t address, const uint8_t* data, uint16_t length);
+
+  bool respondsToStatus() const
   {
-    current_position_ = 0.0;
-    current_velocity_ = 0.0;
-    current_acceleration_ = 0.0;
-    current_current_ = 0.0;
-
-    // Default limits (in ticks, will be converted)
-    default_velocity_limit_ = 100.0;     // rad/s
-    default_acceleration_limit_ = 50.0;  // rad/s^2
+    return comm_fault_ == CommunicationFault::NONE;
   }
-
-  double getVelocityLimit() const
+  bool receivesWrites() const
   {
-    // For velocity mode: use velocity_limit register
-    if (velocity_limit_addr_ > 0) {
-      int32_t limit_ticks = read4ByteSigned(velocity_limit_addr_);
-      if (limit_ticks > 0) {
-        return static_cast<double>(limit_ticks) * rad_per_s_per_tick_;
-      }
-    }
-    return default_velocity_limit_;
+    return comm_fault_ != CommunicationFault::DISCONNECTED;
   }
+  /// @p error with the alert bit a hardware error adds to every status
+  uint8_t statusError(uint8_t error) const;
+  /// Restarts the watchdog window of the timing model, a read only if the manager says reads count
+  void hearInstruction(bool is_read);
+  /// The error a write instruction is refused with as a whole, 0 if it is not. Caller holds memory_mutex_.
+  uint8_t writeRefusal(uint16_t address, const uint8_t* data, uint16_t length) const;
+  /// Whether @p target is outside the RAM area an indirect pointer may address (Data Range Error)
+  bool pointerOutOfRange(uint16_t target) const;
+  /// The RAM area as [begin, end). The firmware bounds pointers by the area, so gaps between
+  /// listed registers are inside it.
+  std::optional<std::pair<uint16_t, uint16_t>> ramArea() const;
+  /// Writes one byte at a resolved address. Caller holds memory_mutex_.
+  void store(uint16_t address, uint8_t data);
 
-  // drive_mode bit 2 (0x04) selects time-based profile mode, in which profile_velocity
-  // is a duration in ms rather than a velocity tick value.
-  bool isTimeBasedProfile() const
+  enum class TraceSearch : uint8_t
   {
-    if (drive_mode_addr_ == 0)
-      return false;
-    std::lock_guard<std::recursive_mutex> lock(memory_mutex_);
-    return (memory_[drive_mode_addr_] & 0x04) != 0;
-  }
+    FIRST,
+    LAST
+  };
 
-  // For position mode: profile_velocity is the dynamic velocity limit (only in
-  // velocity-based profile mode — in time-based mode it has different semantics).
-  double getPositionModeVelocityLimit() const
-  {
-    // First check profile_velocity (dynamic limit during position moves)
-    if (profile_velocity_addr_ > 0 && !isTimeBasedProfile()) {
-      int32_t profile_vel = read4ByteSigned(profile_velocity_addr_);
-      if (profile_vel > 0) {
-        return static_cast<double>(profile_vel) * rad_per_s_per_tick_;
-      }
-    }
-    // Fall back to velocity_limit register
-    if (velocity_limit_addr_ > 0) {
-      int32_t limit_ticks = read4ByteSigned(velocity_limit_addr_);
-      if (limit_ticks > 0) {
-        return static_cast<double>(limit_ticks) * rad_per_s_per_tick_;
-      }
-    }
-    return default_velocity_limit_;
-  }
+  /// @p matches gets the register's address and width
+  int findWriteIndex(const std::string& register_name, TraceSearch direction,
+                     const std::function<bool(const TracedWrite&, uint16_t, uint8_t)>& matches) const;
 
-  // Get position limits for Position mode enforcement
-  std::pair<double, double> getPositionLimits() const
-  {
-    double min_pos = -1e9;
-    double max_pos = 1e9;
-
-    if (min_position_limit_addr_ > 0) {
-      int32_t min_ticks = read4ByteSigned(min_position_limit_addr_);
-      min_pos = static_cast<double>(min_ticks) * rad_per_tick_;
-    }
-    if (max_position_limit_addr_ > 0) {
-      int32_t max_ticks = read4ByteSigned(max_position_limit_addr_);
-      max_pos = static_cast<double>(max_ticks) * rad_per_tick_;
-    }
-    return {min_pos, max_pos};
-  }
-
-  double getAccelerationLimit() const
-  {
-    if (acceleration_limit_addr_ > 0) {
-      int32_t limit_ticks = read4ByteSigned(acceleration_limit_addr_);
-      if (limit_ticks > 0) {
-        return static_cast<double>(limit_ticks);  // Units vary by model
-      }
-    }
-    if (profile_acceleration_addr_ > 0 && !isTimeBasedProfile()) {
-      int32_t profile_acc = read4ByteSigned(profile_acceleration_addr_);
-      if (profile_acc > 0) {
-        return static_cast<double>(profile_acc);
-      }
-    }
-    return default_acceleration_limit_;
-  }
-
-  void updatePositionMode(double dt, bool enforce_limits = true)
-  {
-    if (goal_position_addr_ == 0 || present_position_addr_ == 0)
-      return;
-
-    // Get goal position in radians
-    // Goal Position register includes homing offset, so we need to subtract it
-    // to get the actual target position (same as present_position behavior)
-    int32_t goal_ticks = read4ByteSigned(goal_position_addr_);
-    int32_t homing_offset_ticks = (homing_offset_addr_ > 0) ? read4ByteSigned(homing_offset_addr_) : 0;
-    double goal_pos = static_cast<double>(goal_ticks - homing_offset_ticks) * rad_per_tick_;
-
-    // Enforce position limits only in Position mode (not Extended Position mode)
-    // Only apply limits if they have been explicitly set (i.e., not both 0)
-    if (enforce_limits && max_position_limit_addr_ > 0 && min_position_limit_addr_ > 0) {
-      auto [min_pos, max_pos] = getPositionLimits();
-      // Only clamp if limits are actually configured (not both 0 or same value)
-      if (min_pos != max_pos || min_pos != 0.0) {
-        goal_pos = std::clamp(goal_pos, min_pos, max_pos);
-      }
-    }
-
-    // Use profile_velocity as the velocity limit for position mode (dynamic limit)
-    double vel_limit = getPositionModeVelocityLimit();
-    double acc_limit = getAccelerationLimit();
-
-    // Calculate position error
-    double pos_error = goal_pos - current_position_;
-
-    // Trapezoidal velocity profile
-    // Calculate stopping distance
-    double stopping_distance = (current_velocity_ * current_velocity_) / (2.0 * acc_limit);
-
-    // Desired velocity based on position
-    double desired_velocity = 0.0;
-    if (std::abs(pos_error) > 0.0001) {
-      // Direction towards goal
-      double direction = (pos_error > 0) ? 1.0 : -1.0;
-
-      if (std::abs(pos_error) <= stopping_distance) {
-        // Deceleration phase
-        desired_velocity = direction * std::sqrt(2.0 * acc_limit * std::abs(pos_error));
-      } else {
-        // Acceleration or cruise phase
-        desired_velocity = direction * vel_limit;
-      }
-    }
-
-    // Apply acceleration limits to velocity change
-    double vel_error = desired_velocity - current_velocity_;
-    double max_vel_change = acc_limit * dt;
-
-    if (std::abs(vel_error) > max_vel_change) {
-      current_acceleration_ = (vel_error > 0 ? 1.0 : -1.0) * acc_limit;
-      current_velocity_ += current_acceleration_ * dt;
-    } else {
-      current_velocity_ = desired_velocity;
-      current_acceleration_ = vel_error / dt;
-    }
-
-    // Clamp velocity to limits
-    current_velocity_ = std::clamp(current_velocity_, -vel_limit, vel_limit);
-
-    // Update position
-    current_position_ += current_velocity_ * dt;
-
-    // Enforce position limits on actual position (for Position mode only)
-    if (enforce_limits && max_position_limit_addr_ > 0 && min_position_limit_addr_ > 0) {
-      auto [min_pos, max_pos] = getPositionLimits();
-      // Only clamp if limits are actually configured (not both 0 or same value)
-      if (min_pos != max_pos || min_pos != 0.0) {
-        if (current_position_ < min_pos) {
-          current_position_ = min_pos;
-          current_velocity_ = 0.0;
-        } else if (current_position_ > max_pos) {
-          current_position_ = max_pos;
-          current_velocity_ = 0.0;
-        }
-      }
-    }
-
-    // Snap to goal if very close
-    if (std::abs(current_position_ - goal_pos) < 0.0001 && std::abs(current_velocity_) < 0.001) {
-      current_position_ = goal_pos;
-      current_velocity_ = 0.0;
-      current_acceleration_ = 0.0;
-    }
-
-    // Simulate current draw (proportional to acceleration/torque)
-    current_current_ = std::abs(current_acceleration_) * 0.1;  // Simplified model
-  }
-
-  void updateVelocityMode(double dt)
-  {
-    if (goal_velocity_addr_ == 0)
-      return;
-
-    // Get goal velocity
-    int32_t goal_vel_ticks = read4ByteSigned(goal_velocity_addr_);
-    double goal_velocity = static_cast<double>(goal_vel_ticks) * rad_per_s_per_tick_;
-
-    double acc_limit = getAccelerationLimit();
-
-    // Apply acceleration limits
-    double vel_error = goal_velocity - current_velocity_;
-    double max_vel_change = acc_limit * dt;
-
-    if (std::abs(vel_error) > max_vel_change) {
-      current_acceleration_ = (vel_error > 0 ? 1.0 : -1.0) * acc_limit;
-      current_velocity_ += current_acceleration_ * dt;
-    } else {
-      current_velocity_ = goal_velocity;
-      current_acceleration_ = 0.0;
-    }
-
-    // Update position
-    current_position_ += current_velocity_ * dt;
-
-    // Simulate current
-    current_current_ = std::abs(current_acceleration_) * 0.1;
-  }
-
-  void updateCurrentMode(double dt)
-  {
-    if (goal_current_addr_ == 0)
-      return;
-
-    // Get goal current (simplified: treat current as proportional to acceleration)
-    int16_t goal_current_ticks = static_cast<int16_t>(read2Byte(goal_current_addr_));
-    current_current_ = static_cast<double>(goal_current_ticks) * 0.001;  // Scale factor
-
-    // Simple acceleration based on current
-    current_acceleration_ = current_current_ * 10.0;  // Simplified torque -> acceleration
-
-    // Update velocity and position
-    current_velocity_ += current_acceleration_ * dt;
-    current_position_ += current_velocity_ * dt;
-  }
-
-  void updateMovingFlag()
-  {
-    if (moving_addr_ > 0) {
-      bool moving = std::abs(current_velocity_) > 0.001;
-      write1Byte(moving_addr_, moving ? 1 : 0);
-    }
-  }
-
-  void writePresentValues()
-  {
-    // Calculate homing offset
-    int32_t homing_offset_ticks = 0;
-    if (homing_offset_addr_ > 0) {
-      homing_offset_ticks = read4ByteSigned(homing_offset_addr_);
-    }
-
-    // Write present position (actual position + homing offset)
-    if (present_position_addr_ > 0) {
-      int32_t pos_ticks = static_cast<int32_t>(current_position_ / rad_per_tick_);
-      // Present Position = Actual Position + Homing Offset (per Dynamixel documentation)
-      int32_t present_ticks = pos_ticks + homing_offset_ticks;
-      write4Byte(present_position_addr_, static_cast<uint32_t>(present_ticks));
-    }
-
-    // Write present velocity
-    if (present_velocity_addr_ > 0) {
-      int32_t vel_ticks = static_cast<int32_t>(current_velocity_ / rad_per_s_per_tick_);
-      write4Byte(present_velocity_addr_, static_cast<uint32_t>(vel_ticks));
-    }
-
-    // Write present current
-    if (present_current_addr_ > 0) {
-      int16_t current_ticks = static_cast<int16_t>(current_current_ * 1000.0);
-      write2Byte(present_current_addr_, static_cast<uint16_t>(current_ticks));
-    }
-  }
+  void loadModelSpecs(uint16_t model_number);
+  /// Pointer n to its own data slot n, as a motor ships (e-Manual)
+  void resetIndirectPointers();
+  /// Whether a hardware error selected in the Shutdown register is set. Caller holds memory_mutex_.
+  bool shutdownLatched() const;
+  bool isGoalRegisterAddress(uint16_t address) const;
+  /// drive_mode bit 2, in which the profile registers are durations, which the model ignores
+  bool isTimeBasedProfile() const;
+  double getPositionModeVelocityLimit() const;
+  std::pair<double, double> getPositionLimits() const;
+  double getAccelerationLimit() const;
+  /// The unit of @p register_name per tick, 0 for a register without one
+  double perTick(const std::string& register_name) const;
+  void updatePositionMode(double dt, bool enforce_limits = true);
+  void updateVelocityMode(double dt);
+  void updateCurrentMode(double dt);
+  void updateMovingFlag();
+  void writePresentValues();
+  void writePresentValues(double position, double velocity, double current);
+  /// The register an indirect slot points to, any other address unchanged
+  uint16_t resolveAddress(uint16_t address) const;
+  /// Whether @p address is faulted, spending a use of a counted fault. Caller holds memory_mutex_.
+  bool consumeReadFault(uint16_t address) const;
 
   uint8_t id_;
   uint16_t model_number_;
   std::vector<uint8_t> memory_;
-  // recursive_mutex: update() drives several read/write paths that re-enter
-  // read1Byte / write1Byte transitively. mutable so const accessors can lock.
+  // The physics, the bus and the tests run on different threads. Recursive, because update() and
+  // the bus re-enter the register accessors.
   mutable std::recursive_mutex memory_mutex_;
   std::map<std::string, uint16_t> address_map_;
   std::map<std::string, uint8_t> length_map_;
+  std::map<std::string, std::string> unit_map_;
+  /// Unit per tick, by unit name
+  std::map<std::string, double> unit_conversions_;
 
   // Cached addresses
   uint16_t torque_enable_addr_ = 0;
@@ -776,9 +391,11 @@ private:
   uint16_t goal_position_addr_ = 0;
   uint16_t goal_velocity_addr_ = 0;
   uint16_t goal_current_addr_ = 0;
+  uint16_t goal_pwm_addr_ = 0;
   uint16_t present_position_addr_ = 0;
   uint16_t present_velocity_addr_ = 0;
   uint16_t present_current_addr_ = 0;
+  uint16_t current_limit_addr_ = 0;
   uint16_t velocity_limit_addr_ = 0;
   uint16_t acceleration_limit_addr_ = 0;
   uint16_t hardware_error_addr_ = 0;
@@ -792,55 +409,50 @@ private:
   uint16_t led_green_addr_ = 0;
   uint16_t led_blue_addr_ = 0;
   uint16_t bus_watchdog_addr_ = 0;
+  double bus_silence_s_ = 0.0;
+  int timed_bus_watchdog_trips_ = 0;
+  std::atomic<uint64_t> bus_watchdog_write_count_{0};
   uint16_t drive_mode_addr_ = 0;
+  uint16_t shutdown_addr_ = 0;
 
-  // Unit conversions
-  double rad_per_tick_ = 0.00002068538;  // Default for H42 series
+  // The units of the kinematic model, H42 values where a table has none
+  double rad_per_tick_ = 0.00002068538;
   double rad_per_s_per_tick_ = 0.000344746;
+  double ampere_per_tick_ = 0.001;
 
-  // Physics state
   double current_position_ = 0.0;
   double current_velocity_ = 0.0;
   double current_acceleration_ = 0.0;
   double current_current_ = 0.0;
 
-  // Limits
-  double default_velocity_limit_ = 100.0;
-  double default_acceleration_limit_ = 50.0;
+  // What a motor moves at with neither limit nor profile set
+  static constexpr double DEFAULT_VELOCITY_LIMIT = 100.0;     // rad/s
+  static constexpr double DEFAULT_ACCELERATION_LIMIT = 50.0;  // rad/s^2
 
-  // Error state
-  uint8_t hardware_error_ = 0;
-  bool comm_error_enabled_ = false;
-  int reboot_count_ = 0;                                     // Tracks how many times this motor has been rebooted
-  std::vector<std::pair<uint16_t, uint8_t>> ram_registers_;  // RAM register (address, length) pairs for reset on reboot
+  // Atomic, as a test injects them while the control thread reads the motor
+  std::atomic<uint8_t> hardware_error_{0};
+  std::atomic<bool> hardware_error_sticky_{false};
+  std::atomic<CommunicationFault> comm_fault_{CommunicationFault::NONE};
+  // By resolved address, one entry per byte
+  std::map<uint16_t, RegisterWriteFault> register_write_faults_;
+  mutable std::map<uint16_t, int> register_read_faults_;  ///< reads left to fail
+  std::map<uint16_t, std::function<void()>> register_read_hooks_;
+  bool write_trace_enabled_ = false;
+  std::vector<TracedWrite> write_trace_;
+  std::atomic<int> reboot_count_{0};
+  // (address, length)
+  std::vector<std::pair<uint16_t, uint8_t>> ram_registers_;
+  std::vector<std::pair<uint16_t, uint8_t>> eeprom_registers_;
+  std::atomic<bool> reject_eeprom_writes_while_torqued_{true};
 
-  // Indirect addressing configuration
   uint16_t indirect_address_start_ = 0;
   uint16_t indirect_data_start_ = 0;
   uint16_t indirect_count_ = 0;
-  bool indirect_in_ram_ = false;  // True if the indirect pointer registers live in RAM (X-series)
-
-  // Helper to resolve indirect addresses
-  uint16_t resolveAddress(uint16_t address) const
-  {
-    if (indirect_count_ > 0 && address >= indirect_data_start_ && address < indirect_data_start_ + indirect_count_) {
-
-      uint16_t index = address - indirect_data_start_;
-      uint16_t pointer_addr = indirect_address_start_ + (index * 2);
-
-      // Pointer is 2 bytes (Low, High)
-      if (static_cast<size_t>(pointer_addr + 1) < memory_.size()) {
-        uint16_t target = memory_[pointer_addr] | (memory_[pointer_addr + 1] << 8);
-        return target;
-      }
-    }
-    return address;
-  }
+  bool indirect_in_ram_ = false;  ///< X series, a reboot resets the pointers
+  bool profile_velocity_bounded_ = false;
 };
 
-/**
- * @brief Manager for mock Dynamixel motors (singleton)
- */
+/// The motors this process simulates. The plugin reaches them with use_dummy.
 class MockDynamixelManager
 {
 public:
@@ -850,97 +462,70 @@ public:
     return instance;
   }
 
-  void addMotor(uint8_t id, uint16_t model_number)
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (motors_.find(id) == motors_.end()) {
-      motors_.emplace(id, std::make_shared<MockDynamixel>(id, model_number));
-    }
-  }
+  /// Leaves a motor that has the id alone. @throws std::runtime_error for a model it cannot simulate
+  void addMotor(uint8_t id, uint16_t model_number);
+  void removeMotor(uint8_t id);
+  std::shared_ptr<MockDynamixel> getMotor(uint8_t id);
+  std::vector<uint8_t> getConnectedIds();
 
-  void removeMotor(uint8_t id)
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    motors_.erase(id);
-  }
+  void update(double dt = 0.01);
 
-  std::shared_ptr<MockDynamixel> getMotor(uint8_t id)
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    if (motors_.find(id) != motors_.end()) {
-      return motors_[id];
-    }
-    return nullptr;
-  }
+  /// No motors and no faults, between tests
+  void reset();
 
-  std::vector<uint8_t> getConnectedIds()
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    std::vector<uint8_t> ids;
-    for (auto const& [id, motor] : motors_) {
-      ids.push_back(id);
-    }
-    return ids;
-  }
+  /// Disconnects every motor, or reconnects them
+  void setGlobalCommunicationError(bool enabled);
+  /// The next @p count instruction packets reach the motors, then every motor disconnects as on a
+  /// bus power cut in the middle of a transaction sequence
+  void cutBusAfterPackets(int count);
 
-  void update(double dt = 0.01)
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& [id, motor] : motors_) {
-      motor->update(dt);
-    }
-  }
+  /// @brief Sync writes fail to reach the bus, as on a serial write error, the one way a sync
+  /// write fails since no motor answers it
+  void setSyncWriteTransmissionFailure(bool enabled);
+  void failNextSyncWriteTransmissions(int count);
+  /// Whether the sync write about to go out fails, spending one of a counted failure
+  [[nodiscard]] bool takeSyncWriteTransmissionFailure();
 
-  /**
-   * @brief Reset manager state - removes all motors
-   * Call this between tests to ensure clean state
-   */
-  void reset()
-  {
-    std::lock_guard<std::mutex> lock(mutex_);
-    motors_.clear();
-  }
+  /// @brief Each watchdog trips by itself after a window without instructions. Off by default, as
+  /// the controller manager tests run on wall time. @p fed_by_reads whether reads restart the window.
+  void setBusWatchdogTiming(bool enabled, bool fed_by_reads);
+  [[nodiscard]] bool busWatchdogTimed() const;
+  [[nodiscard]] bool busWatchdogFedByReads() const;
 
-  /**
-   * @brief Enable communication errors on all motors
-   */
-  void setGlobalCommunicationError(bool enabled)
+  /// Instruction packets the in-process handlers sent since the process started, a sync instruction counting once
+  [[nodiscard]] uint64_t packetCount() const
   {
-    std::lock_guard<std::mutex> lock(mutex_);
-    for (auto& [id, motor] : motors_) {
-      motor->setCommunicationError(enabled);
-    }
+    return packets_.load(std::memory_order_relaxed);
   }
 
 private:
-  MockDynamixelManager() = default;
+  friend class MockPacketHandler;
+  friend class MockGroupSyncRead;
+  friend class MockGroupSyncWrite;
+
+  MockDynamixelManager();
+  void countPacket();
   std::map<uint8_t, std::shared_ptr<MockDynamixel>> motors_;
+  /// Sync writes left to fail, negative for all of them
+  std::atomic<int> sync_write_tx_failures_{0};
+  std::atomic<bool> bus_watchdog_timed_{false};
+  std::atomic<bool> bus_watchdog_fed_by_reads_{true};
+  std::atomic<uint64_t> packets_{0};
+  /// Packets left before the cut, negative for none pending. Under mutex_.
+  int packets_until_cut_{-1};
   std::mutex mutex_;
 };
 
-/**
- * @brief Mock PortHandler
- */
 class MockPortHandler : public PortHandler
 {
 public:
   MockPortHandler(const char* port_name)
-      : port_name_(port_name), is_open_(false)
+      : port_name_(port_name)
   {}
 
   bool openPort() override
   {
-    is_open_ = true;
     return true;
-  }
-  void closePort() override
-  {
-    is_open_ = false;
-  }
-  void clearPort() override {}
-  void setPortName(const char* port_name) override
-  {
-    port_name_ = port_name;
   }
   std::string getPortName() override
   {
@@ -955,333 +540,76 @@ public:
   {
     return baud_rate_;
   }
-  bool isOpen() const
-  {
-    return is_open_;
-  }
 
 private:
   std::string port_name_;
   int baud_rate_ = 57600;
-  bool is_open_ = false;
 };
 
-/**
- * @brief Mock PacketHandler with error injection support
- */
+/// Frames the answers of the simulated motors as the SDK's packet handler returns them
 class MockPacketHandler : public PacketHandler
 {
 public:
-  MockPacketHandler(float protocol_version)
-      : protocol_version_(protocol_version)
-  {}
+  int ping(PortHandler& port, uint8_t id, uint16_t* model_number, uint8_t* error) override;
+  int reboot(PortHandler& port, uint8_t id, uint8_t* error) override;
 
-  int ping(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t* model_number, uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
+  int read1ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint8_t* data, uint8_t* error) override;
+  int read2ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint16_t* data, uint8_t* error) override;
+  int read4ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint32_t* data, uint8_t* error) override;
 
-    if (model_number)
-      *model_number = motor->read2Byte(0);
-    if (error)
-      *error = motor->getHardwareError();
-    return COMM_SUCCESS;
-  }
+  int write1ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint8_t data, uint8_t* error) override;
+  int write2ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint16_t data, uint8_t* error) override;
+  int write4ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint32_t data, uint8_t* error) override;
 
-  int reboot(std::shared_ptr<PortHandler> port, uint8_t id, uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
-
-    motor->incrementRebootCount();
-    motor->resetRAMRegisters();
-    motor->clearHardwareError();
-    if (error)
-      *error = 0;
-    return COMM_SUCCESS;
-  }
-
-  int read1ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint8_t* data,
-                    uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
-
-    if (data)
-      *data = motor->read1Byte(address);
-    if (error)
-      *error = motor->getHardwareError();
-    return COMM_SUCCESS;
-  }
-
-  int read2ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint16_t* data,
-                    uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
-
-    if (data)
-      *data = motor->read2Byte(address);
-    if (error)
-      *error = motor->getHardwareError();
-    return COMM_SUCCESS;
-  }
-
-  int read4ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint32_t* data,
-                    uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
-
-    if (data)
-      *data = motor->read4Byte(address);
-    if (error)
-      *error = motor->getHardwareError();
-    return COMM_SUCCESS;
-  }
-
-  int write1ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint8_t data,
-                     uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
-
-    motor->write1Byte(address, data);
-    if (error)
-      *error = motor->getHardwareError();
-    return COMM_SUCCESS;
-  }
-
-  int write2ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint16_t data,
-                     uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
-
-    motor->write2Byte(address, data);
-    if (error)
-      *error = motor->getHardwareError();
-    return COMM_SUCCESS;
-  }
-
-  int write4ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint32_t data,
-                     uint8_t* error) override
-  {
-    (void) port;  // Unused in mock
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    if (!motor)
-      return COMM_RX_TIMEOUT;
-    if (motor->hasCommunicationError())
-      return COMM_RX_TIMEOUT;
-
-    motor->write4Byte(address, data);
-    if (error)
-      *error = motor->getHardwareError();
-    return COMM_SUCCESS;
-  }
-
-  const char* getTxRxResult(int result) override
-  {
-    switch (result) {
-      case COMM_SUCCESS:
-        return "COMM_SUCCESS";
-      case COMM_TX_FAIL:
-        return "COMM_TX_FAIL";
-      case COMM_RX_FAIL:
-        return "COMM_RX_FAIL";
-      case COMM_TX_ERROR:
-        return "COMM_TX_ERROR";
-      case COMM_RX_TIMEOUT:
-        return "COMM_RX_TIMEOUT";
-      default:
-        return "COMM_ERROR";
-    }
-  }
-
-  const char* getRxPacketError(uint8_t error) override
-  {
-    if (error == 0)
-      return "";
-    if (error & ERROR_OVERHEATING)
-      return "Overheating";
-    if (error & ERROR_OVERLOAD)
-      return "Overload";
-    return "Unknown Error";
-  }
+  const char* getTxRxResult(int result) override;
+  const char* getRxPacketError(uint8_t error) override;
 
 private:
-  float protocol_version_;
+  template <typename T>
+  static int readTxRx(uint8_t id, uint16_t address, T* data, uint8_t* error);
+  template <typename T>
+  static int writeTxRx(uint8_t id, uint16_t address, T data, uint8_t* error);
 };
 
-/**
- * @brief Mock GroupSyncRead with multi-register support
- */
 class MockGroupSyncRead : public GroupSyncRead
 {
 public:
-  MockGroupSyncRead(std::shared_ptr<PortHandler> port, std::shared_ptr<PacketHandler> ph, uint16_t start_address,
-                    uint16_t data_length)
+  MockGroupSyncRead(std::shared_ptr<PortHandler> /*port*/, std::shared_ptr<PacketHandler> /*ph*/,
+                    uint16_t start_address, uint16_t data_length)
       : start_address_(start_address), data_length_(data_length)
-  {
-    (void) port;  // Unused in mock
-    (void) ph;    // Unused in mock
-  }
+  {}
 
   bool addParam(uint8_t id) override
   {
+    // As the SDK group, which is what surfaces two joints on one motor id
+    if (std::find(ids_.begin(), ids_.end(), id) != ids_.end()) {
+      return false;
+    }
     ids_.push_back(id);
     return true;
   }
-
-  void removeParam(uint8_t id) override
-  {
-    ids_.erase(std::remove(ids_.begin(), ids_.end(), id), ids_.end());
-  }
-
-  void clearParam() override
-  {
-    ids_.clear();
-  }
-
-  int txRxPacket() override
-  {
-    data_map_.clear();
-    available_map_.clear();
-
-    for (uint8_t id : ids_) {
-      auto motor = MockDynamixelManager::instance().getMotor(id);
-      if (motor && !motor->hasCommunicationError()) {
-        // Read the entire range
-        std::vector<uint8_t> data(data_length_);
-        for (uint16_t i = 0; i < data_length_; ++i) {
-          data[i] = motor->read1Byte(start_address_ + i);
-        }
-        data_map_[id] = data;
-        available_map_[id] = true;
-      } else {
-        available_map_[id] = false;
-      }
-    }
-    return COMM_SUCCESS;
-  }
-
-  bool isAvailable(uint8_t id, uint16_t address, uint16_t data_length) override
-  {
-    if (!available_map_[id])
-      return false;
-    if (address < start_address_)
-      return false;
-    if (address + data_length > start_address_ + data_length_)
-      return false;
-    return true;
-  }
-
-  uint32_t getData(uint8_t id, uint16_t address, uint16_t data_length) override
-  {
-    if (!isAvailable(id, address, data_length))
-      return 0;
-
-    const auto& data = data_map_[id];
-    uint16_t offset = address - start_address_;
-
-    uint32_t val = 0;
-    for (uint16_t i = 0; i < data_length && i < 4; ++i) {
-      val |= (data[offset + i] << (8 * i));
-    }
-    return val;
-  }
+  int txRxPacket() override;
+  bool isAvailable(uint8_t id, uint16_t address, uint16_t data_length) override;
+  uint32_t getData(uint8_t id, uint16_t address, uint16_t data_length) override;
 
 private:
   uint16_t start_address_;
   uint16_t data_length_;
   std::vector<uint8_t> ids_;
   std::map<uint8_t, std::vector<uint8_t>> data_map_;
-  std::map<uint8_t, bool> available_map_;
 };
 
-/**
- * @brief Mock GroupSyncWrite
- */
 class MockGroupSyncWrite : public GroupSyncWrite
 {
 public:
-  MockGroupSyncWrite(std::shared_ptr<PortHandler> port, std::shared_ptr<PacketHandler> ph, uint16_t start_address,
-                     uint16_t data_length)
+  MockGroupSyncWrite(std::shared_ptr<PortHandler> /*port*/, std::shared_ptr<PacketHandler> /*ph*/,
+                     uint16_t start_address, uint16_t data_length)
       : start_address_(start_address), data_length_(data_length)
-  {
-    (void) port;  // Unused in mock
-    (void) ph;    // Unused in mock
-  }
+  {}
 
-  bool addParam(uint8_t id, uint8_t* data) override
-  {
-    std::vector<uint8_t> d;
-    d.assign(data, data + data_length_);
-    params_[id] = d;
-    return true;
-  }
-
-  void removeParam(uint8_t id) override
-  {
-    params_.erase(id);
-  }
-
-  bool changeParam(uint8_t id, uint8_t* data) override
-  {
-    if (params_.find(id) == params_.end())
-      return false;
-    std::vector<uint8_t> d;
-    d.assign(data, data + data_length_);
-    params_[id] = d;
-    return true;
-  }
-
-  void clearParam() override
-  {
-    params_.clear();
-  }
-
-  int txPacket() override
-  {
-    for (auto const& [id, data] : params_) {
-      auto motor = MockDynamixelManager::instance().getMotor(id);
-      if (motor && !motor->hasCommunicationError()) {
-        // Write each byte
-        for (size_t i = 0; i < data.size(); ++i) {
-          motor->write1Byte(start_address_ + i, data[i]);
-        }
-      }
-    }
-    return COMM_SUCCESS;
-  }
+  bool addParam(uint8_t id, uint8_t* data) override;
+  bool changeParam(uint8_t id, uint8_t* data) override;
+  int txPacket() override;
 
 private:
   uint16_t start_address_;

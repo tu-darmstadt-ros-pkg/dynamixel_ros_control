@@ -116,7 +116,7 @@ TEST_F(HardwareInterfaceTest, Manifest_ContainsExpectedJointFields)
 }
 
 // homing_offset is configured per joint in the URDF (registers.homing_offset, in radians). The driver
-// converts it to a raw register tick value and writes it to the motor; the manifest republishes that
+// converts it to a raw register tick value and writes it to the motor. The manifest republishes that
 // raw readback. This test asserts the key is present for every arm joint and that its published value
 // matches the raw register the mock motor actually holds — i.e. the manifest reflects what the driver
 // configured from the URDF, not a hardcoded or stale value.
@@ -155,7 +155,7 @@ TEST_F(HardwareInterfaceTest, Manifest_HomingOffsetMatchesConfigured)
         << *expected << ")";
   }
 
-  // arm_joint_1 is configured with homing_offset 0.0 rad -> 0 ticks; arm_joint_2 with a non-zero
+  // arm_joint_1 is configured with homing_offset 0.0 rad -> 0 ticks. arm_joint_2 has a non-zero
   // offset. Assert the non-zero case so a conversion that silently collapses to 0 would be caught.
   {
     auto motor2 = MockDynamixelManager::instance().getMotor(ARM_JOINT_2_ID);
@@ -249,14 +249,7 @@ TEST_F(HardwareInterfaceTest, Manifest_RepublishedAfterReboot)
   motor->setHardwareError(dynamixel_ros_control::ERROR_OVERLOAD);
   std::this_thread::sleep_for(500ms);
 
-  auto reboot_client = tester_node_->create_test_client<std_srvs::srv::Trigger>("/athena_arm_interface_node/reboot");
-  ASSERT_TRUE(reboot_client->wait_for_service(*executor_, 5s));
-  auto request = std::make_shared<std_srvs::srv::Trigger::Request>();
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 10s;
-  options.response_timeout = 10s;
-  auto resp =
-      hector_testing_utils::call_service<std_srvs::srv::Trigger>(reboot_client->get(), request, *executor_, options);
+  auto resp = rebootMotors();
   ASSERT_NE(resp, nullptr);
   ASSERT_TRUE(resp->success) << resp->message;
 
@@ -269,9 +262,3 @@ TEST_F(HardwareInterfaceTest, Manifest_RepublishedAfterReboot)
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

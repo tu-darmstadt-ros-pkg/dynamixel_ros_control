@@ -1,0 +1,25 @@
+controller_manager:
+  ros__parameters:
+    update_rate: 50
+    joint_state_broadcaster:
+      type: joint_state_broadcaster/JointStateBroadcaster
+    pendulum_controller:
+      type: forward_command_controller/MultiInterfaceForwardCommandController
+    pendulum_torque_off_controller:
+      type: claim_only_controller/ClaimOnlyController
+    gripper_controller:
+      type: forward_command_controller/MultiInterfaceForwardCommandController
+
+pendulum_controller:
+  ros__parameters:
+    joint: pendulum_joint
+    interface_names: [position, max_current]
+
+pendulum_torque_off_controller:
+  ros__parameters:
+    command_interfaces: [pendulum_joint/torque_off]
+
+gripper_controller:
+  ros__parameters:
+    joint: gripper_joint
+    interface_names: [position, max_current]
