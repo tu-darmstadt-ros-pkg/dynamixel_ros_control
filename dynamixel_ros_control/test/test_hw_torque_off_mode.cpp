@@ -301,6 +301,13 @@ TEST_F(TorqueOffModeTest, PrepareRefusesTorqueOffTogetherWithAMotionInterface)
   EXPECT_EQ(prepare({"arm_joint_1/torque_off"}, {}), hardware_interface::return_type::OK);
 }
 
+TEST_F(TorqueOffModeTest, PrepareRefusesAMotionStartWhileTorqueOffIsClaimed)
+{
+  ASSERT_EQ(hardware_->perform_command_mode_switch({"arm_joint_1/torque_off"}, {}), hardware_interface::return_type::OK);
+  EXPECT_EQ(prepare({"arm_joint_1/position"}, {}), hardware_interface::return_type::ERROR);
+  EXPECT_EQ(prepare({"arm_joint_1/position"}, {"arm_joint_1/torque_off"}), hardware_interface::return_type::OK);
+}
+
 TEST_F(TorqueOffModeTest, PrepareRefusesTorqueOffOnAJointThatDoesNotExportIt)
 {
   EXPECT_EQ(prepare({"arm_joint_3/torque_off"}, {}), hardware_interface::return_type::ERROR);
