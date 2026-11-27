@@ -427,6 +427,26 @@ TEST_F(FlipperGapTest, PowerCutThreeTurnsOutKeepsTheJointWhereItWas)
       << "A hold-position command built from the joint state moved the actuator after the correction.";
 }
 
+// A controller manager may start a controller between on_activate and the first read(). The joint
+// moved while the component was down, so the state must already show where it is now.
+TEST_F(DirectHardwareTest, ActivationShowsTheJointWhereItIsBeforeTheFirstRead)
+{
+  startComponent("athena_flipper_interface");
+  const auto& state = states_.at("flipper_fl_joint/position");
+  const double before = state->get_optional().value();
+  auto motor = MockDynamixelManager::instance().getMotor(FLIPPER_FL_ID);
+  ASSERT_NE(motor, nullptr);
+
+  ASSERT_EQ(hardware_->on_deactivate(rclcpp_lifecycle::State()), hardware_interface::CallbackReturn::SUCCESS);
+  motor->powerCycle();
+  motor->moveByHand(0.4);
+  ASSERT_EQ(hardware_->on_activate(rclcpp_lifecycle::State()), hardware_interface::CallbackReturn::SUCCESS);
+
+  // FL's reduction is -2
+  EXPECT_NEAR(state->get_optional().value(), before - 0.2, 1e-3)
+      << "Before the first read() the joint state still shows the flipper where it was before the activation.";
+}
+
 // Current is a motor quantity, so it passes a transmission unchanged whatever the reduction. A current
 // limit lost in SimpleTransmission left arm_joint_1 and arm_joint_7 on athena at their full current.
 class CurrentPassThroughTest : public DirectHardwareTest

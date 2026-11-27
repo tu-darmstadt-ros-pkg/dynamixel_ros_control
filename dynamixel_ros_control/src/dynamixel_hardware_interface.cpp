@@ -487,6 +487,12 @@ hardware_interface::CallbackReturn DynamixelHardwareInterface::on_activate(const
   if (!resetGoalStateAndVerify(joint_names_, max_reset_and_verify_retries_)) {
     return CallbackReturn::ERROR;
   }
+  // A controller may start before the first read(), it must see this reading and not the joints
+  // as they were before the activation
+  for (auto& [name, joint] : joints_) {
+    joint.updateMimicJointStates();
+  }
+  publishStateHandles();
   DXL_LOG_DEBUG("[timing] on_activate: resetGoalStateAndVerify took " << static_cast<int>(phase_timer.elapsedMs())
                                                                       << " ms");
 
