@@ -51,6 +51,10 @@ double profileOrLimit(const double profile, const double limit, const double uns
 const std::set<std::string> PROFILE_VELOCITY_BOUNDED_SERIES = {
     "PH", "PM", "PH42-020-S300-R", "PM42-010-S260-R", "H42-20-S300-RA", "RH_P12_RNA"};
 
+/// Series whose Goal Current (the PRO's Goal Torque) of 0 leaves the cap at the limit register (PRO
+/// H54-200-S500-R e-Manual). The others hold no current at 0.
+const std::set<std::string> ZERO_GOAL_CURRENT_UNCAPPED_SERIES = {"PROExt"};
+
 }  // namespace
 
 MockDynamixel::MockDynamixel(const uint8_t id, const uint16_t model_number)
@@ -161,7 +165,9 @@ ServoCommand MockDynamixel::followPlant(const double dt, const double position, 
   }
   if (goal_current_addr_ > 0) {
     const double goal = std::abs(static_cast<int16_t>(read2Byte(goal_current_addr_))) * ampere_per_tick_;
-    command.current_limit = std::min(command.current_limit, goal);
+    if (goal > 0.0 || !zero_goal_current_uncapped_) {
+      command.current_limit = std::min(command.current_limit, goal);
+    }
   }
   return command;
 }
@@ -198,6 +204,7 @@ void MockDynamixel::loadModelSpecs(const uint16_t model_number)
     }
     const YAML::Node model_node = YAML::LoadFile(devices + "models/" + series.as<std::string>() + ".yaml");
     profile_velocity_bounded_ = PROFILE_VELOCITY_BOUNDED_SERIES.count(series.as<std::string>()) != 0;
+    zero_goal_current_uncapped_ = ZERO_GOAL_CURRENT_UNCAPPED_SERIES.count(series.as<std::string>()) != 0;
 
     if (model_node["unit_conversions"]) {
       auto conversions = model_node["unit_conversions"];

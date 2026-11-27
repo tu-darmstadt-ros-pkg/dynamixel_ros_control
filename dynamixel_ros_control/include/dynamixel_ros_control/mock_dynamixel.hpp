@@ -450,6 +450,7 @@ private:
   uint16_t indirect_count_ = 0;
   bool indirect_in_ram_ = false;  ///< X series, a reboot resets the pointers
   bool profile_velocity_bounded_ = false;
+  bool zero_goal_current_uncapped_ = false;
 };
 
 /// The motors this process simulates. The plugin reaches them with use_dummy.

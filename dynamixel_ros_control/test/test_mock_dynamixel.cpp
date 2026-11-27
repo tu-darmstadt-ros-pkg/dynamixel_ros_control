@@ -858,6 +858,19 @@ TEST_F(MockDynamixelTest, PlantCurrentLimitIsTheLowerOfCurrentLimitAndGoalCurren
   EXPECT_NEAR(m->followPlant(0.01, 0.0, 0.0, 0.0).current_limit, 2.0, 1e-9);
 }
 
+TEST_F(MockDynamixelTest, OnlyAProGoalTorqueOfZeroLeavesTheTorqueLimitAsTheCap)
+{
+  // Goal Current is RAM, so it boots at 0
+  const auto pro = motor(1, MODEL_PRO_H54);
+  pro->setFactoryValue("current_limit", 9.99);
+  EXPECT_NEAR(pro->followPlant(0.01, 0.0, 0.0, 0.0).current_limit, 9.99, 0.02);
+  pro->setFactoryValue("goal_current", 1.0);
+  EXPECT_NEAR(pro->followPlant(0.01, 0.0, 0.0, 0.0).current_limit, 1.0, 0.02);
+  const auto ph = motor(2);
+  ph->setFactoryValue("current_limit", 2.0);
+  EXPECT_NEAR(ph->followPlant(0.01, 0.0, 0.0, 0.0).current_limit, 0.0, 1e-9);
+}
+
 TEST_F(MockDynamixelTest, FactoryValuesAreWrittenInTheRegisterUnit)
 {
   const auto m = motor(1, MODEL_PRO_H54);
