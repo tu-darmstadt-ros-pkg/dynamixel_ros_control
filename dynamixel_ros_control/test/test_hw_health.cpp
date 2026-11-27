@@ -42,13 +42,50 @@ TEST_F(HardwareInterfaceTest, Health_PublishedPeriodically)
       "/athena_arm_interface_node/diagnostics", rclcpp::QoS(10),
       [&messages](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { messages.push_back(m); });
 
-  // 1 Hz nominal rate. Wait up to 4 s for ≥3 messages, leaving margin for startup delay.
-  auto deadline = std::chrono::steady_clock::now() + 4s;
+  // 1 Hz nominal rate. Waits well beyond the 3 s that 3 messages take, for a loaded machine
+  auto deadline = std::chrono::steady_clock::now() + scaled(15s);
   while (messages.size() < 3 && std::chrono::steady_clock::now() < deadline) {
     executor_->spin_some();
     std::this_thread::sleep_for(50ms);
   }
-  EXPECT_GE(messages.size(), 3u) << "Diagnostics publisher should produce ≥3 messages within 4 s at 1 Hz";
+  EXPECT_GE(messages.size(), 3u) << "Diagnostics publisher should produce at least 3 messages at 1 Hz";
+}
+
+// A hardware error takes the component to UNCONFIGURED, where read() no longer refreshes the
+// snapshot. A timer left running keeps republishing the last healthy sample at 1 Hz. That is a
+// fault reported as the current state of a bus nobody is reading any more.
+TEST_F(HardwareInterfaceTest, Health_StopsPublishingOnceTheComponentIsUnconfigured)
+{
+  std::vector<diagnostic_msgs::msg::DiagnosticArray::SharedPtr> messages;
+  auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
+      "/athena_arm_interface_node/diagnostics", rclcpp::QoS(10),
+      [&messages](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { messages.push_back(m); });
+
+  auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  ASSERT_NE(motor, nullptr);
+  motor->setHardwareError(ERROR_OVERHEATING);
+
+  // Wait for the error to take the component out of ACTIVE.
+  auto deadline = std::chrono::steady_clock::now() + 10s;
+  while (hardwareComponentState("athena_arm_interface") == "active" && std::chrono::steady_clock::now() < deadline) {
+    executor_->spin_some();
+    std::this_thread::sleep_for(100ms);
+  }
+  ASSERT_NE(hardwareComponentState("athena_arm_interface"), "active")
+      << "Test premise: the hardware error should have taken the component out of ACTIVE";
+
+  // Let anything already in flight drain, then require silence.
+  std::this_thread::sleep_for(1500ms);
+  executor_->spin_some();
+  messages.clear();
+
+  deadline = std::chrono::steady_clock::now() + 3s;
+  while (std::chrono::steady_clock::now() < deadline) {
+    executor_->spin_some();
+    std::this_thread::sleep_for(50ms);
+  }
+  EXPECT_TRUE(messages.empty()) << "The diagnostics timer kept publishing " << messages.size()
+                                << " message(s) after the component left ACTIVE";
 }
 
 TEST_F(HardwareInterfaceTest, Health_ContainsExpectedFields)
@@ -68,8 +105,8 @@ TEST_F(HardwareInterfaceTest, Health_ContainsExpectedFields)
   // Bus-level keys.
   const auto* bus = findBus(*msg);
   ASSERT_NE(bus, nullptr) << "Missing bus-level health status";
-  for (const auto* key : {"e_stop_active", "read_consecutive_errors", "write_consecutive_errors",
-                          "last_successful_read", "mode_switch_failed"}) {
+  for (const auto* key :
+       {"read_consecutive_errors", "write_consecutive_errors", "last_successful_read", "mode_switch_failed"}) {
     EXPECT_NE(findValue(*bus, key), nullptr) << "Missing bus key '" << key << "'";
   }
 
@@ -82,56 +119,10 @@ TEST_F(HardwareInterfaceTest, Health_ContainsExpectedFields)
     }
   }
   ASSERT_NE(joint_status, nullptr);
-  for (const auto* key : {"motor_id", "torque_desired", "hardware_error_status", "operating_mode_desired"}) {
+  for (const auto* key :
+       {"motor_id", "torque_desired", "torque_enable", "hardware_error_status", "operating_mode_desired"}) {
     EXPECT_NE(findValue(*joint_status, key), nullptr) << "Missing joint key '" << key << "'";
   }
-}
-
-TEST_F(HardwareInterfaceTest, Health_ReflectsEStopState)
-{
-  diagnostic_msgs::msg::DiagnosticArray::SharedPtr msg;
-  auto sub = tester_node_->create_subscription<diagnostic_msgs::msg::DiagnosticArray>(
-      "/athena_arm_interface_node/diagnostics", rclcpp::QoS(10),
-      [&msg](diagnostic_msgs::msg::DiagnosticArray::SharedPtr m) { msg = m; });
-
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (!msg && std::chrono::steady_clock::now() < deadline) {
-    executor_->spin_some();
-    std::this_thread::sleep_for(50ms);
-  }
-  ASSERT_NE(msg, nullptr);
-
-  const auto* bus = findBus(*msg);
-  ASSERT_NE(bus, nullptr);
-  const auto* e_stop = findValue(*bus, "e_stop_active");
-  ASSERT_NE(e_stop, nullptr);
-  EXPECT_EQ(e_stop->value, "false");
-
-  // Engage e-stop and wait for the next health tick.
-  auto estop_pub = createEStopPublisher();
-  std_msgs::msg::Bool estop_msg;
-  estop_msg.data = true;
-  estop_pub->publish(estop_msg);
-
-  deadline = std::chrono::steady_clock::now() + 3s;
-  bool saw_warn = false;
-  while (!saw_warn && std::chrono::steady_clock::now() < deadline) {
-    executor_->spin_some();
-    std::this_thread::sleep_for(50ms);
-    if (msg) {
-      const auto* b = findBus(*msg);
-      const auto* v = b ? findValue(*b, "e_stop_active") : nullptr;
-      if (b && b->level == diagnostic_msgs::msg::DiagnosticStatus::WARN && v && v->value == "true") {
-        saw_warn = true;
-      }
-    }
-  }
-  EXPECT_TRUE(saw_warn) << "Health should report WARN with e_stop_active=true after e-stop publish";
-
-  // Cleanup.
-  estop_msg.data = false;
-  estop_pub->publish(estop_msg);
-  std::this_thread::sleep_for(300ms);
 }
 
 TEST_F(HardwareInterfaceTest, Health_ReflectsTorqueState)
@@ -148,39 +139,40 @@ TEST_F(HardwareInterfaceTest, Health_ReflectsTorqueState)
   }
   ASSERT_NE(msg, nullptr);
 
-  // Initially torque ON (set on_activate). Find any arm joint and inspect `torque_desired`.
-  auto torque_value_for = [&](const diagnostic_msgs::msg::DiagnosticArray& m, const std::string& joint) -> std::string {
-    for (const auto& s : m.status) {
+  auto value_for = [&](const std::string& joint, const std::string& key) -> std::string {
+    for (const auto& s : msg->status) {
       if (s.name.find(joint) != std::string::npos) {
-        if (const auto* v = findValue(s, "torque_desired"))
+        if (const auto* v = findValue(s, key))
           return v->value;
       }
     }
     return {};
   };
-  EXPECT_EQ(torque_value_for(*msg, "arm_joint_1"), "true");
-
-  // Disable torque via service.
-  auto torque_client = createTorqueClient();
-  ASSERT_TRUE(setTorque(torque_client, false));
-
-  deadline = std::chrono::steady_clock::now() + 3s;
-  while (std::chrono::steady_clock::now() < deadline) {
-    executor_->spin_some();
-    std::this_thread::sleep_for(50ms);
-    if (msg && torque_value_for(*msg, "arm_joint_1") == "false") {
-      break;
+  auto wait_for = [&](const std::string& key, const std::string& value) {
+    const auto until = std::chrono::steady_clock::now() + 3s;
+    while (value_for("arm_joint_1", key) != value && std::chrono::steady_clock::now() < until) {
+      executor_->spin_some();
+      std::this_thread::sleep_for(50ms);
     }
-  }
-  EXPECT_EQ(torque_value_for(*msg, "arm_joint_1"), "false");
+    return value_for("arm_joint_1", key);
+  };
+  // Torque is on after on_activate
+  EXPECT_EQ(value_for("arm_joint_1", "torque_desired"), "true");
+  EXPECT_EQ(wait_for("torque_enable", "on"), "on");
 
-  ASSERT_TRUE(setTorque(torque_client, true));
+  ASSERT_TRUE(limp());
+  EXPECT_EQ(wait_for("torque_desired", "false"), "false");
+  EXPECT_EQ(wait_for("torque_enable", "off"), "off");
+
+  // torque_enable is what the motor reports, also when that differs from what the plugin wants
+  auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  ASSERT_NE(motor, nullptr);
+  motor->write1Byte(motor->getAddress("torque_enable"), 1);
+  EXPECT_EQ(wait_for("torque_enable", "on"), "on");
+  EXPECT_EQ(value_for("arm_joint_1", "torque_desired"), "false");
+  motor->write1Byte(motor->getAddress("torque_enable"), 0);
+
+  ASSERT_TRUE(releaseLimp());
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

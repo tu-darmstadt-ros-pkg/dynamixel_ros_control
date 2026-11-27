@@ -22,6 +22,10 @@ command_interfaces:
     register_name: goal_current
   - interface_name: current     # hardware_interface::HW_IF_CURRENT
     register_name: goal_current
+  - interface_name: max_current
+    register_name: goal_current
+  - interface_name: max_velocity
+    register_name: profile_velocity
 
 limits:
   - interface_name: velocity
@@ -30,3 +34,7 @@ limits:
     register_name: current_limit
   - interface_name: current
     register_name: current_limit
+  - interface_name: max_current
+    register_name: current_limit
+  - interface_name: max_velocity
+    register_name: velocity_limit

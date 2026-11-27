@@ -11,19 +11,9 @@ launch:
       param:
         - from: $(find-pkg-share dynamixel_ros_control)/config/test_controllers.yaml
           allow_substs: true
-        - name: hardware_components_initial_state.unconfigured
-          value: [hardware_interface]
-# Controller manager lifecycle management
-  - node:
-      pkg: controller_manager
-      exec: hardware_spawner
-      name: hardware_interface_spawner
-      output: screen
-      args: hardware_interface --activate
-      respawn: 'true'
-      respawn_delay: 5.0
 
-# Controllers
+# Controllers. The controller manager activates the hardware before it offers the services the
+# spawners wait for.
   - node:
       pkg: controller_manager
       exec: spawner

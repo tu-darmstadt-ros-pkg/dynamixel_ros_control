@@ -1,0 +1,133 @@
+# ThreadSanitizer suppressions for dynamixel_ros_control.
+#
+# Only this package is built with -fsanitize=thread; rclcpp, rmw and the DDS
+# implementation are not. TSan still sees their mutexes - it intercepts pthread
+# at the libc level - but it cannot see their atomics, so lock-free
+# synchronisation inside an uninstrumented library reads as unsynchronised
+# access. Everything below is of that kind, and every entry was added against a
+# report that was actually observed, not in anticipation.
+#
+# The rule for adding one: a report about this package's own state is real. Fix
+# it. The single exception below is annotated with why it is not our state.
+
+# --- rclcpp lifecycle -------------------------------------------------------
+# 285 lock-order-inversions, all raised entirely inside librclcpp_lifecycle.so:
+# it takes its state mutex in an order TSan's deadlock detector dislikes while
+# the controller manager drives transitions from two threads. No frame of ours
+# appears in any of them. Deadlock detection stays ON so that an inversion
+# between our own mutexes - the comm mutex and the sync managers' - is still
+# reported.
+called_from_lib:librclcpp_lifecycle.so
+
+# --- rmw / DDS graph cache --------------------------------------------------
+# rmw_dds_common::GraphCache is read while the discovery thread rewrites it, and
+# takes the same mutex twice on some paths. Reported as double locks and as
+# races on the participant/topic name strings.
+called_from_lib:librmw_dds_common.so
+called_from_lib:librmw_cyclonedds_cpp.so
+called_from_lib:librmw_implementation.so
+called_from_lib:librmw.so
+# Also hides a real Cyclone 11.0.1 typelib race, ddsi_topic_descriptor_from_type walks gv->typedeps unlocked during concurrent entity creation.
+called_from_lib:libddsc.so
+
+# --- Fast-DDS ---------------------------------------------------------------
+# The other RMW. CI runs whatever the ros:jazzy image defaults to (Fast-DDS) while a workspace
+# usually pins Cyclone, so both have to be covered or the job reports what a developer never sees.
+# Same two shapes as Cyclone: lock-free internals TSan cannot order, and a teardown race where the
+# DomainParticipantFactory destroys a StatusCondition while a dds.udp thread is still reading it.
+called_from_lib:librmw_fastrtps_cpp.so
+called_from_lib:librmw_fastrtps_shared_cpp.so
+called_from_lib:libfastrtps.so
+called_from_lib:libfastcdr.so
+race:eprosima
+mutex:eprosima
+# Fast-DDS assigns std::strings from its own threads. The racing frames are libstdc++ inlined into
+# the test binary with libfastrtps only further down the stack and unsymbolised, so neither
+# called_from_lib nor the eprosima namespace matches; the module name does.
+race:libfastrtps.so
+mutex:libfastrtps.so
+race:librmw_fastrtps_shared_cpp.so
+called_from_lib:librclcpp.so
+called_from_lib:librcl.so
+called_from_lib:librcutils.so
+called_from_lib:librcpputils.so
+
+# rclcpp's service client guards its pending-request table with a mutex taken from a header that
+# is inlined into every module that sends a request - instrumented ones and librclcpp.so alike - so
+# TSan sees only half of its lock/unlock pairs and calls the next lock a double lock. Named by the
+# function that takes it, so it covers that table and nothing else. Reported only from rclcpp's own
+# response-delivery path; nothing here calls it directly on a healthy request.
+# --- rclcpp service client pending-request table ----------------------------
+# Reached whenever this package's tests drive a controller switch. rclcpp's Client header is
+# inlined into instrumented modules while librclcpp.so holds the other half, so TSan sees the
+# accesses to pending_requests_ but not the lock ordering them; the table is reported both as a
+# double lock and as a data race. Named by the two rclcpp functions that touch it - nothing in this
+# workspace defines either.
+mutex:rclcpp::Client
+mutex:get_and_erase_pending_request
+race:get_and_erase_pending_request
+race:handle_response
+
+# realtime_tools ships its own mutex type with a custom lock implementation, used by the
+# controllers these tests activate. TSan cannot model it from an uninstrumented module and reports
+# every unlock as unmatched.
+mutex:realtime_tools::detail::mutex
+
+# --- plugin loading and statistics ------------------------------------------
+# class_loader keeps its registry lock-free on the read side; pal_statistics
+# unlocks from a different thread than it locked on shutdown.
+called_from_lib:libclass_loader.so
+called_from_lib:libpal_statistics.so
+
+# --- uninstrumented ros2_control --------------------------------------------
+# The handshake between the controller manager's update thread and our executor
+# thread is only half visible: our side is instrumented, its side is not. The
+# observed report is a std::string buffer written by the transmission interface
+# on the main thread and read by controller_interface on another, ordered by a
+# lock TSan cannot see from either side.
+called_from_lib:libcontroller_manager.so
+called_from_lib:libcontroller_interface.so
+# The controllers these tests activate read their generated parameter struct under their own lock,
+# in a module TSan is not instrumenting. Intermittent, and the last thing that made the CI subset
+# red at random.
+called_from_lib:libforward_command_controller.so
+called_from_lib:libposition_controllers.so
+called_from_lib:libvelocity_controllers.so
+called_from_lib:libjoint_state_broadcaster.so
+called_from_lib:libhardware_interface.so
+
+# urdf's parser unlocks a mutex TSan believes was never locked, during the URDF
+# load in the test fixture's SetUp().
+called_from_lib:liburdf.so
+
+# libstdc++'s shared_ptr control block is manipulated by code inlined into the
+# test binary, while the block itself is allocated and ordered inside
+# uninstrumented rclcpp - so TSan sees the refcount but not the synchronisation
+# that established it. Every message and service response crossing the executor
+# boundary produces one, intermittently, which would make the CI job red at
+# random. Named by the control block so it covers refcounting only: a race on
+# the pointed-to object is reported by the frames that touch the object, not by
+# these.
+# _Sp_counted rather than _Sp_counted_base: the family is _Sp_counted_base, _Sp_counted_ptr and
+# _Sp_counted_ptr_inplace, and the reports arrive from whichever one holds the object. All three
+# are the control block; a race on the pointed-to object is reported by the frames that touch it.
+race:_Sp_counted
+mutex:_Sp_counted
+
+# --- process teardown -------------------------------------------------------
+# rmw_implementation dlclose()s the DDS library while its threads are still
+# running in it, because rclcpp::shutdown() does not destroy the global Context.
+# An upstream ROS 2 teardown-ordering bug that reproduces on a pristine tree.
+race:__cxa_finalize
+race:_dl_fini
+
+# --- the one exception ------------------------------------------------------
+# RCLCPP_*_THROTTLE expands to a function-local static holding the last-logged
+# timestamp. It is per call site, not per instance, so two hardware components
+# e-stopping at once (the arm and the flippers each have their own executor
+# thread) read-modify-write it unsynchronised. The macro is documented upstream
+# as not thread-safe; the state is the macro's, not ours, and the worst outcome
+# is a throttle decision made against a stale timestamp - one log line more or
+# fewer. Named by the variable, so this suppresses races on that timestamp only
+# and not everything in the functions that log.
+race:__rcutils_logging_last_logged

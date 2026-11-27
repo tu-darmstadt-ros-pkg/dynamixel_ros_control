@@ -6,12 +6,45 @@
 namespace dynamixel_ros_control::test {
 
 // ============================================================================
-// Partial Torque (ignore_joints) Tests
+// Partial Torque Tests
 // ============================================================================
 
-TEST_F(HardwareInterfaceTest, PartialTorque_IgnoreJointsKeepsSpecifiedJointsTorqued)
+TEST_F(HardwareInterfaceTest, TorqueOff_DeEnergisesReachableMotorsWhenOneIsUnresponsive)
 {
-  // Verify that disabling torque with ignore_joints keeps the ignored joint torqued.
+  // Torque-off is best-effort per motor. Aborting the whole sequence on the first failed register
+  // read would leave the entire arm energised because one motor could not answer, the opposite of
+  // the safety action that was requested.
+  std::this_thread::sleep_for(200ms);
+
+  // One motor drops its status packets: it still receives instructions but never answers, so any
+  // read-back fails for it.
+  constexpr uint8_t DEAD_ID = ARM_JOINT_2_ID;
+  auto dead = MockDynamixelManager::instance().getMotor(DEAD_ID);
+  ASSERT_NE(dead, nullptr);
+  dead->setCommunicationFault(dynamixel_ros_control::CommunicationFault::DROP_STATUS_PACKETS);
+
+  // Claim torque_off for the whole arm, the dead motor included. The switch is expected to fail
+  // because one motor cannot be verified.
+  EXPECT_FALSE(limp());
+  std::this_thread::sleep_for(150ms);
+
+  // Every reachable motor must be de-energised, even though one motor could not be verified.
+  for (uint8_t id : ARM_MOTOR_IDS) {
+    if (id == DEAD_ID) {
+      continue;
+    }
+    auto motor = MockDynamixelManager::instance().getMotor(id);
+    ASSERT_NE(motor, nullptr);
+    EXPECT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 0)
+        << "Reachable motor " << static_cast<int>(id) << " was left torqued because another motor was unresponsive";
+  }
+
+  dead->setCommunicationFault(dynamixel_ros_control::CommunicationFault::NONE);  // let teardown settle
+}
+
+TEST_F(HardwareInterfaceTest, PartialTorque_UnclaimedJointsStayTorqued)
+{
+  // Verify that a torque_off claim on the arm joints keeps the gripper torqued.
   std::this_thread::sleep_for(200ms);
 
   // 1. Verify initial state: all arm + gripper motors have torque ON
@@ -27,9 +60,8 @@ TEST_F(HardwareInterfaceTest, PartialTorque_IgnoreJointsKeepsSpecifiedJointsTorq
         << "Arm motor " << static_cast<int>(id) << " should start with torque ON";
   }
 
-  // 2. Disable torque with ignore_joints=["gripper_servo_joint"]
-  auto torque_client = createTorqueClient();
-  ASSERT_TRUE(setTorque(torque_client, false, {"gripper_servo_joint"}));
+  // 2. Claim torque_off on the arm joints, not on the gripper
+  ASSERT_TRUE(limp("arm_joints_torque_off_controller"));
   std::this_thread::sleep_for(300ms);
 
   // 3. Verify arm motors have torque OFF
@@ -40,14 +72,14 @@ TEST_F(HardwareInterfaceTest, PartialTorque_IgnoreJointsKeepsSpecifiedJointsTorq
   }
 
   // 4. Verify gripper still has torque ON
-  EXPECT_EQ(gripper->read1Byte(torque_addr), 1) << "Gripper torque should still be ON (ignored)";
+  EXPECT_EQ(gripper->read1Byte(torque_addr), 1) << "Gripper torque should still be ON (not claimed)";
 }
 
-TEST_F(HardwareInterfaceTest, PartialTorque_IgnoreJointsDoesNotResetIgnoredGoals)
+TEST_F(HardwareInterfaceTest, PartialTorque_UnclaimedGoalsAreNotReset)
 {
-  // Verify that re-enabling torque with ignore_joints does not reset the ignored joint's goal.
+  // Verify that a torque_off cycle on the arm joints does not reset the gripper's goal.
   // The gripper's goal position was set to current position during on_activate.
-  // A torque cycle with ignore_joints should NOT overwrite it via resetGoalStateAndVerify.
+  // The cycle must NOT overwrite it via resetGoalStateAndVerify.
   std::this_thread::sleep_for(200ms);
 
   // 1. Record gripper goal position from the register
@@ -57,60 +89,19 @@ TEST_F(HardwareInterfaceTest, PartialTorque_IgnoreJointsDoesNotResetIgnoredGoals
   ASSERT_GT(goal_pos_addr, 0u) << "Goal position register should exist";
   int32_t gripper_goal_before = gripper->read4ByteSigned(goal_pos_addr);
 
-  // 2. Disable torque ignoring the gripper
-  auto torque_client = createTorqueClient();
-  ASSERT_TRUE(setTorque(torque_client, false, {"gripper_servo_joint"}));
+  // 2. Disable torque on the arm joints only
+  ASSERT_TRUE(limp("arm_joints_torque_off_controller"));
   std::this_thread::sleep_for(300ms);
 
-  // 3. Re-enable torque ignoring the gripper
-  ASSERT_TRUE(setTorque(torque_client, true, {"gripper_servo_joint"}));
+  // 3. Re-enable it
+  ASSERT_TRUE(releaseLimp("arm_joints_torque_off_controller"));
   std::this_thread::sleep_for(300ms);
 
   // 4. Verify gripper goal was NOT reset
   int32_t gripper_goal_after = gripper->read4ByteSigned(goal_pos_addr);
   EXPECT_EQ(gripper_goal_after, gripper_goal_before)
-      << "Gripper goal should be preserved when using ignore_joints. "
+      << "Gripper goal should be preserved by a torque_off cycle on other joints. "
       << "Before: " << gripper_goal_before << ", After: " << gripper_goal_after;
-}
-
-TEST_F(HardwareInterfaceTest, PartialTorque_DesiredStateNotUpdatedWithIgnoreJoints)
-{
-  // Verify that desired_torque_state_ is not updated when ignore_joints is used.
-  // After a partial torque-off (with ignore_joints), calling setTorque(true) without
-  // ignore_joints should succeed and re-enable all joints — proving the internal
-  // desired state was not corrupted to "off".
-
-  // 1. Initial state: torque ON for all
-  auto torque_client = createTorqueClient();
-  std::this_thread::sleep_for(200ms);
-
-  // 2. Disable torque with ignore_joints (should NOT update desired_torque_state_)
-  ASSERT_TRUE(setTorque(torque_client, false, {"gripper_servo_joint"}));
-  std::this_thread::sleep_for(300ms);
-
-  // Verify arm motors are off, gripper still on
-  for (uint8_t id : ARM_MOTOR_IDS) {
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    ASSERT_NE(motor, nullptr);
-    EXPECT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 0)
-        << "Arm motor " << static_cast<int>(id) << " should be OFF";
-  }
-  auto gripper = MockDynamixelManager::instance().getMotor(GRIPPER_ID);
-  ASSERT_NE(gripper, nullptr);
-  EXPECT_EQ(gripper->read1Byte(gripper->getAddress("torque_enable")), 1) << "Gripper should still be ON";
-
-  // 3. Re-enable torque for ALL joints (no ignore_joints).
-  // This should succeed because desired_torque_state_ was not changed by the partial call.
-  ASSERT_TRUE(setTorque(torque_client, true));
-  std::this_thread::sleep_for(300ms);
-
-  // 4. Verify all motors are torqued on
-  for (uint8_t id : ARM_MOTOR_IDS) {
-    auto motor = MockDynamixelManager::instance().getMotor(id);
-    EXPECT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 1)
-        << "Arm motor " << static_cast<int>(id) << " should be ON after full re-enable";
-  }
-  EXPECT_EQ(gripper->read1Byte(gripper->getAddress("torque_enable")), 1) << "Gripper should be ON after full re-enable";
 }
 
 // ============================================================================
@@ -155,11 +146,7 @@ TEST_F(HardwareInterfaceTest, GoalStatePublisher_ReflectsCommandedGoals)
   ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
 
   auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
+  waitForSubscribers(pub, 5s);
   ASSERT_GT(pub->get_subscription_count(), 0u);
 
   constexpr double TARGET_POSITION = 0.7;
@@ -171,7 +158,7 @@ TEST_F(HardwareInterfaceTest, GoalStatePublisher_ReflectsCommandedGoals)
   // The command needs to be picked up by the controller update cycle and written through
   // the hardware interface before it appears in goal_joint_states.
   bool goal_reflected = false;
-  deadline = std::chrono::steady_clock::now() + 5s;
+  auto deadline = std::chrono::steady_clock::now() + 5s;
   while (std::chrono::steady_clock::now() < deadline && !goal_reflected) {
     pub->publish(cmd);
     std::this_thread::sleep_for(100ms);
@@ -193,9 +180,3 @@ TEST_F(HardwareInterfaceTest, GoalStatePublisher_ReflectsCommandedGoals)
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

@@ -9,79 +9,126 @@ namespace dynamixel_ros_control::test {
 // Hardware Interface Lifecycle Tests
 // ============================================================================
 
-TEST_F(HardwareInterfaceTest, Lifecycle_TorqueServiceAvailableWhenActive)
+// Deactivation stops read()/write(), so a joint left torqued in velocity or current mode keeps
+// executing whatever goal it last received. It is only stationary in position mode, where the goal
+// *is* a standstill. Disarming the bus watchdog at the same time removes the one mechanism that
+// would have stopped it, so the goals have to be zeroed first.
+TEST_F(HardwareInterfaceTest, Lifecycle_DeactivationZeroesAFreeRunningVelocityJoint)
 {
-  // Test that torque service is available and works when hardware interface is active
+  std::this_thread::sleep_for(400ms);
+  ASSERT_TRUE(loadAndActivateController("flipper_velocity_controller"));
+  std::this_thread::sleep_for(300ms);
 
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s)) << "Torque service should be available when active";
+  auto cmd_pub =
+      tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/flipper_velocity_controller/commands", 10);
+  ASSERT_TRUE(waitForSubscribers(cmd_pub, 5s));
+  std_msgs::msg::Float64MultiArray cmd;
+  cmd.data = std::vector<double>(FLIPPER_MOTOR_IDS.size(), 0.5);  // rad/s, well clear of zero
+  cmd_pub->publish(cmd);
+  std::this_thread::sleep_for(600ms);
 
-  // Toggle torque off and on
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;
+  auto motor = MockDynamixelManager::instance().getMotor(FLIPPER_FL_ID);
+  ASSERT_NE(motor, nullptr);
+  const auto goal_velocity_address = motor->getAddress("goal_velocity");
+  ASSERT_NE(motor->read4ByteSigned(goal_velocity_address), 0)
+      << "Test premise: the joint must be commanded to a non-zero velocity before deactivating";
 
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
+  ASSERT_TRUE(setHardwareComponentState("athena_flipper_interface", lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE,
+                                        "inactive"));
+  std::this_thread::sleep_for(500ms);
 
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr) << "Torque service should respond";
-  EXPECT_TRUE(resp->success) << "Torque disable should succeed";
-
-  request->enable = true;
-  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
-                                                                                        *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  EXPECT_TRUE(resp->success) << "Torque enable should succeed";
+  EXPECT_EQ(motor->read4ByteSigned(goal_velocity_address), 0)
+      << "The joint was left with a non-zero goal velocity while the loop that commands it stopped "
+         "and the watchdog that would stop it was disarmed.";
 }
 
-TEST_F(HardwareInterfaceTest, Lifecycle_CalibrationServiceAvailableWhenActive)
+// torque_off_on_shutdown is off in the shared config, so the whole failure path below is otherwise
+// never exercised.
+class TorqueOffOnShutdownTest : public HardwareInterfaceTest
 {
-  // Test that calibration service is available when hardware interface is active
+protected:
+  std::string transformUrdf(std::string urdf) override
+  {
+    // The shared URDF already declares this param as false for both interfaces, so injecting a
+    // second one next to it silently loses. Flip the arm's own declaration instead, located after
+    // the arm interface's unique port_name so the flipper's is left alone.
+    const std::string anchor = "<param name=\"port_name\">/dev/ttyUSB_manipulator_arm</param>";
+    const auto anchor_pos = urdf.find(anchor);
+    if (anchor_pos == std::string::npos) {
+      ADD_FAILURE() << "Could not find the arm interface anchor";
+      return urdf;
+    }
+    const std::string target = "<param name=\"torque_off_on_shutdown\">false</param>";
+    const auto pos = urdf.find(target, anchor_pos);
+    if (pos == std::string::npos) {
+      ADD_FAILURE() << "Could not find the arm interface's torque_off_on_shutdown param";
+      return urdf;
+    }
+    urdf.replace(pos, target.size(), "<param name=\"torque_off_on_shutdown\">true</param>");
+    return urdf;
+  }
+};
 
-  using hector_transmission_interface_msgs::srv::AdjustTransmissionOffsets;
-
-  auto calibration_client = tester_node_->create_test_client<AdjustTransmissionOffsets>(
-      "/athena_flipper_interface_node/adjust_transmission_offsets");
-  ASSERT_TRUE(calibration_client->wait_for_service(*executor_, 5s))
-      << "Calibration service should be available when active";
-
-  // Try a calibration request
-  auto request = std::make_shared<AdjustTransmissionOffsets::Request>();
-  request->external_joint_measurements.name = {"flipper_fl_joint"};
-  request->external_joint_measurements.position = {0.0};
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-
-  auto resp = hector_testing_utils::call_service<AdjustTransmissionOffsets>(calibration_client->get(), request,
-                                                                            *executor_, options);
-  ASSERT_NE(resp, nullptr) << "Calibration service should respond";
-  // Note: success depends on implementation, but service should at least respond
-}
-
-TEST_F(HardwareInterfaceTest, Lifecycle_EStopTopicSubscribedWhenActive)
+// A torque-off that cannot be verified is the case that leaves a joint energised on the way out.
+// The block this used to return past is the one that stops such a joint. Returning early skipped it
+// and left the interface with the motor still torqued in velocity mode, the watchdog disarmed (the
+// suspension inside setTorque re-arms nothing once the phase is Inactive) and read()/write() about
+// to stop, with nothing left to halt it.
+TEST_F(TorqueOffOnShutdownTest, DeactivationStopsAFreeRunningJointWhenTheTorqueOffFails)
 {
-  // Test that e-stop topic is subscribed when hardware interface is active
+  std::this_thread::sleep_for(400ms);
 
-  auto estop_pub = tester_node_->create_publisher<std_msgs::msg::Bool>("/soft_e_stop", 10);
+  ASSERT_TRUE(loadAndActivateController("arm_velocity_controller"));
+  std::this_thread::sleep_for(300ms);
 
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && estop_pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
+  auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_1_ID);
+  ASSERT_NE(motor, nullptr);
+
+  auto cmd_pub =
+      tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_velocity_controller/commands", 10);
+  ASSERT_TRUE(waitForSubscribers(cmd_pub, 5s));
+  std_msgs::msg::Float64MultiArray cmd;
+  cmd.data = std::vector<double>(ARM_MOTOR_IDS.size(), 0.5);
+  cmd_pub->publish(cmd);
+  std::this_thread::sleep_for(600ms);
+  ASSERT_GT(std::abs(motor->getCurrentVelocity()), 0.05) << "Test premise: the joint should be turning";
+
+  // The motor acknowledges the torque-off and keeps torque on. The master sees a successful write
+  // and a read-back that disagrees with it, so the change is unverifiable and the joint stays
+  // energised and turning.
+  for (uint8_t id : ARM_MOTOR_IDS) {
+    auto m = MockDynamixelManager::instance().getMotor(id);
+    ASSERT_NE(m, nullptr);
+    m->setRegisterWriteFault("torque_enable", RegisterWriteFault::DROP);
   }
 
-  EXPECT_GT(estop_pub->get_subscription_count(), 0) << "E-stop topic should have a subscriber when HW interface active";
+  auto hw_state_client =
+      tester_node_->create_test_client<SetHardwareComponentState>("/controller_manager/set_hardware_component_state");
+  ASSERT_TRUE(hw_state_client->wait_for_service(*executor_, 5s));
+  hector_testing_utils::ServiceCallOptions options;
+  options.service_timeout = 20s;
+  options.response_timeout = 20s;
+  auto request = std::make_shared<SetHardwareComponentState::Request>();
+  request->name = "athena_arm_interface";
+  request->target_state.id = lifecycle_msgs::msg::State::PRIMARY_STATE_INACTIVE;
+  request->target_state.label = "inactive";
+  (void) hector_testing_utils::call_service<SetHardwareComponentState>(hw_state_client->get(), request, *executor_,
+                                                                       options);
+
+  // The mock's physics keeps stepping regardless of the component's lifecycle state, so a joint
+  // whose zero goal never reached it is still turning here.
+  std::this_thread::sleep_for(1000ms);
+
+  EXPECT_LT(std::abs(motor->getCurrentVelocity()), 0.05)
+      << "The joint is still turning at " << motor->getCurrentVelocity()
+      << " rad/s after deactivation. The failed torque-off returned before the block that commands a "
+         "zero velocity, and nothing else will: the watchdog is disarmed and read()/write() have stopped.";
+
+  for (uint8_t id : ARM_MOTOR_IDS) {
+    auto m = MockDynamixelManager::instance().getMotor(id);
+    ASSERT_NE(m, nullptr);
+    m->clearRegisterWriteFaults();
+  }
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

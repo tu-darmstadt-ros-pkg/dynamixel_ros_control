@@ -10,13 +10,13 @@ namespace dynamixel_ros_control {
 namespace {
 
 template <typename Pick>
-inline void fill(sensor_msgs::msg::JointState& msg, const std::vector<std::string>& joint_names,
-                 const std::unordered_map<std::string, Joint>& joints, const rclcpp::Time& stamp, Pick pick)
+inline void fill(sensor_msgs::msg::JointState& msg, const std::vector<const Joint*>& joints, const rclcpp::Time& stamp,
+                 Pick pick)
 {
   msg.header.stamp = stamp;
-  const size_t n = joint_names.size();
+  const size_t n = joints.size();
   for (size_t i = 0; i < n; ++i) {
-    const auto& m = pick(joints.at(joint_names[i]));
+    const auto& m = pick(*joints[i]);
     auto p = m.find(hardware_interface::HW_IF_POSITION);
     msg.position[i] = (p != m.end()) ? p->second : std::numeric_limits<double>::quiet_NaN();
     auto v = m.find(hardware_interface::HW_IF_VELOCITY);
@@ -34,16 +34,19 @@ inline void fill(sensor_msgs::msg::JointState& msg, const std::vector<std::strin
 
 }  // namespace
 
-void JointStatePublisherSet::init(const rclcpp::Node::SharedPtr& node,
+bool JointStatePublisherSet::init(const rclcpp::Node::SharedPtr& node,
                                   const std::unordered_map<std::string, std::string>& hardware_parameters,
+                                  const std::unordered_map<std::string, Joint>& joints,
                                   const std::vector<std::string>& joint_names)
 {
   bool publish_goal = false;
   bool publish_read = false;
   bool publish_write = false;
-  getParameter(hardware_parameters, "publish_goal_joint_states", publish_goal, false);
-  getParameter(hardware_parameters, "publish_read_joint_states", publish_read, false);
-  getParameter(hardware_parameters, "publish_write_joint_states", publish_write, false);
+  if (!getOptionalParameter(hardware_parameters, "publish_goal_joint_states", publish_goal, false) ||
+      !getOptionalParameter(hardware_parameters, "publish_read_joint_states", publish_read, false) ||
+      !getOptionalParameter(hardware_parameters, "publish_write_joint_states", publish_write, false)) {
+    return false;
+  }
 
   const auto make = [&node, &joint_names](const std::string& topic) {
     auto p = std::make_unique<Publisher>();
@@ -66,41 +69,47 @@ void JointStatePublisherSet::init(const rclcpp::Node::SharedPtr& node,
   if (publish_write) {
     write_ = make("~/write_joint_states");
   }
+
+  if (!goal_ && !read_ && !write_) {
+    return true;
+  }
+  // Assigned, not appended: fill() sizes its loop from this vector but writes into message vectors
+  // sized by joint_names, so a second init() that doubled it would run off the end of those.
+  joints_.clear();
+  joints_.reserve(joint_names.size());
+  for (const auto& name : joint_names) {
+    joints_.push_back(&joints.at(name));
+  }
+  return true;
 }
 
-void JointStatePublisherSet::publishRead(const rclcpp::Time& stamp,
-                                         const std::unordered_map<std::string, Joint>& joints,
-                                         const std::vector<std::string>& joint_names)
+void JointStatePublisherSet::publishRead(const rclcpp::Time& stamp)
 {
   if (!read_) {
     return;
   }
-  fill(read_->msg, joint_names, joints, stamp, [](const Joint& j) -> const std::unordered_map<std::string, double>& {
+  fill(read_->msg, joints_, stamp, [](const Joint& j) -> const std::unordered_map<std::string, double>& {
     return j.state_transmission ? j.actuator_state.current : j.joint_state.current;
   });
   read_->publisher->try_publish(read_->msg);
 }
 
-void JointStatePublisherSet::publishGoal(const rclcpp::Time& stamp,
-                                         const std::unordered_map<std::string, Joint>& joints,
-                                         const std::vector<std::string>& joint_names)
+void JointStatePublisherSet::publishGoal(const rclcpp::Time& stamp)
 {
   if (!goal_) {
     return;
   }
-  fill(goal_->msg, joint_names, joints, stamp,
+  fill(goal_->msg, joints_, stamp,
        [](const Joint& j) -> const std::unordered_map<std::string, double>& { return j.joint_state.goal; });
   goal_->publisher->try_publish(goal_->msg);
 }
 
-void JointStatePublisherSet::publishWrite(const rclcpp::Time& stamp,
-                                          const std::unordered_map<std::string, Joint>& joints,
-                                          const std::vector<std::string>& joint_names)
+void JointStatePublisherSet::publishWrite(const rclcpp::Time& stamp)
 {
   if (!write_) {
     return;
   }
-  fill(write_->msg, joint_names, joints, stamp, [](const Joint& j) -> const std::unordered_map<std::string, double>& {
+  fill(write_->msg, joints_, stamp, [](const Joint& j) -> const std::unordered_map<std::string, double>& {
     return j.command_transmission ? j.actuator_state.goal : j.joint_state.goal;
   });
   write_->publisher->try_publish(write_->msg);

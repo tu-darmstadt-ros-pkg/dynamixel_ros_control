@@ -1,0 +1,28 @@
+<?xml version="1.0"?>
+<sdf version="1.9">
+  <world name="bus_rig">
+    <physics name="1ms" type="dart">
+      <max_step_size>0.001</max_step_size>
+      <real_time_factor>1</real_time_factor>
+    </physics>
+    <plugin filename="gz-sim-physics-system" name="gz::sim::systems::Physics"/>
+    <gravity>0 0 -9.81</gravity>
+    <!-- The gripper closes on it, 0.06 m wide, so each finger touches after 0.06 m -->
+    <model name="box">
+      <static>true</static>
+      <pose>2 0 1 0 0 0</pose>
+      <link name="link">
+        <collision name="collision">
+          <geometry>
+            <box>
+              <size>0.06 0.06 0.06</size>
+            </box>
+          </geometry>
+        </collision>
+      </link>
+    </model>
+    <include>
+      <uri>@ROBOT@</uri>
+    </include>
+  </world>
+</sdf>

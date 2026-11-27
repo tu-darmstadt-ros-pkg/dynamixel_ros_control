@@ -11,7 +11,7 @@ namespace dynamixel_ros_control::test {
 
 TEST_F(HardwareInterfaceTest, Torque_DisableTorqueChangesLEDToGreen)
 {
-  // 1. Verify initial state - torque on, LED blue
+  // 1. Verify initial state (torque on, LED blue)
   std::this_thread::sleep_for(200ms);
   for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
     auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
@@ -20,22 +20,8 @@ TEST_F(HardwareInterfaceTest, Torque_DisableTorqueChangesLEDToGreen)
     }
   }
 
-  // 2. Call set_torque service to disable torque
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;  // Disable torque
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-
-  ASSERT_NE(resp, nullptr) << "Service call failed";
-  EXPECT_TRUE(resp->success) << "Torque disable should succeed";
+  // 2. Claim torque_off for the whole arm
+  EXPECT_TRUE(limp()) << "Torque disable should succeed";
 
   // 3. Wait for LED update and verify LED is green
   std::this_thread::sleep_for(500ms);
@@ -62,20 +48,7 @@ TEST_F(HardwareInterfaceTest, Torque_DisableTorqueChangesLEDToGreen)
 TEST_F(HardwareInterfaceTest, Torque_EnableTorqueChangesLEDToBlue)
 {
   // 1. First disable torque
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;  // Disable torque
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  ASSERT_TRUE(resp->success);
+  ASSERT_TRUE(limp());
 
   std::this_thread::sleep_for(300ms);
 
@@ -84,11 +57,7 @@ TEST_F(HardwareInterfaceTest, Torque_EnableTorqueChangesLEDToBlue)
   EXPECT_EQ(motor->getLedGreen(), COLOR_GREEN_G) << "LED should be green when torque is off";
 
   // 2. Enable torque
-  request->enable = true;
-  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
-                                                                                        *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  EXPECT_TRUE(resp->success);
+  EXPECT_TRUE(releaseLimp());
 
   std::this_thread::sleep_for(300ms);
 
@@ -115,20 +84,7 @@ TEST_F(HardwareInterfaceTest, Torque_EnableTorqueChangesLEDToBlue)
 TEST_F(HardwareInterfaceTest, Torque_CommandsNotExecutedWhenTorqueOff)
 {
   // 1. Disable torque
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  ASSERT_TRUE(resp->success);
+  ASSERT_TRUE(limp());
 
   std::this_thread::sleep_for(300ms);
 
@@ -139,21 +95,8 @@ TEST_F(HardwareInterfaceTest, Torque_CommandsNotExecutedWhenTorqueOff)
     initial_positions.push_back(motor->getCurrentPosition());
   }
 
-  // 3. Load and activate controller
-  ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
-
-  // 4. Send position command
-  auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
-
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-
-  std_msgs::msg::Float64MultiArray cmd;
-  cmd.data = {1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0};
-  pub->publish(cmd);
+  // 3. A joint held limp cannot be commanded, so the position controller is refused
+  EXPECT_FALSE(loadAndActivateController("arm_position_controller", 3s));
   std::this_thread::sleep_for(1s);
 
   // 5. Verify motors didn't move (torque is off, physics simulation shouldn't move them)
@@ -188,208 +131,48 @@ TEST_F(HardwareInterfaceTest, Torque_OnStartupVerification)
   }
 }
 
-TEST_F(HardwareInterfaceTest, Torque_GoalPositionUpdatedBeforeReEnable)
+TEST_F(HardwareInterfaceTest, Torque_ReEnableRefusesAStaleSmallerGoalCurrent)
 {
-  // CRITICAL TEST: Verify that goal position is properly reset when torque is re-enabled
-  // with an active controller. The resetGoalStateAndVerify() function writes goal position
-  // equal to current position for all active command interfaces before enabling torque.
-  //
-  // This test verifies that with an active controller sending commands, the motors don't
-  // jump to an old position when torque is re-enabled.
-
-  // 1. Move motors to a known position first using position controller
-  ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
-
-  auto pub = tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_position_controller/commands", 10);
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(pub->get_subscription_count(), 0);
-
-  // Move to position 0.5 rad
-  std_msgs::msg::Float64MultiArray cmd;
-  cmd.data = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
-  pub->publish(cmd);
-  std::this_thread::sleep_for(2s);
-
-  // Record positions after reaching target (use joint position which includes homing offset)
-  std::map<uint8_t, double> positions_at_target;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_at_target[id] = motor->getJointPosition();
-    // Verify motors reached approximately the target
-    EXPECT_NEAR(positions_at_target[id], 0.5, 0.1) << "Motor " << (int) id << " should have reached target 0.5 rad";
-  }
-
-  // 2. Disable torque (this also deactivates the controller)
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  ASSERT_TRUE(resp->success) << "Torque disable should succeed";
-
+  auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_4_ID);
+  ASSERT_NE(motor, nullptr);
+  ASSERT_TRUE(limp()) << "Precondition: torque must go off";
   std::this_thread::sleep_for(300ms);
 
-  // Verify controller was deactivated
-  EXPECT_TRUE(waitForControllerState("arm_position_controller", "inactive", 3s))
-      << "Controller should be deactivated when torque is disabled";
+  // 5 A of the configured 22 A, left behind by something else, and the reset write does not land.
+  motor->write2Byte(motor->getAddress("goal_current"), 5000);
+  motor->setRegisterWriteFault("goal_current", RegisterWriteFault::DROP);
 
-  // 3. Re-enable torque WITHOUT a controller active
-  // The motors should stay at their current position because when no controller is active,
-  // the previous goal (0.5 rad) remains in the motor. This is the expected behavior.
-  request->enable = true;
-  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
-                                                                                        *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  EXPECT_TRUE(resp->success) << "Torque enable should succeed";
-
-  std::this_thread::sleep_for(500ms);
-
-  // 4. Verify motors stayed at approximately the same position
-  // Since the goal was 0.5 rad before torque disable, motors should stay near that position
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    // Motors should stay near their position before torque disable (which was ~0.5 rad)
-    EXPECT_NEAR(motor->getJointPosition(), positions_at_target[id], 0.2)
-        << "Motor " << (int) id << " should stay near position after torque cycle. "
-        << "Position before torque off: " << positions_at_target[id]
-        << ", Position after torque on: " << motor->getJointPosition();
-  }
+  EXPECT_FALSE(releaseLimp())
+      << "A goal current smaller than the one written was accepted as if the motor had clamped it.";
+  std::this_thread::sleep_for(300ms);
+  EXPECT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 0)
+      << "arm_joint_4 must not be energised on a goal current that was never verified";
 }
 
-TEST_F(HardwareInterfaceTest, Torque_GoalVelocityZeroBeforeReEnable)
+// The same failure with nothing left behind: a goal current that did not reach the register reads
+// back as 0. A latched bus watchdog, wiped indirect pointers after a reboot and a dropped packet all
+// produce this, and energising a joint whose torque limit did not land leaves it unable to hold.
+TEST_F(HardwareInterfaceTest, Torque_ReEnableRefusesWhenTheGoalCurrentNeverLands)
 {
-  // Verify that when a velocity controller is deactivated via torque disable,
-  // motors stop moving (velocity becomes zero).
-
-  // 1. Activate velocity controller and send velocity command to get motors moving
-  ASSERT_TRUE(loadAndActivateController("arm_velocity_controller"));
-
-  auto vel_pub =
-      tester_node_->create_publisher<std_msgs::msg::Float64MultiArray>("/arm_velocity_controller/commands", 10);
-  auto deadline = std::chrono::steady_clock::now() + 5s;
-  while (std::chrono::steady_clock::now() < deadline && vel_pub->get_subscription_count() == 0) {
-    std::this_thread::sleep_for(50ms);
-    executor_->spin_some();
-  }
-  ASSERT_GT(vel_pub->get_subscription_count(), 0);
-
-  // Send non-zero velocity command to get motors moving
-  std_msgs::msg::Float64MultiArray cmd;
-  cmd.data = {0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5};
-  vel_pub->publish(cmd);
-  std::this_thread::sleep_for(500ms);
-
-  // Record positions while moving (use joint position for consistency with hardware interface)
-  std::map<uint8_t, double> positions_while_moving;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_while_moving[id] = motor->getJointPosition();
-  }
-
-  // 2. Disable torque (this also deactivates the controller)
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  ASSERT_TRUE(resp->success);
-
+  auto motor = MockDynamixelManager::instance().getMotor(ARM_JOINT_4_ID);
+  ASSERT_NE(motor, nullptr);
+  ASSERT_TRUE(limp()) << "Precondition: torque must go off";
   std::this_thread::sleep_for(300ms);
 
-  // Verify controller was deactivated
-  EXPECT_TRUE(waitForControllerState("arm_velocity_controller", "inactive", 3s))
-      << "Controller should be deactivated when torque is disabled";
+  // Clear the register first: a dropped write leaves whatever was there before, and the previous
+  // activation already wrote the correct goal. That would verify legitimately and prove nothing.
+  // Zero is what the register reads after a reboot wipes RAM or when it was not written.
+  motor->write2Byte(motor->getAddress("goal_current"), 0);
+  // From here the motor acknowledges the write and does not apply it. That is the silent rejection
+  // a latched watchdog performs on every goal-area write.
+  motor->setRegisterWriteFault("goal_current", RegisterWriteFault::DROP);
 
-  // 3. Record positions after torque disable
-  std::map<uint8_t, double> positions_after_torque_off;
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    positions_after_torque_off[id] = motor->getJointPosition();
-  }
-
-  // 4. Re-enable torque (no controller active)
-  request->enable = true;
-  resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(torque_client->get(), request,
-                                                                                        *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  EXPECT_TRUE(resp->success);
-
-  // 5. Wait and verify motors stayed put (no controller commanding movement)
-  std::this_thread::sleep_for(500ms);
-
-  for (uint8_t id = ARM_JOINT_1_ID; id <= ARM_JOINT_7_ID; ++id) {
-    auto motor = dynamixel_ros_control::MockDynamixelManager::instance().getMotor(id);
-    double position_change = std::abs(motor->getJointPosition() - positions_after_torque_off[id]);
-    // With no controller active, motors should not move significantly
-    // (they may drift slightly due to physics simulation settling)
-    EXPECT_LT(position_change, 0.3) << "Motor " << (int) id
-                                    << " should not continue moving after torque re-enable without controller. "
-                                    << "Position after torque off: " << positions_after_torque_off[id]
-                                    << ", Position after torque on: " << motor->getJointPosition();
-  }
-}
-
-TEST_F(HardwareInterfaceTest, Torque_DeactivatesControllersOnDisable)
-{
-  // Verify that disabling torque deactivates active controllers
-  // This prevents controllers from commanding motors that can't move
-
-  // 1. Activate controller
-  ASSERT_TRUE(loadAndActivateController("arm_position_controller"));
-  ASSERT_TRUE(waitForControllerState("arm_position_controller", "active", 5s));
-
-  // 2. Disable torque
-  auto torque_client = tester_node_->create_test_client<dynamixel_ros_control_msgs::srv::SetTorque>(
-      "/athena_arm_interface_node/set_torque");
-  ASSERT_TRUE(torque_client->wait_for_service(*executor_, 5s));
-
-  auto request = std::make_shared<dynamixel_ros_control_msgs::srv::SetTorque::Request>();
-  request->enable = false;
-
-  hector_testing_utils::ServiceCallOptions options;
-  options.service_timeout = 5s;
-  options.response_timeout = 5s;
-  auto resp = hector_testing_utils::call_service<dynamixel_ros_control_msgs::srv::SetTorque>(
-      torque_client->get(), request, *executor_, options);
-  ASSERT_NE(resp, nullptr);
-  ASSERT_TRUE(resp->success);
-
-  std::this_thread::sleep_for(500ms);
-
-  // 3. Verify controller was deactivated
-  auto list_resp = list_controllers();
-  ASSERT_NE(list_resp, nullptr);
-  auto states = states_from_list(*list_resp);
-
-  // Controller should be deactivated (inactive or unloaded)
-  EXPECT_TRUE(states.count("arm_position_controller") == 0 || states["arm_position_controller"] != "active")
-      << "Controller should be deactivated when torque is disabled";
+  EXPECT_FALSE(releaseLimp())
+      << "A goal current that never landed must abort the torque-on, not pass verification as if "
+         "the motor had clamped it.";
+  std::this_thread::sleep_for(300ms);
+  EXPECT_EQ(motor->read1Byte(motor->getAddress("torque_enable")), 0)
+      << "arm_joint_4 must not be energised when its goal current could not be written";
 }
 
 }  // namespace dynamixel_ros_control::test
-
-int main(int argc, char** argv)
-{
-  testing::InitGoogleTest(&argc, argv);
-  return RUN_ALL_TESTS();
-}

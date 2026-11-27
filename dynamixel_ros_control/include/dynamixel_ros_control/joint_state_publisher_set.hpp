@@ -28,28 +28,33 @@ class JointStatePublisherSet
 {
 public:
   // Read flags from `hardware_parameters` and create the enabled publishers on `node`.
-  // Pre-sizes message vectors with `joint_names` so realtime publishes do no allocations.
-  void init(const rclcpp::Node::SharedPtr& node,
-            const std::unordered_map<std::string, std::string>& hardware_parameters,
-            const std::vector<std::string>& joint_names);
+  // Pre-sizes message vectors with `joint_names` so realtime publishes do no allocations, and
+  // resolves each name to its Joint once. A publish then walks a vector instead of hashing every
+  // joint name against `joints` up to three times per control cycle.
+  //
+  // `joints` must outlive this object and must not lose entries afterwards. The hardware interface
+  // fills it in on_init() and never rebuilds it. (Adding entries would be safe on its own, since
+  // std::unordered_map keeps its elements at stable addresses, but names resolved here would be
+  // missing from the message.) Fails on a flag that is not a bool.
+  [[nodiscard]] bool init(const rclcpp::Node::SharedPtr& node,
+                          const std::unordered_map<std::string, std::string>& hardware_parameters,
+                          const std::unordered_map<std::string, Joint>& joints,
+                          const std::vector<std::string>& joint_names);
 
   // Publish actuator-space read state (current values). Use the time of the read cycle
   // for the message stamp. Picks `actuator_state.current` when a state transmission
   // exists, else `joint_state.current` (mirroring Joint::getActuatorState()).
-  void publishRead(const rclcpp::Time& stamp, const std::unordered_map<std::string, Joint>& joints,
-                   const std::vector<std::string>& joint_names);
+  void publishRead(const rclcpp::Time& stamp);
 
   // Publish the joint-space goal (the controller's commanded values, pre-transmission).
   // Safe to call even when the actual bus write failed for the cycle: this reflects
   // controller intent, not what reached the motors.
-  void publishGoal(const rclcpp::Time& stamp, const std::unordered_map<std::string, Joint>& joints,
-                   const std::vector<std::string>& joint_names);
+  void publishGoal(const rclcpp::Time& stamp);
 
   // Publish the actuator-space goal (post-transmission). Picks `actuator_state.goal` when
   // a command transmission exists, else `joint_state.goal`. Should only be called on a
   // successful bus write so the published values match what actually reached the motors.
-  void publishWrite(const rclcpp::Time& stamp, const std::unordered_map<std::string, Joint>& joints,
-                    const std::vector<std::string>& joint_names);
+  void publishWrite(const rclcpp::Time& stamp);
 
 private:
   struct Publisher
@@ -61,6 +66,8 @@ private:
   std::unique_ptr<Publisher> goal_;
   std::unique_ptr<Publisher> read_;
   std::unique_ptr<Publisher> write_;
+  /// The joints behind `joint_names`, in message order. Empty unless a publisher is enabled.
+  std::vector<const Joint*> joints_;
 };
 
 }  // namespace dynamixel_ros_control

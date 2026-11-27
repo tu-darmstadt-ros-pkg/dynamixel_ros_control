@@ -1,0 +1,177 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- A pendulum on a PH54-200 and a two finger gripper on an RH-P12-RN(A), one bus at @PORT@.
+     The pendulum has a homing and a transmission offset, so a frame mistake moves it. -->
+<robot name="bus_rig">
+  <link name="world"/>
+  <link name="base">
+    <inertial>
+      <mass value="1"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+  <joint name="base_joint" type="fixed">
+    <parent link="world"/>
+    <child link="base"/>
+    <origin xyz="0 0 1"/>
+  </joint>
+  <!-- 3 kg at 0.5 m, horizontal at 0 rad, so holding it takes 14.7 Nm, above the servo's friction -->
+  <link name="pendulum">
+    <inertial>
+      <origin xyz="0.5 0 0"/>
+      <mass value="3"/>
+      <inertia ixx="0.001" ixy="0" ixz="0" iyy="0.001" iyz="0" izz="0.001"/>
+    </inertial>
+  </link>
+  <joint name="pendulum_joint" type="revolute">
+    <parent link="base"/>
+    <child link="pendulum"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="-2.5" upper="2.5" effort="100" velocity="3"/>
+  </joint>
+  <!-- The gap the fingers closed by, 0 open. The fingers mimic it, dartsim has no mimic constraint.
+       Each finger moves 2 q + 0.02, so it touches the box at q 0.02 -->
+  <link name="gripper_base">
+    <inertial>
+      <mass value="1"/>
+      <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+    </inertial>
+  </link>
+  <joint name="gripper_base_joint" type="fixed">
+    <parent link="world"/>
+    <child link="gripper_base"/>
+    <origin xyz="2 0 1"/>
+  </joint>
+  <link name="gripper_servo_link">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+  </link>
+  <joint name="gripper_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child link="gripper_servo_link"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="0.1" effort="100" velocity="1"/>
+  </joint>
+  <link name="finger_left">
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    <collision>
+      <geometry>
+        <box size="0.04 0.02 0.04"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="finger_left_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child link="finger_left"/>
+    <origin xyz="0 0.1 0"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="0" upper="0.1" effort="100" velocity="1"/>
+    <mimic joint="gripper_joint" multiplier="2" offset="0.02"/>
+  </joint>
+  <link name="finger_right">
+    <inertial>
+      <mass value="0.05"/>
+      <inertia ixx="1e-5" ixy="0" ixz="0" iyy="1e-5" iyz="0" izz="1e-5"/>
+    </inertial>
+    <collision>
+      <geometry>
+        <box size="0.04 0.02 0.04"/>
+      </geometry>
+    </collision>
+  </link>
+  <joint name="finger_right_joint" type="prismatic">
+    <parent link="gripper_base"/>
+    <child link="finger_right"/>
+    <origin xyz="0 -0.1 0"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="0.1" effort="100" velocity="1"/>
+    <mimic joint="gripper_joint" multiplier="2" offset="0.02"/>
+  </joint>
+  <!-- A distal joint on each finger, as on athena's gripper. Its mimic stays below its limit while
+       the fingers rest on the box -->
+  <link name="finger_left_tip">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+  </link>
+  <joint name="finger_left_tip_joint" type="prismatic">
+    <parent link="finger_left"/>
+    <child link="finger_left_tip"/>
+    <axis xyz="0 -1 0"/>
+    <limit lower="0" upper="0.05" effort="100" velocity="1"/>
+    <mimic joint="gripper_joint" multiplier="0.5" offset="0"/>
+  </joint>
+  <link name="finger_right_tip">
+    <inertial>
+      <mass value="0.01"/>
+      <inertia ixx="1e-6" ixy="0" ixz="0" iyy="1e-6" iyz="0" izz="1e-6"/>
+    </inertial>
+  </link>
+  <joint name="finger_right_tip_joint" type="prismatic">
+    <parent link="finger_right"/>
+    <child link="finger_right_tip"/>
+    <axis xyz="0 1 0"/>
+    <limit lower="0" upper="0.05" effort="100" velocity="1"/>
+    <mimic joint="gripper_joint" multiplier="0.5" offset="0"/>
+  </joint>
+  <ros2_control name="bus_rig" type="system">
+    <hardware>
+      <plugin>dynamixel_ros_control/DynamixelHardwareInterface</plugin>
+      <param name="port_name">@PORT@</param>
+      <param name="baud_rate">1000000</param>
+      <param name="torque_on_startup">true</param>
+      <param name="torque_off_on_shutdown">false</param>
+    </hardware>
+    <joint name="pendulum_joint">
+      <param name="id">1</param>
+      <param name="registers.homing_offset">0.5</param>
+      <param name="position_control_mode">extended_position</param>
+      <command_interface name="position"/>
+      <command_interface name="max_current"/>
+      <command_interface name="torque_off"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <transmission name="pendulum_transmission">
+      <plugin>transmission_interface/SimpleTransmission</plugin>
+      <actuator name="pendulum_actuator" role="pendulum_actuator"/>
+      <joint name="pendulum_joint" role="pendulum_joint">
+        <mechanical_reduction>1.0</mechanical_reduction>
+        <offset>0.3</offset>
+      </joint>
+    </transmission>
+    <joint name="gripper_joint">
+      <param name="id">2</param>
+      <param name="position_control_mode">current_based_position</param>
+      <command_interface name="position"/>
+      <command_interface name="max_current"/>
+      <state_interface name="position"/>
+      <state_interface name="velocity"/>
+      <state_interface name="effort"/>
+    </joint>
+    <!-- 0.1 m of gap per motor radian, max_current passes through as on athena's gripper -->
+    <transmission name="gripper_transmission">
+      <plugin>hector_transmission_interface/AdjustableOffsetTransmission</plugin>
+      <param name="pass_through_effort">true</param>
+      <param name="pass_through_interfaces">max_current</param>
+      <actuator name="gripper_actuator" role="gripper_actuator"/>
+      <joint name="gripper_joint" role="gripper_joint">
+        <mechanical_reduction>10.0</mechanical_reduction>
+        <offset>0.0</offset>
+      </joint>
+    </transmission>
+  </ros2_control>
+  <gazebo>
+    <plugin filename="dynamixel_ros_control_gz-system" name="dynamixel_ros_control_gz::DynamixelBusSystem">
+      <port>@PORT@</port>
+      <servo joint="pendulum_joint" id="1" model="2020" reduction="1.0" offset="0.3" initial="0.0"/>
+      <servo joint="gripper_joint" id="2" model="35074" reduction="10.0" offset="0.0" initial="0.0"/>
+    </plugin>
+  </gazebo>
+</robot>

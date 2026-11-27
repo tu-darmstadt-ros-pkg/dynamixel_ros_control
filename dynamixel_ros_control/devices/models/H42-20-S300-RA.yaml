@@ -1,4 +1,5 @@
 # H42-20-S300-RA
+
 unit_conversions: # dxl value to unit ratio
   rad: 0.00001034269
   rad_per_s: 0.00104719755
@@ -8,6 +9,9 @@ unit_conversions: # dxl value to unit ratio
   ms: 1.0
   A: 0.001
   ms_20: 20.0
+
+# Operating modes in which Goal Current limits the current (e-Manual)
+current_cap_modes: [velocity, position, extended_position]
 
 indirect_addresses:
 # address start | data start  | count | memory

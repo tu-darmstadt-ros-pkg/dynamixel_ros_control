@@ -1,0 +1,37 @@
+# The servo models a simulated bus knows, by Dynamixel model number. Values at the output shaft.
+# Datasheet values from the ROBOTIS e-Manual until they are measured on athena.
+#   torque_constant: Nm/A, continuous torque over continuous current at 24 V
+#   friction_torque: Nm, what holds a limp servo against its load. No datasheet value, about a fifth
+#     of the continuous torque, so athena's limp arm holds its rest pose and sags under a larger load
+#   bandwidth: 1/s, optional, how hard the drive pulls the joint onto the reference (default 30)
+#   factory: EEPROM values in their unit (A, rad/s) as the servo ships, the plugin overwrites some
+2020:  # PH54-200-S500-R
+  torque_constant: 4.81  # 44.7 Nm / 9.3 A
+  friction_torque: 9.0
+  factory:
+    current_limit: 22.74  # 22740 x 1 mA
+    velocity_limit: 3.037  # 2900 x 0.01 rev/min
+2010:  # PH54-100-S500-R
+  torque_constant: 4.6  # 25.3 Nm / 5.5 A
+  friction_torque: 5.0
+  factory:
+    current_limit: 15.9  # 15900 x 1 mA
+    velocity_limit: 3.058  # 2920 x 0.01 rev/min
+2000:  # PH42-020-S300-R
+  torque_constant: 3.4  # 5.1 Nm / 1.5 A
+  friction_torque: 1.0
+  factory:
+    current_limit: 4.5  # 4500 x 1 mA
+    velocity_limit: 3.058  # 2920 x 0.01 rev/min
+54024:  # PRO H54-200-S500-R
+  torque_constant: 4.81  # 44.7 Nm / 9.3 A
+  friction_torque: 9.0
+  factory:
+    current_limit: 9.99  # Torque Limit 620 x 16.11328 mA
+    velocity_limit: 3.547  # 17000 x 0.00199234 rev/min
+35074:  # RH-P12-RN(A), torque at the motor shaft that turns 1.1508 rad over the 0.109 m stroke
+  torque_constant: 4.84  # 170 N gripping force x 0.109 m / 1.1508 rad / 3.33 A peak current
+  friction_torque: 0.5
+  factory:
+    current_limit: 2.657  # 661 x 4.02 mA
+    velocity_limit: 3.110  # 2970 x 0.01 rev/min

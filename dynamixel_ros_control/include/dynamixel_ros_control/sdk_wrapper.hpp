@@ -24,9 +24,6 @@ class PortHandler
 public:
   virtual ~PortHandler() = default;
   virtual bool openPort() = 0;
-  virtual void closePort() = 0;
-  virtual void clearPort() = 0;
-  virtual void setPortName(const char* port_name) = 0;
   virtual std::string getPortName() = 0;
   virtual bool setBaudRate(const int baudrate) = 0;
   virtual int getBaudRate() = 0;
@@ -49,31 +46,19 @@ public:
     handler_ = dynamixel::PortHandler::getPortHandler(port_name);
   }
 
-  explicit RealPortHandler(dynamixel::PortHandler* handler)
-      : handler_(handler)
-  {}
-
   ~RealPortHandler() override
   {
     if (handler_)
       delete handler_;
   }
 
+  // Owns the raw handler, so a copy would delete it twice.
+  RealPortHandler(const RealPortHandler&) = delete;
+  RealPortHandler& operator=(const RealPortHandler&) = delete;
+
   bool openPort() override
   {
     return handler_->openPort();
-  }
-  void closePort() override
-  {
-    handler_->closePort();
-  }
-  void clearPort() override
-  {
-    handler_->clearPort();
-  }
-  void setPortName(const char* port_name) override
-  {
-    handler_->setPortName(port_name);
   }
   std::string getPortName() override
   {
@@ -104,21 +89,21 @@ class PacketHandler
 {
 public:
   virtual ~PacketHandler() = default;
-  virtual int ping(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t* model_number, uint8_t* error = nullptr) = 0;
-  virtual int reboot(std::shared_ptr<PortHandler> port, uint8_t id, uint8_t* error = nullptr) = 0;
+  virtual int ping(PortHandler& port, uint8_t id, uint16_t* model_number, uint8_t* error = nullptr) = 0;
+  virtual int reboot(PortHandler& port, uint8_t id, uint8_t* error = nullptr) = 0;
 
-  virtual int read1ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint8_t* data,
+  virtual int read1ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint8_t* data,
                             uint8_t* error = nullptr) = 0;
-  virtual int read2ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint16_t* data,
+  virtual int read2ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint16_t* data,
                             uint8_t* error = nullptr) = 0;
-  virtual int read4ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint32_t* data,
+  virtual int read4ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint32_t* data,
                             uint8_t* error = nullptr) = 0;
 
-  virtual int write1ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint8_t data,
+  virtual int write1ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint8_t data,
                              uint8_t* error = nullptr) = 0;
-  virtual int write2ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint16_t data,
+  virtual int write2ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint16_t data,
                              uint8_t* error = nullptr) = 0;
-  virtual int write4ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint32_t data,
+  virtual int write4ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint32_t data,
                              uint8_t* error = nullptr) = 0;
 
   virtual const char* getTxRxResult(int result) = 0;
@@ -144,45 +129,39 @@ public:
   // SDK's getPacketHandler returns a static instance, so we must not delete it
   ~RealPacketHandler() override = default;
 
-  int ping(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t* model_number, uint8_t* error) override
+  int ping(PortHandler& port, uint8_t id, uint16_t* model_number, uint8_t* error) override
   {
-    return handler_->ping(port->getRaw(), id, model_number, error);
+    return handler_->ping(port.getRaw(), id, model_number, error);
   }
-  int reboot(std::shared_ptr<PortHandler> port, uint8_t id, uint8_t* error) override
+  int reboot(PortHandler& port, uint8_t id, uint8_t* error) override
   {
-    return handler_->reboot(port->getRaw(), id, error);
-  }
-
-  int read1ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint8_t* data,
-                    uint8_t* error) override
-  {
-    return handler_->read1ByteTxRx(port->getRaw(), id, address, data, error);
-  }
-  int read2ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint16_t* data,
-                    uint8_t* error) override
-  {
-    return handler_->read2ByteTxRx(port->getRaw(), id, address, data, error);
-  }
-  int read4ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint32_t* data,
-                    uint8_t* error) override
-  {
-    return handler_->read4ByteTxRx(port->getRaw(), id, address, data, error);
+    return handler_->reboot(port.getRaw(), id, error);
   }
 
-  int write1ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint8_t data,
-                     uint8_t* error) override
+  int read1ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint8_t* data, uint8_t* error) override
   {
-    return handler_->write1ByteTxRx(port->getRaw(), id, address, data, error);
+    return handler_->read1ByteTxRx(port.getRaw(), id, address, data, error);
   }
-  int write2ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint16_t data,
-                     uint8_t* error) override
+  int read2ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint16_t* data, uint8_t* error) override
   {
-    return handler_->write2ByteTxRx(port->getRaw(), id, address, data, error);
+    return handler_->read2ByteTxRx(port.getRaw(), id, address, data, error);
   }
-  int write4ByteTxRx(std::shared_ptr<PortHandler> port, uint8_t id, uint16_t address, uint32_t data,
-                     uint8_t* error) override
+  int read4ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint32_t* data, uint8_t* error) override
   {
-    return handler_->write4ByteTxRx(port->getRaw(), id, address, data, error);
+    return handler_->read4ByteTxRx(port.getRaw(), id, address, data, error);
+  }
+
+  int write1ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint8_t data, uint8_t* error) override
+  {
+    return handler_->write1ByteTxRx(port.getRaw(), id, address, data, error);
+  }
+  int write2ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint16_t data, uint8_t* error) override
+  {
+    return handler_->write2ByteTxRx(port.getRaw(), id, address, data, error);
+  }
+  int write4ByteTxRx(PortHandler& port, uint8_t id, uint16_t address, uint32_t data, uint8_t* error) override
+  {
+    return handler_->write4ByteTxRx(port.getRaw(), id, address, data, error);
   }
 
   const char* getTxRxResult(int result) override
@@ -211,8 +190,6 @@ class GroupSyncRead
 public:
   virtual ~GroupSyncRead() = default;
   virtual bool addParam(uint8_t id) = 0;
-  virtual void removeParam(uint8_t id) = 0;
-  virtual void clearParam() = 0;
   virtual int txRxPacket() = 0;
   virtual bool isAvailable(uint8_t id, uint16_t address, uint16_t data_length) = 0;
   virtual uint32_t getData(uint8_t id, uint16_t address, uint16_t data_length) = 0;
@@ -234,17 +211,13 @@ public:
     delete group_sync_read_;
   }
 
+  // Owns the raw group, so a copy would delete it twice.
+  RealGroupSyncRead(const RealGroupSyncRead&) = delete;
+  RealGroupSyncRead& operator=(const RealGroupSyncRead&) = delete;
+
   bool addParam(uint8_t id) override
   {
     return group_sync_read_->addParam(id);
-  }
-  void removeParam(uint8_t id) override
-  {
-    group_sync_read_->removeParam(id);
-  }
-  void clearParam() override
-  {
-    group_sync_read_->clearParam();
   }
   int txRxPacket() override
   {
@@ -271,9 +244,7 @@ class GroupSyncWrite
 public:
   virtual ~GroupSyncWrite() = default;
   virtual bool addParam(uint8_t id, uint8_t* data) = 0;
-  virtual void removeParam(uint8_t id) = 0;
   virtual bool changeParam(uint8_t id, uint8_t* data) = 0;
-  virtual void clearParam() = 0;
   virtual int txPacket() = 0;
 };
 
@@ -293,21 +264,17 @@ public:
     delete group_sync_write_;
   }
 
+  // Owns the raw group, so a copy would delete it twice.
+  RealGroupSyncWrite(const RealGroupSyncWrite&) = delete;
+  RealGroupSyncWrite& operator=(const RealGroupSyncWrite&) = delete;
+
   bool addParam(uint8_t id, uint8_t* data) override
   {
     return group_sync_write_->addParam(id, data);
   }
-  void removeParam(uint8_t id) override
-  {
-    group_sync_write_->removeParam(id);
-  }
   bool changeParam(uint8_t id, uint8_t* data) override
   {
     return group_sync_write_->changeParam(id, data);
-  }
-  void clearParam() override
-  {
-    group_sync_write_->clearParam();
   }
   int txPacket() override
   {
@@ -317,6 +284,24 @@ public:
 private:
   dynamixel::GroupSyncWrite* group_sync_write_;
 };
+
+/// Makes the SDK objects of one bus
+class Sdk
+{
+public:
+  virtual ~Sdk() = default;
+  [[nodiscard]] virtual std::shared_ptr<PortHandler> portHandler(const std::string& port_name) const = 0;
+  [[nodiscard]] virtual std::shared_ptr<PacketHandler> packetHandler() const = 0;
+  [[nodiscard]] virtual std::shared_ptr<GroupSyncRead> syncRead(const std::shared_ptr<PortHandler>& port,
+                                                                const std::shared_ptr<PacketHandler>& packet_handler,
+                                                                uint16_t address, uint16_t length) const = 0;
+  [[nodiscard]] virtual std::shared_ptr<GroupSyncWrite> syncWrite(const std::shared_ptr<PortHandler>& port,
+                                                                  const std::shared_ptr<PacketHandler>& packet_handler,
+                                                                  uint16_t address, uint16_t length) const = 0;
+};
+
+/// The bus use_dummy talks to. Set by the motors a process simulates, so the plugin carries no simulation.
+void setDummySdk(const Sdk* sdk);
 
 }  // namespace dynamixel_ros_control
 

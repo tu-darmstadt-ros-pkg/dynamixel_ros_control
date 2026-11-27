@@ -1,14 +1,18 @@
 # XM series
+
 unit_conversions: # dxl value to unit ratio
   rad: 0.001533980787885641
   rad_per_s: 0.023980117
   # Nm: 0.006675773  # Unused: goal_current and present_current use A, not Nm
-  rad_per_s2: 1.123489409
+  rad_per_s2: 0.3745075149  # 214.577 rev/min^2 per tick
   celsius: 1.0
   V: 0.1
   ms: 1.0
   A: 0.00269
   ms_20: 20.0
+
+# Operating modes in which Goal Current limits the current (e-Manual)
+current_cap_modes: [current_based_position]
 
 indirect_addresses:
 # address start | data start  | count | memory
@@ -33,7 +37,6 @@ control_table:
   - 34  | min_voltage_limit        | 2      | RW     | EEPROM | V
   - 36  | pwm_limit                | 2      | RW     | EEPROM |
   - 38  | current_limit            | 2      | RW     | EEPROM | A
-  - 40  | acceleration_limit       | 4      | RW     | EEPROM | rad_per_s2
   - 44  | velocity_limit           | 4      | RW     | EEPROM | rad_per_s
   - 48  | max_position_limit       | 4      | RW     | EEPROM | rad
   - 52  | min_position_limit       | 4      | RW     | EEPROM | rad
@@ -66,7 +69,7 @@ control_table:
   - 132 | present_position         | 4      | R      | RAM    | rad
   - 136 | velocity_trajectory      | 4      | R      | RAM    |
   - 140 | position_trajectory      | 4      | R      | RAM    |
-  - 144 | present_input_voltage    | 2      | R      | RAM    |
+  - 144 | present_input_voltage    | 2      | R      | RAM    | V
   - 146 | present_temperature      | 1      | R      | RAM    | celsius
   #- 168 | indirect_address_1       | 2      | RW     | RAM    |
   #- 224 | indirect_data_1          | 1      | RW     | RAM    |

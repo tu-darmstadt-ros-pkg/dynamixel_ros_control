@@ -1,0 +1,20 @@
+# LeakSanitizer suppressions for dynamixel_ros_control.
+#
+# rclcpp keeps its global Context alive past main(): rclcpp::shutdown() does not
+# run ~Context, so the type support, the participant and the DDS thread state
+# are all still reachable at exit and are reported as leaks. None of them are
+# this package's allocations, and none of them grow with the workload.
+leak:librclcpp.so
+leak:librcl.so
+leak:librmw.so
+leak:librmw_implementation.so
+leak:librmw_cyclonedds_cpp.so
+leak:libddsc.so
+leak:librcl_yaml_param_parser.so
+leak:libclass_loader.so
+leak:libcontroller_manager.so
+leak:libhardware_interface.so
+
+# pluginlib/class_loader deliberately never unloads a library it has opened, so
+# every plugin's static state is live at exit by design.
+leak:dlopen

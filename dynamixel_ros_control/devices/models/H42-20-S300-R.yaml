@@ -1,11 +1,17 @@
 # H42-20-S300-R
+
 unit_conversions: # dxl value to unit ratio
   rad: 0.00002068538
   rad_per_s: 0.000344746
-  rad_per_s2: 1 # TODO
+  # 58,000 rev/min^2 per tick at the core motor, over the 303.76 gear ratio to reach the
+  # output shaft, where rad and rad_per_s are measured. The P-series measures all three there.
+  rad_per_s2: 0.3332544666
   celsius: 1.0
   V: 0.1
   A: 0.00402832031
+
+# Operating modes in which Goal Current limits the current (e-Manual)
+current_cap_modes: [velocity, position, extended_position]
 
 indirect_addresses:
 # address start | data start  | count | memory

@@ -7,3 +7,7 @@ repositories:
     type: git
     url: https://github.com/tu-darmstadt-ros-pkg/hector_controller_spawner.git
     version: lyrical
+  hector_ros_controllers:
+    type: git
+    url: https://github.com/tu-darmstadt-ros-pkg/hector_ros_controllers.git
+    version: lyrical

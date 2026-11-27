@@ -1,4 +1,5 @@
 # PH42-020-S300-R
+
 unit_conversions: # dxl value to unit ratio
   rad: 0.00001034269
   rad_per_s: 0.00104719755
@@ -8,6 +9,9 @@ unit_conversions: # dxl value to unit ratio
   ms: 1.0
   A: 0.001
   ms_20: 20.0
+
+# Operating modes in which Goal Current limits the current (e-Manual)
+current_cap_modes: [velocity, position, extended_position]
 
 indirect_addresses:
 # address start | data start  | count | memory
@@ -26,13 +30,13 @@ control_table:
   - 24  | moving_threshold         | 4      | RW     | EEPROM | rad_per_s
   - 31  | temperature_limit        | 1      | RW     | EEPROM | celsius
   - 32  | max_voltage_limit        | 2      | RW     | EEPROM | V
-  - 24  | min_voltage_limit        | 2      | RW     | EEPROM | V
+  - 34  | min_voltage_limit        | 2      | RW     | EEPROM | V
   - 36  | pwm_limit                | 2      | RW     | EEPROM |
   - 38  | current_limit            | 2      | RW     | EEPROM | A
   - 40  | acceleration_limit       | 4      | RW     | EEPROM | rad_per_s2
   - 44  | velocity_limit           | 4      | RW     | EEPROM | rad_per_s
   - 48  | max_position_limit       | 4      | RW     | EEPROM | rad
-  - 452 | min_position_limit       | 4      | RW     | EEPROM | rad
+  - 52  | min_position_limit       | 4      | RW     | EEPROM | rad
   - 56  | external_port_mod_1      | 1      | RW     | EEPROM |
   - 57  | external_port_mod_2      | 1      | RW     | EEPROM |
   - 58  | external_port_mod_3      | 1      | RW     | EEPROM |

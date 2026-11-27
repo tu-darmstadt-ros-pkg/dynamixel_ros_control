@@ -31,6 +31,50 @@ def generate_launch_description():
     ld.add_action(id_arg)
     id_arg = LaunchConfiguration("id")
 
+    id2_arg = DeclareLaunchArgument(
+        name="id2",
+        default_value="0",
+        description=(
+            "ID of a second dynamixel to put on the bus, or 0 for none. A second motor "
+            "is what makes the multi-motor paths reachable: the sync read/write groups, "
+            "the watchdog padding on a mixed bus, per-joint torque and partial securing. "
+            "It is energised and read, but no controller commands it."
+        ),
+    )
+    ld.add_action(id2_arg)
+    id2 = LaunchConfiguration("id2")
+
+    torque_on_startup_arg = DeclareLaunchArgument(
+        name="torque_on_startup",
+        default_value="true",
+        description=(
+            "Energise the motors on activation. Pass false to bring the bus up "
+            "de-energised, which is how a first run on unfamiliar hardware should start."
+        ),
+    )
+    ld.add_action(torque_on_startup_arg)
+    torque_on_startup = LaunchConfiguration("torque_on_startup")
+
+    velocity_limit_arg = DeclareLaunchArgument(
+        name="velocity_limit",
+        default_value="1.0",
+        description="velocity_limit register written to both joints, in rad/s.",
+    )
+    ld.add_action(velocity_limit_arg)
+    velocity_limit = LaunchConfiguration("velocity_limit")
+
+    current_limit_arg = DeclareLaunchArgument(
+        name="current_limit",
+        default_value="0",
+        description=(
+            "current_limit register written to both joints, in A. 0 leaves the motor's "
+            "own value alone. Set it for bench work: it is the firmware-side clamp "
+            "behind the bench supply's."
+        ),
+    )
+    ld.add_action(current_limit_arg)
+    current_limit = LaunchConfiguration("current_limit")
+
     # Get the package directory
     urdf_file = PathJoinSubstitution(
         [
@@ -51,6 +95,14 @@ def generate_launch_description():
                 baud_rate,
                 " id:=",
                 id_arg,
+                " id2:=",
+                id2,
+                " torque_on_startup:=",
+                torque_on_startup,
+                " velocity_limit:=",
+                velocity_limit,
+                " current_limit:=",
+                current_limit,
             ]
         ),
         value_type=str,
